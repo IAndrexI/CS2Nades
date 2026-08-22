@@ -1,12 +1,4 @@
-import React from 'react';
-
-export default function App() {
-  return (
-    <div style={{ padding: '50px', background: 'black', color: 'lime', fontSize: '30px', fontFamily: 'monospace' }}>
-      TEST SUCCESSFUL: React is rendering!
-    </div>
-  );
-}import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 
 const socket = io('http://localhost:5000');
