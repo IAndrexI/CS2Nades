@@ -390,10 +390,17 @@ app.delete('/api/strats/:id', requireAuth, (req, res) => {
 const DIST_DIR = path.join(__dirname, '../dist')
 if (fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR))
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(DIST_DIR, 'index.html'))
-  })
 }
+
+// Catch-all handler for SPA history fallback (Express 5 compatible)
+app.use((req, res) => {
+  const indexPath = path.join(DIST_DIR, 'index.html')
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath)
+  } else {
+    res.status(404).json({ error: 'Endpoint not found' })
+  }
+})
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[CS2 Stratbook Server] Running on http://0.0.0.0:${PORT}`)
