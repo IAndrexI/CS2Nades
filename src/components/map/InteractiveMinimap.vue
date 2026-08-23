@@ -19,7 +19,8 @@ import {
   Check,
   Sparkles,
   Play,
-  Layers
+  Layers,
+  Users
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -41,20 +42,25 @@ let hoverLeaveTimeout: any = null
 // Live cursor placement preview
 const liveCursorCoords = ref<{ x: number; y: number } | null>(null)
 
-// Helper for Grenade Colors
+// Helper for Grenade Colors (CSNADES.GG EXACT PALETTE)
 function getNadeColor(type: GrenadeType): string {
   switch (type) {
-    case 'smoke': return '#94a3b8'
-    case 'flash': return '#eab308'
-    case 'molotov': return '#ef4444'
-    case 'he': return '#22c55e'
-    case 'decoy': return '#a855f7'
+    case 'smoke': return '#94a3b8' // Clean Slate
+    case 'flash': return '#eab308' // CS2 Gold
+    case 'molotov': return '#ef4444' // Fire Red
+    case 'he': return '#22c55e' // Tactical Green
+    case 'decoy': return '#a855f7' // Purple
     default: return '#cbd5e1'
   }
 }
 
 // Lineups that should display active trajectories
 const visibleTrajectories = computed<Lineup[]>(() => {
+  // If an Execute group is selected, ALWAYS show all trajectories in that execute together!
+  if (lineupStore.activeExecute) {
+    return lineupStore.activeExecuteLineups
+  }
+
   if (selectedLineupId.value) {
     return lineupStore.filteredLineups.filter(l => l.id === selectedLineupId.value)
   }
@@ -187,7 +193,7 @@ function handleMapClick(e: MouseEvent) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// CSNADES.GG INTERACTION HANDLERS
+// CSNADES.GG INTERACTION HANDLERS (STATIC NON-JUMPING PINS)
 // ─────────────────────────────────────────────────────────────
 function handleLandingPinClick(lineup: Lineup, e: MouseEvent) {
   e.stopPropagation()
@@ -288,7 +294,7 @@ onUnmounted(() => {
     <!-- MAIN RADAR MAP VIEWPORT -->
     <div 
       ref="mapContainer"
-      class="interactive-minimap-container relative w-full h-[600px] lg:h-[700px] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl select-none"
+      class="interactive-minimap-container relative w-full h-[580px] sm:h-[640px] lg:h-[720px] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl select-none"
       @wheel="handleWheel"
       @mousedown="handleMouseDown"
       @mousemove="handleMouseMove"
@@ -321,7 +327,7 @@ onUnmounted(() => {
               v-for="lineup in visibleTrajectories" 
               :key="`traj-${lineup.id}`"
               :class="[
-                'transition-all duration-200 cursor-pointer',
+                'transition-opacity duration-150 cursor-pointer',
                 hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? 'opacity-100' : 'opacity-70'
               ]"
               @mouseenter="handleLineupEnter(lineup, $event)"
@@ -333,7 +339,7 @@ onUnmounted(() => {
                 :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
                 fill="none" 
                 stroke="transparent" 
-                stroke-width="30"
+                stroke-width="28"
                 pointer-events="stroke"
               />
 
@@ -342,7 +348,7 @@ onUnmounted(() => {
                 :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
                 fill="none" 
                 :stroke="getNadeColor(lineup.grenadeType)" 
-                :stroke-width="hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? '5.5' : '3.5'"
+                :stroke-width="hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? '5' : '3.5'"
                 :stroke-opacity="hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? '0.6' : '0.35'"
                 pointer-events="none"
               />
@@ -359,94 +365,119 @@ onUnmounted(() => {
             </g>
           </g>
 
-          <!-- LAYER 3: THROW ORIGIN PINS (PLAYER STANDING SPOTS) -->
+          <!-- LAYER 3: THROW ORIGIN PINS (STATIC - NO JUMPING/SCALING ON HOVER) -->
           <g class="origin-markers-layer">
             <g 
               v-for="lineup in (selectedLineupId ? visibleTrajectories : lineupStore.filteredLineups)" 
               :key="`origin-${lineup.id}`"
               :transform="`translate(${lineup.originCoords.x * 10}, ${lineup.originCoords.y * 10})`"
-              class="cursor-pointer transition-transform duration-150 hover:scale-130"
+              class="cursor-pointer"
               @mouseenter="handleLineupEnter(lineup, $event)"
               @mouseleave="handleLineupLeave"
               @click="handleLandingPinClick(lineup, $event)"
             >
               <!-- TRANSPARENT HIT-AREA -->
-              <circle cx="0" cy="0" r="28" fill="transparent" pointer-events="all" />
+              <circle cx="0" cy="0" r="24" fill="transparent" pointer-events="all" />
 
-              <!-- Origin Outer Pulse -->
+              <!-- Origin Static Outer Ring -->
               <circle 
                 cx="0" 
                 cy="0" 
-                :r="hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? '18' : '13'" 
+                r="13" 
                 fill="none" 
                 :stroke="getNadeColor(lineup.grenadeType)" 
-                stroke-width="2" 
+                stroke-width="1.8" 
                 stroke-dasharray="3 3"
-                class="opacity-80 animate-pulse"
+                :class="[
+                  'transition-opacity',
+                  hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? 'opacity-100' : 'opacity-65'
+                ]"
                 pointer-events="none"
               />
               
-              <!-- Origin Base Circle -->
+              <!-- Origin Base Circle (Team Color) -->
               <circle 
                 cx="0" 
                 cy="0" 
-                r="9" 
+                r="8.5" 
                 :fill="lineup.side === 't' ? '#f97316' : lineup.side === 'ct' ? '#38bdf8' : '#334155'" 
-                stroke="#0f172a" 
+                stroke="#0b0e14" 
                 stroke-width="2"
                 pointer-events="none"
               />
               
-              <circle cx="0" cy="0" r="3.5" fill="#ffffff" pointer-events="none" />
+              <circle cx="0" cy="0" r="3" fill="#ffffff" pointer-events="none" />
             </g>
           </g>
 
-          <!-- LAYER 4: CSNADES.GG TARGET LANDING PINS FOR EVERY FILTERED LINEUP -->
+          <!-- LAYER 4: CSNADES.GG TARGET LANDING PINS (STATIC - NO HOVER JUMPS) -->
           <g class="landing-markers-layer">
             <g 
               v-for="lineup in lineupStore.filteredLineups" 
               :key="`landing-${lineup.id}`"
               :transform="`translate(${lineup.landingCoords.x * 10}, ${lineup.landingCoords.y * 10})`"
-              class="cursor-pointer transition-transform duration-150 hover:scale-130"
+              class="cursor-pointer"
               @mouseenter="handleLineupEnter(lineup, $event)"
               @mouseleave="handleLineupLeave"
               @click="handleLandingPinClick(lineup, $event)"
             >
               <!-- TRANSPARENT HIT-AREA -->
-              <circle cx="0" cy="0" r="30" fill="transparent" pointer-events="all" />
+              <circle cx="0" cy="0" r="26" fill="transparent" pointer-events="all" />
 
-              <!-- Active Selection / Hover Pulse Ring -->
+              <!-- Static Outer Ring (Subtle Glow when active) -->
               <circle 
                 cx="0" 
                 cy="0" 
-                :r="selectedLineupId === lineup.id || hoveredLineup?.id === lineup.id ? '24' : '16'" 
+                r="16" 
                 :fill="getNadeColor(lineup.grenadeType)" 
-                :fill-opacity="selectedLineupId === lineup.id || hoveredLineup?.id === lineup.id ? '0.4' : '0.2'" 
+                :fill-opacity="selectedLineupId === lineup.id || hoveredLineup?.id === lineup.id ? '0.35' : '0.15'" 
                 :stroke="getNadeColor(lineup.grenadeType)" 
-                :stroke-width="selectedLineupId === lineup.id ? '3' : '1.5'"
-                class="animate-pulse-glow"
+                :stroke-width="selectedLineupId === lineup.id || hoveredLineup?.id === lineup.id ? '2.5' : '1.5'"
                 pointer-events="none"
               />
 
-              <!-- Pin Solid Badge -->
+              <!-- Pin Solid Dark Circle -->
               <circle 
                 cx="0" 
                 cy="0" 
                 r="11" 
-                fill="#0f172a" 
+                fill="#0b0e14" 
                 :stroke="getNadeColor(lineup.grenadeType)" 
                 stroke-width="2"
                 pointer-events="none"
               />
 
-              <!-- Type Indicator Dot -->
-              <circle cx="0" cy="0" r="4.5" :fill="getNadeColor(lineup.grenadeType)" pointer-events="none" />
+              <!-- CSNADES.GG Grenade Icon Glyphs -->
+              <!-- SMOKE GLYPH -->
+              <g v-if="lineup.grenadeType === 'smoke'" pointer-events="none" transform="translate(-4.5, -4.5) scale(0.38)">
+                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" fill="#94a3b8" />
+              </g>
+
+              <!-- FLASH GLYPH -->
+              <g v-else-if="lineup.grenadeType === 'flash'" pointer-events="none" transform="translate(-4, -4.5) scale(0.38)">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="#eab308" />
+              </g>
+
+              <!-- MOLOTOV GLYPH -->
+              <g v-else-if="lineup.grenadeType === 'molotov'" pointer-events="none" transform="translate(-4.5, -5) scale(0.4)">
+                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" fill="#ef4444" />
+              </g>
+
+              <!-- HE GLYPH -->
+              <g v-else-if="lineup.grenadeType === 'he'" pointer-events="none" transform="translate(-4.5, -4.5) scale(0.38)">
+                <circle cx="12" cy="14" r="6" fill="#22c55e" />
+                <path d="M12 7V3M9 3h6" stroke="#22c55e" stroke-width="2" />
+              </g>
+
+              <!-- DECOY GLYPH -->
+              <g v-else pointer-events="none" transform="translate(-4.5, -4.5) scale(0.38)">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="#a855f7" />
+              </g>
             </g>
           </g>
 
           <!-- LAYER 5: LIVE PLACEMENT MODE PINS (Precise & Interactive) -->
           <g v-if="mapStore.isPlacementMode" class="placement-pins-layer">
-            <!-- Fixed Origin Pin after Step 1 -->
             <g 
               v-if="mapStore.tempPlacement.origin" 
               :transform="`translate(${mapStore.tempPlacement.origin.x * 10}, ${mapStore.tempPlacement.origin.y * 10})`"
@@ -456,7 +487,6 @@ onUnmounted(() => {
               <text x="0" y="-14" font-size="12" font-weight="bold" fill="#22c55e" text-anchor="middle">STAND HERE</text>
             </g>
 
-            <!-- Real-time Trajectory Arc from Origin to live mouse cursor in Step 2 -->
             <g v-if="mapStore.placementStep === 'landing' && mapStore.tempPlacement.origin && liveCursorCoords">
               <path 
                 :d="getTrajectoryPath(mapStore.tempPlacement.origin, liveCursorCoords)"
@@ -693,7 +723,7 @@ onUnmounted(() => {
             class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
           >
             <Play class="w-3.5 h-3.5 stroke-[2.5]" />
-            <span>Open Full Video & Crosshair Guide</span>
+            <span>Open Full Video &amp; Crosshair Guide</span>
           </button>
 
           <button

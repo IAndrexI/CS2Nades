@@ -6,13 +6,16 @@ import NadeIcon from '../common/NadeIcon.vue'
 import type { GrenadeType, TeamSide } from '../../types'
 import { 
   Eye, 
-  EyeOff, 
   RotateCcw, 
   Search, 
   Sparkles, 
   Layers,
   Crosshair,
-  Plus
+  Plus,
+  Users,
+  Shield,
+  Layers2,
+  Play
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -25,154 +28,161 @@ const nadeTypes: { type: GrenadeType; label: string }[] = [
   { type: 'he', label: 'HE Nades' }
 ]
 
-const throwTypes = [
-  { id: 'all', label: 'All Throws' },
-  { id: 'standing', label: 'Standing' },
-  { id: 'jumpthrow', label: 'Jumpthrow' },
-  { id: 'runthrow', label: 'Runthrow' },
-  { id: 'crouch_jumpthrow', label: 'Crouch Jump' },
-  { id: 'left_right_click', label: 'Left + Right' }
+const surfaceLevels = [
+  { id: 'all', label: 'All Levels' },
+  { id: 'upper', label: 'Upper' },
+  { id: 'lower', label: 'Lower' }
 ]
 
-const sites = [
-  { id: 'all', label: 'All Sites' },
-  { id: 'A', label: 'A Site' },
-  { id: 'B', label: 'B Site' },
-  { id: 'Mid', label: 'Mid' }
+const teams = [
+  { id: 'all', label: 'All Teams' },
+  { id: 't', label: 'T Side', color: 'text-amber-400' },
+  { id: 'ct', label: 'CT Side', color: 'text-sky-400' }
 ]
 
 const activeCount = computed(() => lineupStore.filteredLineups.length)
 </script>
 
 <template>
-  <div class="nade-filter-bar w-full flex flex-col gap-2.5 p-3 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl shadow-2xl">
-    <!-- TOP ROW: NADE TOGGLES & SIDE SELECTOR -->
+  <div class="nade-filter-bar w-full flex flex-col gap-3 p-3 sm:p-4 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl">
+    <!-- TOP ROW: GRENADE TYPES, TEAMS, SURFACE LEVEL, EXECUTES, AND ADD BUTTON -->
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <!-- NADE TOGGLE BUTTONS -->
-      <div class="flex items-center gap-1.5 p-1 bg-slate-950/80 rounded-lg border border-slate-800/80">
-        <button
-          v-for="item in nadeTypes"
-          :key="item.type"
-          @click="mapStore.toggleNadeType(item.type)"
-          @dblclick.prevent="mapStore.selectOnlyNadeType(item.type)"
-          :title="`Toggle ${item.label} (Double-click to isolate)`"
-          :class="[
-            'flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer',
-            mapStore.selectedNadeTypes.includes(item.type)
-              ? 'bg-slate-800 text-white shadow-sm border border-slate-700'
-              : 'text-slate-500 hover:text-slate-300 hover:bg-slate-850 opacity-60'
-          ]"
-        >
-          <NadeIcon :type="item.type" :size="16" :filled="mapStore.selectedNadeTypes.includes(item.type)" />
-          <span>{{ item.label }}</span>
-          <span 
+      
+      <!-- LEFT CLUSTER: GRENADE TYPES & TEAM SELECTOR -->
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- NADE TOGGLE BUTTONS (csnades.gg style) -->
+        <div class="flex items-center gap-1 p-1 bg-slate-950/90 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
+          <button
+            v-for="item in nadeTypes"
+            :key="item.type"
+            @click="mapStore.toggleNadeType(item.type)"
+            @dblclick.prevent="mapStore.selectOnlyNadeType(item.type)"
+            :title="`Toggle ${item.label} (Double-click to isolate)`"
             :class="[
-              'px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none whitespace-nowrap',
               mapStore.selectedNadeTypes.includes(item.type)
-                ? 'bg-slate-700 text-amber-400'
-                : 'bg-slate-900 text-slate-500'
+                ? 'bg-slate-800 text-white shadow-sm border border-slate-700'
+                : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900 opacity-60'
             ]"
           >
-            {{ lineupStore.nadeCounts[item.type] || 0 }}
+            <NadeIcon :type="item.type" :size="16" :filled="mapStore.selectedNadeTypes.includes(item.type)" />
+            <span>{{ item.label }}</span>
+            <span 
+              :class="[
+                'px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold',
+                mapStore.selectedNadeTypes.includes(item.type)
+                  ? 'bg-slate-700 text-amber-400'
+                  : 'bg-slate-900 text-slate-500'
+              ]"
+            >
+              {{ lineupStore.nadeCounts[item.type] || 0 }}
+            </span>
+          </button>
+        </div>
+
+        <!-- TEAM FILTER (REPLACING THROW TYPE TAB) -->
+        <div class="flex items-center gap-1 p-1 bg-slate-950/90 rounded-xl border border-slate-800">
+          <button
+            v-for="team in teams"
+            :key="team.id"
+            @click="mapStore.setSide(team.id as TeamSide)"
+            :class="[
+              'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap',
+              mapStore.selectedSide === team.id
+                ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            ]"
+          >
+            <span 
+              v-if="team.id === 't'" 
+              class="w-2 h-2 rounded-full bg-amber-500"
+            ></span>
+            <span 
+              v-else-if="team.id === 'ct'" 
+              class="w-2 h-2 rounded-full bg-sky-400"
+            ></span>
+            <span>{{ team.label }}</span>
+          </button>
+        </div>
+
+        <!-- SURFACE LEVEL FILTER (FOR NUKE, VERTIGO, MULTI-LEVEL MAPS) -->
+        <div class="flex items-center gap-1 p-1 bg-slate-950/90 rounded-xl border border-slate-800">
+          <span class="text-[10px] uppercase font-mono font-bold text-slate-500 px-1.5 flex items-center gap-1">
+            <Layers2 class="w-3 h-3" />
+            <span class="hidden sm:inline">Level:</span>
           </span>
-        </button>
+          <button
+            v-for="lvl in surfaceLevels"
+            :key="lvl.id"
+            @click="mapStore.setSurfaceLevel(lvl.id as any)"
+            :class="[
+              'px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap',
+              mapStore.surfaceLevel === lvl.id
+                ? 'bg-slate-800 text-amber-400 border border-slate-700'
+                : 'text-slate-500 hover:text-slate-300'
+            ]"
+          >
+            {{ lvl.label }}
+          </button>
+        </div>
       </div>
 
-      <!-- TEAM SIDE TOGGLE (ALL / T / CT) -->
-      <div class="flex items-center gap-1 p-1 bg-slate-950/80 rounded-lg border border-slate-800/80">
-        <button
-          @click="mapStore.setSide('all')"
-          :class="[
-            'px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer',
-            mapStore.selectedSide === 'all'
-              ? 'bg-slate-800 text-white border border-slate-700'
-              : 'text-slate-400 hover:text-slate-200'
-          ]"
-        >
-          ALL
-        </button>
-        <button
-          @click="mapStore.setSide('t')"
-          :class="[
-            'px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
-            mapStore.selectedSide === 't'
-              ? 'bg-amber-600/30 text-amber-400 border border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
-              : 'text-slate-400 hover:text-amber-400'
-          ]"
-        >
-          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-          T SIDE
-        </button>
-        <button
-          @click="mapStore.setSide('ct')"
-          :class="[
-            'px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
-            mapStore.selectedSide === 'ct'
-              ? 'bg-sky-600/30 text-sky-400 border border-sky-500/50 shadow-[0_0_12px_rgba(56,189,248,0.2)]'
-              : 'text-slate-400 hover:text-sky-400'
-          ]"
-        >
-          <span class="w-2 h-2 rounded-full bg-sky-400"></span>
-          CT SIDE
-        </button>
-      </div>
-
-      <!-- ADD LINEUP / ACTION BUTTON -->
+      <!-- RIGHT CLUSTER: EXECUTE GROUPS & ADD NADE ACTION BUTTONS -->
       <div class="flex items-center gap-2">
+        <!-- EXECUTE GROUP SELECTOR -->
+        <div class="relative flex items-center gap-1.5 bg-slate-950/90 p-1 rounded-xl border border-slate-800">
+          <select 
+            :value="lineupStore.activeExecuteId || 'all'"
+            @change="lineupStore.setActiveExecute(($event.target as HTMLSelectElement).value === 'all' ? null : ($event.target as HTMLSelectElement).value)"
+            class="bg-transparent text-xs font-bold text-slate-200 px-2 py-1 focus:outline-none cursor-pointer uppercase font-mono"
+          >
+            <option value="all">⚡ All Nades View</option>
+            <optgroup v-if="lineupStore.currentMapExecutes.length > 0" label="Tactical Executes">
+              <option 
+                v-for="exec in lineupStore.currentMapExecutes" 
+                :key="exec.id" 
+                :value="exec.id"
+              >
+                🎯 {{ exec.title }} ({{ exec.lineupIds.length }} nades)
+              </option>
+            </optgroup>
+          </select>
+
+          <!-- CREATE EXECUTE BUTTON -->
+          <button
+            @click="lineupStore.isCreateExecuteModalOpen = true"
+            title="Create Synchronized Execute Group"
+            class="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap"
+          >
+            <Sparkles class="w-3 h-3" />
+            <span class="hidden md:inline">+ Execute Group</span>
+          </button>
+        </div>
+
+        <!-- ADD LINEUP / ACTION BUTTON -->
         <button
           @click="lineupStore.isAddModalOpen = true"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs rounded-lg shadow-lg hover:shadow-amber-500/20 transition-all cursor-pointer"
+          class="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg hover:shadow-amber-500/20 transition-all cursor-pointer whitespace-nowrap"
         >
           <Plus class="w-3.5 h-3.5 stroke-[3]" />
-          <span>New Lineup</span>
+          <span>New Nade</span>
         </button>
       </div>
     </div>
 
-    <!-- BOTTOM ROW: SITES, THROW TYPE, TRAJECTORY TOGGLES, SEARCH -->
-    <div class="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-800/80 text-xs">
-      <!-- SITE PILLS -->
-      <div class="flex items-center gap-1.5">
-        <span class="text-slate-400 text-[11px] uppercase tracking-wider font-semibold">Site:</span>
-        <button
-          v-for="site in sites"
-          :key="site.id"
-          @click="mapStore.setSite(site.id)"
-          :class="[
-            'px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer',
-            mapStore.selectedSite === site.id
-              ? 'bg-slate-700 text-white font-bold border border-slate-600'
-              : 'text-slate-400 hover:text-slate-200 bg-slate-950/60'
-          ]"
-        >
-          {{ site.label }}
-        </button>
-      </div>
-
-      <!-- THROW TYPE SELECT -->
-      <div class="flex items-center gap-2">
-        <span class="text-slate-400 text-[11px] uppercase tracking-wider font-semibold">Throw:</span>
-        <select
-          v-model="mapStore.selectedThrowType"
-          class="bg-slate-950/80 border border-slate-800 text-slate-200 text-xs rounded-md px-2 py-1 focus:outline-none focus:border-amber-500/60 cursor-pointer"
-        >
-          <option v-for="t in throwTypes" :key="t.id" :value="t.id">
-            {{ t.label }}
-          </option>
-        </select>
-      </div>
-
+    <!-- BOTTOM ROW: SEARCH, DISPLAY TOGGLES (CALLOUTS / ARCS), ACTIVE COUNTER -->
+    <div class="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-800/80 text-xs">
       <!-- MAP DISPLAY TOGGLES -->
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
         <button
           @click="mapStore.showTrajectories = !mapStore.showTrajectories"
           :class="[
-            'flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors cursor-pointer',
+            'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors cursor-pointer border',
             mapStore.showTrajectories
-              ? 'text-amber-400 font-medium bg-amber-500/10 border border-amber-500/30'
-              : 'text-slate-500 hover:text-slate-300'
+              ? 'text-amber-400 font-medium bg-amber-500/10 border-amber-500/30'
+              : 'text-slate-400 border-slate-800 hover:text-white bg-slate-950'
           ]"
-          title="Toggle: Show all trajectories at once vs only on hover/click"
+          title="Toggle trajectory lines"
         >
           <Sparkles class="w-3.5 h-3.5" />
           <span>All Arcs</span>
@@ -181,40 +191,51 @@ const activeCount = computed(() => lineupStore.filteredLineups.length)
         <button
           @click="mapStore.showCallouts = !mapStore.showCallouts"
           :class="[
-            'flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors cursor-pointer',
+            'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors cursor-pointer border',
             mapStore.showCallouts
-              ? 'text-sky-400 font-medium bg-sky-500/10 border border-sky-500/30'
-              : 'text-slate-500 hover:text-slate-300'
+              ? 'text-sky-400 font-medium bg-sky-500/10 border-sky-500/30'
+              : 'text-slate-400 border-slate-800 hover:text-white bg-slate-950'
           ]"
-          title="Toggle spot name labels on radar (off by default — use /callouts tab for full guide)"
+          title="Toggle map spot labels"
         >
           <Layers class="w-3.5 h-3.5" />
           <span>Callouts</span>
         </button>
+
+        <!-- ACTIVE EXECUTE BADGE IF SELECTED -->
+        <div v-if="lineupStore.activeExecute" class="flex items-center gap-2 px-2.5 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-lg text-xs font-bold">
+          <span>Active Execute: <strong>{{ lineupStore.activeExecute.title }}</strong></span>
+          <button 
+            @click="lineupStore.setActiveExecute(null)" 
+            class="text-amber-400 hover:text-white font-bold ml-1"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <!-- SEARCH & ACTIVE COUNTER -->
       <div class="flex items-center gap-2 flex-grow sm:flex-grow-0">
-        <div class="relative">
+        <div class="relative flex-grow sm:flex-grow-0">
           <Search class="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             v-model="mapStore.searchQuery"
-            placeholder="Search lineups / callouts..."
-            class="w-44 bg-slate-950/90 border border-slate-800 text-slate-200 text-xs rounded-md pl-8 pr-2.5 py-1 placeholder-slate-500 focus:outline-none focus:border-amber-500/60 transition-all"
+            placeholder="Search spot / nade..."
+            class="w-full sm:w-48 bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl pl-8 pr-2.5 py-1.5 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-all"
           />
         </div>
 
         <button
           @click="mapStore.resetFilters()"
           title="Reset all filters"
-          class="p-1 text-slate-500 hover:text-amber-400 transition-colors cursor-pointer"
+          class="p-1.5 bg-slate-950 border border-slate-800 text-slate-400 hover:text-amber-400 rounded-xl transition-colors cursor-pointer"
         >
           <RotateCcw class="w-3.5 h-3.5" />
         </button>
 
-        <div class="text-[11px] font-mono text-slate-400 pl-1 border-l border-slate-800">
-          <span class="text-amber-400 font-bold">{{ activeCount }}</span> shown
+        <div class="text-[11px] font-mono text-slate-400 pl-1 border-l border-slate-800 whitespace-nowrap">
+          <span class="text-amber-400 font-bold">{{ activeCount }}</span> nades shown
         </div>
       </div>
     </div>

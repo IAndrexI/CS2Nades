@@ -5,6 +5,7 @@ import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useAdminStore } from '../../stores/adminStore'
+import { useThemeStore } from '../../stores/themeStore'
 import { BRANDING, NAV_LABELS } from '../../config/site'
 import DataSyncModal from '../common/DataSyncModal.vue'
 import MapSettingsModal from '../map/MapSettingsModal.vue'
@@ -14,32 +15,37 @@ import {
   Crosshair, 
   Map as MapIcon, 
   BookOpen, 
-  PenTool, 
   Grid, 
   Plus, 
-  Database, 
-  ChevronDown,
-  Settings2,
-  Layers,
-  User,
-  ShieldCheck,
-  LogOut,
-  UserCheck,
-  BookMarked,
-  Radio,
-  RefreshCw
+  ChevronDown, 
+  Settings2, 
+  Layers, 
+  User, 
+  ShieldCheck, 
+  LogOut, 
+  BookMarked, 
+  Radio, 
+  RefreshCw,
+  Sun,
+  Moon,
+  Smartphone,
+  Monitor,
+  Menu,
+  X
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
 const lineupStore = useLineupStore()
 const authStore = useAuthStore()
 const adminStore = useAdminStore()
+const themeStore = useThemeStore()
 const router = useRouter()
 const route = useRoute()
 
 const isMapDropdownOpen = ref(false)
 const isUserDropdownOpen = ref(false)
 const isDataModalOpen = ref(false)
+const isMobileMenuOpen = ref(false)
 
 const navLinks = [
   { name: NAV_LABELS.radar, path: '/', icon: MapIcon },
@@ -67,19 +73,19 @@ async function handleSyncLineups() {
 
 <template>
   <header class="navbar-wrapper w-full bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-      <!-- LOGO & BRANDING (CONFIGURABLE VIA SITE.TS & ADMIN) -->
-      <div class="flex items-center gap-6">
-        <router-link to="/" class="flex items-center gap-2.5 group cursor-pointer">
-          <div class="p-2 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-transform">
-            <Crosshair class="w-5 h-5 text-slate-950 stroke-[2.5]" />
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
+      <!-- LOGO & BRANDING -->
+      <div class="flex items-center gap-3 sm:gap-6">
+        <router-link to="/" class="flex items-center gap-2 group cursor-pointer">
+          <div class="p-2 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-transform flex-shrink-0">
+            <Crosshair class="w-4 h-4 sm:w-5 sm:h-5 text-slate-950 stroke-[2.5]" />
           </div>
           <div class="flex flex-col">
-            <span class="text-sm font-black tracking-wider text-white uppercase group-hover:text-amber-400 transition-colors">
+            <span class="text-xs sm:text-sm font-black tracking-wider text-white uppercase group-hover:text-amber-400 transition-colors">
               {{ adminStore.settings.siteTitle || BRANDING.siteTitle }}
             </span>
-            <span class="text-[10px] font-mono text-amber-500/90 font-bold -mt-0.5 tracking-widest uppercase">
-              {{ adminStore.settings.teamName || BRANDING.teamName }} // {{ BRANDING.tagline }}
+            <span class="text-[9px] sm:text-[10px] font-mono text-amber-500/90 font-bold -mt-0.5 tracking-widest uppercase hidden xs:inline">
+              {{ adminStore.settings.teamName || BRANDING.teamName }}
             </span>
           </div>
         </router-link>
@@ -88,7 +94,7 @@ async function handleSyncLineups() {
         <div class="relative">
           <button
             @click="isMapDropdownOpen = !isMapDropdownOpen"
-            class="flex items-center gap-2 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
           >
             <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
             <span class="uppercase tracking-wide font-mono">{{ mapStore.currentMap.name }}</span>
@@ -98,7 +104,7 @@ async function handleSyncLineups() {
           <!-- DROPDOWN MENU -->
           <div 
             v-if="isMapDropdownOpen"
-            class="absolute top-full left-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in"
+            class="absolute top-full left-0 mt-2 w-60 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in"
           >
             <div class="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
               <span>Select Map</span>
@@ -139,21 +145,21 @@ async function handleSyncLineups() {
                 class="w-full py-1.5 px-2 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Layers class="w-3.5 h-3.5 text-amber-400" />
-                <span>Custom Radar / Map Settings</span>
+                <span>Custom Radar / Settings</span>
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- MAIN NAVIGATION TABS -->
-      <nav class="hidden lg:flex items-center gap-1 p-1 bg-slate-900/80 rounded-xl border border-slate-800">
+      <!-- MAIN NAVIGATION TABS (DESKTOP & TABLET SCROLLABLE) -->
+      <nav class="hidden md:flex items-center gap-1 p-1 bg-slate-900/80 rounded-xl border border-slate-800 overflow-x-auto max-w-[480px] lg:max-w-none">
         <router-link
           v-for="link in navLinks"
           :key="link.path"
           :to="link.path"
           :class="[
-            'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all',
+            'flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap',
             route.path === link.path 
               ? 'bg-slate-800 text-amber-400 shadow-sm border border-slate-700' 
               : 'text-slate-400 hover:text-slate-200'
@@ -164,43 +170,52 @@ async function handleSyncLineups() {
         </router-link>
       </nav>
 
-      <!-- RIGHT ACTIONS: SYNC, USER AUTH, ADMIN, NEW NADE -->
-      <div class="flex items-center gap-2.5">
+      <!-- RIGHT ACTIONS: THEME TOGGLE, PHONE MODE, SYNC, USER AUTH, ADMIN, NEW NADE -->
+      <div class="flex items-center gap-1.5 sm:gap-2.5">
+        <!-- LIGHT / DARK MODE TOGGLE BUTTON -->
+        <button
+          @click="themeStore.toggleTheme"
+          :title="themeStore.theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
+          class="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-amber-400 rounded-xl transition-colors cursor-pointer"
+        >
+          <Sun v-if="themeStore.theme === 'dark'" class="w-3.5 h-3.5 text-amber-400" />
+          <Moon v-else class="w-3.5 h-3.5 text-slate-300" />
+        </button>
+
+        <!-- PHONE / COMPACT MODE TOGGLE BUTTON -->
+        <button
+          @click="themeStore.togglePhoneMode"
+          :title="themeStore.isPhoneMode ? 'Exit Phone Mode' : 'Toggle Phone / Mobile Layout'"
+          :class="[
+            'p-2 border rounded-xl transition-colors cursor-pointer',
+            themeStore.isPhoneMode
+              ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+              : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-400 hover:text-white'
+          ]"
+        >
+          <Smartphone v-if="!themeStore.isPhoneMode" class="w-3.5 h-3.5" />
+          <Monitor v-else class="w-3.5 h-3.5" />
+        </button>
+
         <!-- SERVER LINEUP SYNC BUTTON -->
         <button
           @click="handleSyncLineups"
           :disabled="lineupStore.isSyncing"
-          class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
           :title="lineupStore.lastSyncTime ? `Last synced at ${lineupStore.lastSyncTime}` : 'Sync with Server'"
         >
           <RefreshCw class="w-3.5 h-3.5 text-amber-400" :class="{ 'animate-spin': lineupStore.isSyncing }" />
-          <span class="hidden sm:inline">Sync</span>
+          <span class="hidden md:inline">Sync</span>
         </button>
-
-        <!-- ADMIN PANEL LINK (IF ADMIN) -->
-        <router-link
-          v-if="authStore.isAdmin"
-          to="/admin"
-          :class="[
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all',
-            route.path === '/admin'
-              ? 'bg-amber-500 text-slate-950 font-black'
-              : 'bg-slate-900 hover:bg-slate-850 border border-slate-800 text-amber-400'
-          ]"
-          title="Admin Panel"
-        >
-          <ShieldCheck class="w-3.5 h-3.5" />
-          <span class="hidden sm:inline">Admin</span>
-        </router-link>
 
         <!-- USER PROFILE / LOGIN BUTTON -->
         <div class="relative">
           <template v-if="authStore.isAuthenticated">
             <button
               @click="isUserDropdownOpen = !isUserDropdownOpen"
-              class="flex items-center gap-2 p-1 pl-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-colors cursor-pointer"
+              class="flex items-center gap-1.5 p-1 pl-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-colors cursor-pointer"
             >
-              <span class="hidden sm:inline">{{ authStore.currentUser?.username }}</span>
+              <span class="hidden md:inline">{{ authStore.currentUser?.username }}</span>
               <img 
                 :src="authStore.currentUser?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${authStore.currentUser?.username}`" 
                 class="w-6 h-6 rounded-lg bg-slate-950 border border-slate-700" 
@@ -261,7 +276,7 @@ async function handleSyncLineups() {
               class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-200 hover:text-amber-400 text-xs font-bold rounded-xl transition-colors cursor-pointer"
             >
               <User class="w-3.5 h-3.5 text-amber-400" />
-              <span>Sign In</span>
+              <span class="hidden sm:inline">Sign In</span>
             </button>
           </template>
         </div>
@@ -269,12 +284,43 @@ async function handleSyncLineups() {
         <!-- NEW NADE BUTTON -->
         <button
           @click="lineupStore.isAddModalOpen = true"
-          class="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+          class="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
         >
           <Plus class="w-3.5 h-3.5 stroke-[3]" />
-          <span>Add Nade</span>
+          <span class="hidden sm:inline">Add Nade</span>
+        </button>
+
+        <!-- MOBILE HAMBURGER MENU BUTTON -->
+        <button
+          @click="isMobileMenuOpen = !isMobileMenuOpen"
+          class="md:hidden p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 rounded-xl"
+        >
+          <Menu v-if="!isMobileMenuOpen" class="w-4 h-4" />
+          <X v-else class="w-4 h-4" />
         </button>
       </div>
+    </div>
+
+    <!-- MOBILE NAVIGATION DRAWER -->
+    <div 
+      v-if="isMobileMenuOpen"
+      class="md:hidden border-t border-slate-800 bg-slate-950/95 p-3 flex flex-col gap-1 animate-fade-in"
+    >
+      <router-link
+        v-for="link in navLinks"
+        :key="link.path"
+        :to="link.path"
+        @click="isMobileMenuOpen = false"
+        :class="[
+          'flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all',
+          route.path === link.path 
+            ? 'bg-slate-800 text-amber-400 border border-slate-700' 
+            : 'text-slate-300 hover:bg-slate-900'
+        ]"
+      >
+        <component :is="link.icon" class="w-4 h-4" :class="{ 'text-emerald-400 animate-pulse': link.isLive }" />
+        <span>{{ link.name }}</span>
+      </router-link>
     </div>
 
     <!-- MODALS -->

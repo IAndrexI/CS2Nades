@@ -3,22 +3,33 @@ import { ref, computed, watch } from 'vue'
 import axios from 'axios'
 import { DEFAULT_LINEUPS } from '../data/defaultLineups'
 import { useMapStore } from './mapStore'
-import type { Lineup, GrenadeType } from '../types'
+import type { Lineup, GrenadeType, NadeExecute } from '../types'
 
 const STORAGE_KEY = 'cs2_stratbook_custom_lineups'
 const FAVORITES_KEY = 'cs2_stratbook_favorites'
+const EXECUTES_STORAGE_KEY = 'cs2_stratbook_executes'
 
 export const useLineupStore = defineStore('lineup', () => {
   const mapStore = useMapStore()
 
   // State
   const customLineups = ref<Lineup[]>([])
+  const customExecutes = ref<NadeExecute[]>([])
+  const activeExecuteId = ref<string | null>(null)
+  const isCreateExecuteModalOpen = ref<boolean>(false)
+
   const favoriteIds = ref<string[]>([])
   const activeLineup = ref<Lineup | null>(null)
   const hoveredLineup = ref<Lineup | null>(null)
   const isAddModalOpen = ref<boolean>(false)
   const isEditMode = ref<boolean>(false)
   const editingLineup = ref<Lineup | null>(null)
+
+  // Sync state
+  const isSyncing = ref<boolean>(false)
+  const isConflictModalOpen = ref<boolean>(false)
+  const pendingConflicts = ref<{ local: Lineup; server: Lineup }[]>([])
+  const lastSyncTime = ref<string | null>(null)
 
   // Initialize from LocalStorage
   function loadFromStorage() {
@@ -31,6 +42,10 @@ export const useLineupStore = defineStore('lineup', () => {
       if (favs) {
         favoriteIds.value = JSON.parse(favs)
       }
+      const execs = localStorage.getItem(EXECUTES_STORAGE_KEY)
+      if (execs) {
+        customExecutes.value = JSON.parse(execs)
+      }
     } catch (e) {
       console.error('Failed to load custom lineups from storage', e)
     }
@@ -40,6 +55,7 @@ export const useLineupStore = defineStore('lineup', () => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(customLineups.value))
       localStorage.setItem(FAVORITES_KEY, JSON.stringify(favoriteIds.value))
+      localStorage.setItem(EXECUTES_STORAGE_KEY, JSON.stringify(customExecutes.value))
     } catch (e) {
       console.error('Failed to save custom lineups to storage', e)
     }
@@ -48,7 +64,7 @@ export const useLineupStore = defineStore('lineup', () => {
   loadFromStorage()
 
   // Watch for changes to save
-  watch([customLineups, favoriteIds], () => {
+  watch([customLineups, favoriteIds, customExecutes], () => {
     saveToStorage()
   }, { deep: true })
 
@@ -62,8 +78,30 @@ export const useLineupStore = defineStore('lineup', () => {
     return allLineups.value.filter(l => l.mapId === mapStore.currentMapId)
   })
 
+  // Executes for current map
+  const currentMapExecutes = computed<NadeExecute[]>(() => {
+    return customExecutes.value.filter(e => e.mapId === mapStore.currentMapId)
+  })
+
+  // Active Execute
+  const activeExecute = computed<NadeExecute | null>(() => {
+    if (!activeExecuteId.value) return null
+    return customExecutes.value.find(e => e.id === activeExecuteId.value) || null
+  })
+
+  // Lineups in active execute
+  const activeExecuteLineups = computed<Lineup[]>(() => {
+    if (!activeExecute.value) return []
+    return currentMapLineups.value.filter(l => activeExecute.value!.lineupIds.includes(l.id))
+  })
+
   // Filtered lineups for display
   const filteredLineups = computed<Lineup[]>(() => {
+    // If an execute group is active, isolate to that execute's lineups
+    if (activeExecute.value) {
+      return activeExecuteLineups.value
+    }
+
     return currentMapLineups.value.filter(lineup => {
       // Nade type filter
       if (!mapStore.selectedNadeTypes.includes(lineup.grenadeType)) {
@@ -75,16 +113,10 @@ export const useLineupStore = defineStore('lineup', () => {
         return false
       }
 
-      // Site filter
-      if (mapStore.selectedSite !== 'all') {
-        if (lineup.site !== mapStore.selectedSite) {
-          return false
-        }
-      }
-
-      // Throw type filter
-      if (mapStore.selectedThrowType !== 'all') {
-        if (lineup.throwType !== mapStore.selectedThrowType) {
+      // Surface Level Filter (if map is multi-level and not 'all')
+      if (mapStore.surfaceLevel !== 'all') {
+        const levelTag = (lineup as any).level || (lineup.tags || []).find(t => t.toLowerCase() === 'upper' || t.toLowerCase() === 'lower')
+        if (levelTag && levelTag.toLowerCase() !== mapStore.surfaceLevel) {
           return false
         }
       }
@@ -117,7 +149,6 @@ export const useLineupStore = defineStore('lineup', () => {
 
     currentMapLineups.value.forEach(l => {
       if (counts[l.grenadeType] !== undefined) {
-        // Match side filter
         if (mapStore.selectedSide === 'all' || l.side === 'all' || l.side === mapStore.selectedSide) {
           counts[l.grenadeType]++
         }
@@ -153,173 +184,158 @@ export const useLineupStore = defineStore('lineup', () => {
     return favoriteIds.value.includes(id)
   }
 
-  function addLineup(newLineupData: Omit<Lineup, 'id' | 'createdAt' | 'isCustom'>): Lineup {
-    const id = `custom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  function addLineup(lineupData: Omit<Lineup, 'id' | 'createdAt'>): Lineup {
     const newLineup: Lineup = {
-      ...newLineupData,
-      id,
-      isCustom: true,
-      createdAt: new Date().toISOString().split('T')[0]
+      ...lineupData,
+      id: `custom-lineup-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      createdAt: new Date().toISOString(),
+      isCustom: true
     }
-    customLineups.value.push(newLineup)
+    customLineups.value.unshift(newLineup)
+    pushToServer(newLineup).catch(() => {})
     return newLineup
   }
 
-  function updateLineup(id: string, updatedData: Partial<Lineup>) {
-    const idx = customLineups.value.findIndex(l => l.id === id)
+  function updateLineup(updatedLineup: Lineup) {
+    const idx = customLineups.value.findIndex(l => l.id === updatedLineup.id)
     if (idx >= 0) {
-      customLineups.value[idx] = {
-        ...customLineups.value[idx],
-        ...updatedData,
-        updatedAt: new Date().toISOString().split('T')[0]
-      }
-      if (activeLineup.value?.id === id) {
-        activeLineup.value = customLineups.value[idx]
-      }
+      customLineups.value[idx] = { ...updatedLineup, updatedAt: new Date().toISOString() }
+      pushToServer(customLineups.value[idx]).catch(() => {})
     }
   }
 
-  async function deleteLineup(id: string) {
-    const idx = customLineups.value.findIndex(l => l.id === id)
-    if (idx >= 0) {
-      customLineups.value.splice(idx, 1)
-      if (activeLineup.value?.id === id) {
-        activeLineup.value = null
-      }
-      if (hoveredLineup.value?.id === id) {
-        hoveredLineup.value = null
-      }
-      // Also remove from favorites
-      const favIdx = favoriteIds.value.indexOf(id)
-      if (favIdx >= 0) favoriteIds.value.splice(favIdx, 1)
-
-      // Try server delete if online
-      try {
-        await axios.delete(`/api/lineups/${id}`)
-      } catch (e) {
-        // Ignored if offline or unauthorized
-      }
-    }
+  function deleteLineup(id: string) {
+    customLineups.value = customLineups.value.filter(l => l.id !== id)
+    favoriteIds.value = favoriteIds.value.filter(fId => fId !== id)
+    // Remove from executes
+    customExecutes.value.forEach(e => {
+      e.lineupIds = e.lineupIds.filter(lId => lId !== id)
+    })
+    if (activeLineup.value?.id === id) activeLineup.value = null
+    if (hoveredLineup.value?.id === id) hoveredLineup.value = null
+    axios.delete(`/api/lineups/${id}`).catch(() => {})
   }
 
   function clearAllLineups() {
     customLineups.value = []
     favoriteIds.value = []
+    customExecutes.value = []
     activeLineup.value = null
     hoveredLineup.value = null
-    localStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem(FAVORITES_KEY)
+    saveToStorage()
+    axios.post('/api/lineups/clear').catch(() => {})
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // EXECUTE / NADE GROUPING ACTIONS
+  // ─────────────────────────────────────────────────────────────
+  function createExecute(execData: Omit<NadeExecute, 'id' | 'createdAt'>): NadeExecute {
+    const newExec: NadeExecute = {
+      ...execData,
+      id: `exec-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      createdAt: new Date().toISOString()
+    }
+    customExecutes.value.unshift(newExec)
+    saveToStorage()
+    return newExec
+  }
+
+  function deleteExecute(id: string) {
+    customExecutes.value = customExecutes.value.filter(e => e.id !== id)
+    if (activeExecuteId.value === id) activeExecuteId.value = null
+    saveToStorage()
+  }
+
+  function toggleLineupInExecute(executeId: string, lineupId: string) {
+    const exec = customExecutes.value.find(e => e.id === executeId)
+    if (exec) {
+      const idx = exec.lineupIds.indexOf(lineupId)
+      if (idx >= 0) {
+        exec.lineupIds.splice(idx, 1)
+      } else {
+        exec.lineupIds.push(lineupId)
+      }
+      saveToStorage()
+    }
+  }
+
+  function setActiveExecute(execId: string | null) {
+    activeExecuteId.value = execId
   }
 
   function exportJSON(): string {
-    const exportData = {
-      version: '2.0',
-      exportedAt: new Date().toISOString(),
-      customLineups: customLineups.value,
-      favorites: favoriteIds.value
-    }
-    return JSON.stringify(exportData, null, 2)
+    return JSON.stringify(customLineups.value, null, 2)
   }
 
-  function importJSON(jsonString: string): { success: boolean; count: number; error?: string } {
+  function importJSON(jsonStr: string): { success: boolean; count?: number; error?: string } {
     try {
-      const data = JSON.parse(jsonString)
-      if (Array.isArray(data.customLineups)) {
-        // Merge or replace
-        const newItems: Lineup[] = data.customLineups.map((item: any) => ({
-          ...item,
-          id: item.id || `custom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          isCustom: true
-        }))
-        
-        // Filter duplicates
-        const existingIds = new Set(customLineups.value.map(l => l.id))
-        const filteredNew = newItems.filter(item => !existingIds.has(item.id))
-        
-        customLineups.value.push(...filteredNew)
-        if (Array.isArray(data.favorites)) {
-          favoriteIds.value = Array.from(new Set([...favoriteIds.value, ...data.favorites]))
-        }
-        return { success: true, count: filteredNew.length }
+      const parsed = JSON.parse(jsonStr)
+      if (Array.isArray(parsed)) {
+        customLineups.value = parsed
+        saveToStorage()
+        return { success: true, count: parsed.length }
       }
-      return { success: false, count: 0, error: 'Invalid JSON format: missing customLineups array' }
+      return { success: false, error: 'Invalid JSON array structure.' }
     } catch (e: any) {
-      return { success: false, count: 0, error: e.message || 'JSON parsing error' }
+      console.error('Import failed', e)
+      return { success: false, error: e?.message || 'Invalid JSON syntax.' }
     }
   }
-
-  // Server Sync and Conflict Resolution
-  const isSyncing = ref<boolean>(false)
-  const isConflictModalOpen = ref<boolean>(false)
-  const pendingConflicts = ref<Array<{ id: string; local: Lineup; server: Lineup }>>([])
-  const lastSyncTime = ref<string | null>(localStorage.getItem('cs2_stratbook_last_sync'))
 
   async function syncWithServer() {
     isSyncing.value = true
     try {
       const res = await axios.get('/api/lineups')
-      const serverLineups: Lineup[] = res.data
+      const serverLineups: Lineup[] = res.data || []
+      
+      const conflicts: { local: Lineup; server: Lineup }[] = []
+      const localMap = new Map<string, Lineup>()
+      customLineups.value.forEach(l => localMap.set(l.id, l))
 
-      const newConflicts: Array<{ id: string; local: Lineup; server: Lineup }> = []
-      const localMap = new Map(customLineups.value.map(l => [l.id, l]))
-
-      for (const serverItem of serverLineups) {
-        const localItem = localMap.get(serverItem.id)
-        if (!localItem) {
-          // No conflict, just add server lineup
-          customLineups.value.push({ ...serverItem, isCustom: true })
-        } else {
-          // Check if contents actually differ
-          const isDifferent = 
-            localItem.title !== serverItem.title ||
-            localItem.grenadeType !== serverItem.grenadeType ||
-            localItem.originCoords.x !== serverItem.originCoords.x ||
-            localItem.originCoords.y !== serverItem.originCoords.y ||
-            localItem.landingCoords.x !== serverItem.landingCoords.x ||
-            localItem.landingCoords.y !== serverItem.landingCoords.y ||
-            localItem.startLocation !== serverItem.startLocation ||
-            localItem.endLocation !== serverItem.endLocation
-
-          if (isDifferent) {
-            newConflicts.push({
-              id: serverItem.id,
-              local: localItem,
-              server: serverItem
-            })
+      serverLineups.forEach(serverL => {
+        const localL = localMap.get(serverL.id)
+        if (localL) {
+          if (JSON.stringify(localL) !== JSON.stringify(serverL)) {
+            conflicts.push({ local: localL, server: serverL })
           }
+        } else {
+          customLineups.value.push(serverL)
+        }
+      })
+
+      for (const localL of customLineups.value) {
+        if (!serverLineups.some(s => s.id === localL.id)) {
+          await pushToServer(localL)
         }
       }
 
-      if (newConflicts.length > 0) {
-        pendingConflicts.value = newConflicts
+      if (conflicts.length > 0) {
+        pendingConflicts.value = conflicts
         isConflictModalOpen.value = true
       }
 
-      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      lastSyncTime.value = now
-      localStorage.setItem('cs2_stratbook_last_sync', now)
-      return { success: true, conflictCount: newConflicts.length }
-    } catch (e: any) {
-      console.warn('Server sync offline / unavailable:', e.message)
-      return { success: false, error: e.message }
+      lastSyncTime.value = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } catch (e) {
+      console.warn('Server sync not reachable, working in offline mode:', e)
     } finally {
       isSyncing.value = false
     }
   }
 
-  function resolveConflict(conflictId: string, choice: 'local' | 'server' | 'both') {
-    const conflictIndex = pendingConflicts.value.findIndex(c => c.id === conflictId)
-    if (conflictIndex === -1) return
+  function resolveConflict(conflictIndex: number, choice: 'local' | 'server' | 'both') {
+    const item = pendingConflicts.value[conflictIndex]
+    if (!item) return
 
-    const { local, server } = pendingConflicts.value[conflictIndex]
-    const localIndex = customLineups.value.findIndex(l => l.id === conflictId)
+    const { local, server } = item
+    const idx = customLineups.value.findIndex(l => l.id === local.id)
 
     if (choice === 'server') {
-      if (localIndex >= 0) {
-        customLineups.value[localIndex] = { ...server, isCustom: true }
+      if (idx >= 0) {
+        customLineups.value[idx] = server
+      } else {
+        customLineups.value.push(server)
       }
     } else if (choice === 'both') {
-      // Keep local and add server copy with unique ID
       const duplicatedServer: Lineup = {
         ...server,
         id: `server-copy-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -328,7 +344,6 @@ export const useLineupStore = defineStore('lineup', () => {
       }
       customLineups.value.push(duplicatedServer)
     }
-    // If 'local', do nothing (local version stays)
 
     pendingConflicts.value.splice(conflictIndex, 1)
     if (pendingConflicts.value.length === 0) {
@@ -355,6 +370,12 @@ export const useLineupStore = defineStore('lineup', () => {
     activeLineup,
     hoveredLineup,
     favoriteIds,
+    customExecutes,
+    currentMapExecutes,
+    activeExecuteId,
+    activeExecute,
+    activeExecuteLineups,
+    isCreateExecuteModalOpen,
     isAddModalOpen,
     isEditMode,
     editingLineup,
@@ -371,6 +392,10 @@ export const useLineupStore = defineStore('lineup', () => {
     updateLineup,
     deleteLineup,
     clearAllLineups,
+    createExecute,
+    deleteExecute,
+    toggleLineupInExecute,
+    setActiveExecute,
     exportJSON,
     importJSON,
     syncWithServer,

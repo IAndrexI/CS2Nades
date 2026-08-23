@@ -21,6 +21,8 @@ export const useMapStore = defineStore('map', () => {
   const currentMapId = ref<string>('mirage')
   const selectedNadeTypes = ref<GrenadeType[]>(['smoke', 'flash', 'molotov', 'he'])
   const selectedSide = ref<TeamSide>('all')
+  const selectedTeam = ref<string>('all') // 'all' | 't' | 'ct' | 'my_squad'
+  const surfaceLevel = ref<'all' | 'upper' | 'lower'>('all') // Surface level for multi-level maps (Nuke, Vertigo)
   const selectedThrowType = ref<string>('all')
   const selectedSite = ref<string>('all')
   const searchQuery = ref<string>('')
@@ -203,7 +205,20 @@ export const useMapStore = defineStore('map', () => {
 
   function setSide(side: TeamSide) {
     selectedSide.value = side
+    selectedTeam.value = side
     selectedLandingSpotKey.value = null
+  }
+
+  function setTeam(team: string) {
+    selectedTeam.value = team
+    if (team === 't' || team === 'ct' || team === 'all') {
+      selectedSide.value = team as TeamSide
+    }
+    selectedLandingSpotKey.value = null
+  }
+
+  function setSurfaceLevel(level: 'all' | 'upper' | 'lower') {
+    surfaceLevel.value = level
   }
 
   function setSite(site: string) {
@@ -274,6 +289,8 @@ export const useMapStore = defineStore('map', () => {
     isMapSettingsOpen,
     selectedNadeTypes,
     selectedSide,
+    selectedTeam,
+    surfaceLevel,
     selectedThrowType,
     selectedSite,
     searchQuery,
@@ -299,6 +316,8 @@ export const useMapStore = defineStore('map', () => {
     toggleNadeType,
     selectOnlyNadeType,
     setSide,
+    setTeam,
+    setSurfaceLevel,
     setSite,
     setThrowType,
     setSearchQuery,

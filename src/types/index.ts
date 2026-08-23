@@ -130,3 +130,15 @@ export interface TacticsElement {
   playerRole?: string
   radius?: number
 }
+
+export interface NadeExecute {
+  id: string
+  title: string
+  mapId: string
+  side: TeamSide
+  site?: string
+  description?: string
+  lineupIds: string[]
+  author?: string
+  createdAt?: string
+}

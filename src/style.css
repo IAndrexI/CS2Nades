@@ -22,8 +22,71 @@
     color: #f1f5f9;
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     overflow-x: hidden;
-    user-select: none;
   }
+}
+
+/* ── LIGHT THEME OVERRIDES ────────────────────────────────── */
+html.light-theme {
+  --color-bg-base: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-card: #f1f5f9;
+  --color-bg-hover: #e2e8f0;
+  --color-border: #cbd5e1;
+}
+
+html.light-theme body,
+html.light-theme .app-root {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+html.light-theme .bg-slate-950,
+html.light-theme .bg-slate-950\/90,
+html.light-theme .bg-slate-950\/80,
+html.light-theme .bg-slate-950\/60 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.light-theme .bg-slate-900,
+html.light-theme .bg-slate-900\/90,
+html.light-theme .bg-slate-900\/95 {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light-theme .bg-slate-800 {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.light-theme .border-slate-800,
+html.light-theme .border-slate-700 {
+  border-color: #cbd5e1 !important;
+}
+
+html.light-theme .text-slate-400,
+html.light-theme .text-slate-500 {
+  color: #64748b !important;
+}
+
+html.light-theme .text-white {
+  color: #0f172a !important;
+}
+
+html.light-theme .text-slate-200,
+html.light-theme .text-slate-300 {
+  color: #1e293b !important;
+}
+
+/* ── PHONE / COMPACT MOBILE VIEWPORT MODE ────────────────── */
+html.phone-mode-active .app-root {
+  max-width: 480px;
+  margin: 0 auto;
+  border-left: 1px solid #1e293b;
+  border-right: 1px solid #1e293b;
+  min-height: 100vh;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.6);
 }
 
 /* Custom Tactical Scrollbar */
@@ -80,24 +143,4 @@
 .bg-dot-grid {
   background-size: 24px 24px;
   background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-}
-
-/* Tactical HUD border clipped corners */
-.hud-clip {
-  clip-path: polygon(
-    0 8px,
-    8px 0,
-    calc(100% - 8px) 0,
-    100% 8px,
-    100% calc(100% - 8px),
-    calc(100% - 8px) 100%,
-    8px 100%,
-    0 calc(100% - 8px)
-  );
-}
-
-.hud-panel {
-  background: rgba(18, 24, 32, 0.85);
-  backdrop-filter: blur(12px);
-  border: 1px solid #2a3649;
 }

@@ -6,6 +6,7 @@ import InteractiveMinimap from '../components/map/InteractiveMinimap.vue'
 import LineupGrid from '../components/lineups/LineupGrid.vue'
 import LineupModal from '../components/lineups/LineupModal.vue'
 import AddLineupModal from '../components/lineups/AddLineupModal.vue'
+import CreateExecuteModal from '../components/lineups/CreateExecuteModal.vue'
 
 const mapStore = useMapStore()
 const lineupStore = useLineupStore()
@@ -27,5 +28,6 @@ const lineupStore = useLineupStore()
     <!-- MODALS -->
     <LineupModal />
     <AddLineupModal />
+    <CreateExecuteModal />
   </div>
 </template>

@@ -80,7 +80,7 @@ const remainingCount = computed(() => lineupStore.pendingConflicts.length)
           </div>
 
           <button
-            @click="lineupStore.resolveConflict(currentConflict.id, 'local')"
+            @click="lineupStore.resolveConflict(0, 'local')"
             class="mt-2 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
           >
             <Check class="w-4 h-4 text-amber-400" />
@@ -109,7 +109,7 @@ const remainingCount = computed(() => lineupStore.pendingConflicts.length)
           </div>
 
           <button
-            @click="lineupStore.resolveConflict(currentConflict.id, 'server')"
+            @click="lineupStore.resolveConflict(0, 'server')"
             class="mt-2 py-2 px-3 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
           >
             <ArrowRight class="w-4 h-4 text-cyan-400" />
@@ -126,7 +126,7 @@ const remainingCount = computed(() => lineupStore.pendingConflicts.length)
         </span>
 
         <button
-          @click="lineupStore.resolveConflict(currentConflict.id, 'both')"
+          @click="lineupStore.resolveConflict(0, 'both')"
           class="py-2 px-4 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
         >
           <Copy class="w-4 h-4 stroke-[2.5]" />
