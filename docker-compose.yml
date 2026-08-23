@@ -11,5 +11,14 @@ services:
       - "8080:80"
     environment:
       - NODE_ENV=production
+      - PORT=80
+      - DATA_DIR=/app/server/data
+      - JWT_SECRET=cs2-stratbook-secret-key-change-me-if-desired
+    volumes:
+      - cs2-stratbook-data:/app/server/data
     labels:
       - "io.portainer.accesscontrol.teams=admin"
+
+volumes:
+  cs2-stratbook-data:
+    name: cs2-stratbook-data

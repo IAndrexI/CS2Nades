@@ -3,8 +3,11 @@ import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
+import { useAuthStore } from '../../stores/authStore'
+import { useAdminStore } from '../../stores/adminStore'
 import DataSyncModal from '../common/DataSyncModal.vue'
 import MapSettingsModal from '../map/MapSettingsModal.vue'
+import AuthModal from '../auth/AuthModal.vue'
 import { 
   Crosshair, 
   Map as MapIcon, 
@@ -15,34 +18,48 @@ import {
   Database, 
   ChevronDown,
   Settings2,
-  Layers
+  Layers,
+  User,
+  ShieldCheck,
+  LogOut,
+  UserCheck,
+  BookMarked
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
 const lineupStore = useLineupStore()
+const authStore = useAuthStore()
+const adminStore = useAdminStore()
 const router = useRouter()
 const route = useRoute()
 
 const isMapDropdownOpen = ref(false)
+const isUserDropdownOpen = ref(false)
 const isDataModalOpen = ref(false)
 
 const navLinks = [
   { name: 'Radar Minimap', path: '/', icon: MapIcon },
   { name: 'Stratbook', path: '/strats', icon: BookOpen },
   { name: 'Tactics Board', path: '/tactics', icon: PenTool },
-  { name: 'Lineup Library', path: '/library', icon: Grid }
+  { name: 'Lineup Library', path: '/library', icon: Grid },
+  { name: 'My Lineups', path: '/my-lineups', icon: BookMarked }
 ]
 
 function selectMap(mapId: string) {
   mapStore.setMap(mapId)
   isMapDropdownOpen.value = false
 }
+
+function handleLogout() {
+  authStore.logout()
+  isUserDropdownOpen.value = false
+}
 </script>
 
 <template>
   <header class="navbar-wrapper w-full bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-      <!-- LOGO & BRANDING -->
+      <!-- LOGO & BRANDING (CUSTOMIZABLE VIA ADMIN) -->
       <div class="flex items-center gap-6">
         <router-link to="/" class="flex items-center gap-2.5 group cursor-pointer">
           <div class="p-2 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-transform">
@@ -50,10 +67,10 @@ function selectMap(mapId: string) {
           </div>
           <div class="flex flex-col">
             <span class="text-sm font-black tracking-wider text-white uppercase group-hover:text-amber-400 transition-colors">
-              CS2 STRATBOOK
+              {{ adminStore.settings.siteTitle || 'CS2 STRATBOOK' }}
             </span>
-            <span class="text-[10px] font-mono text-amber-500/90 font-bold -mt-0.5 tracking-widest">
-              PROXMOX // SELF-HOSTED
+            <span class="text-[10px] font-mono text-amber-500/90 font-bold -mt-0.5 tracking-widest uppercase">
+              {{ adminStore.settings.teamName || 'PRO TACTICS' }} // SELF-HOSTED
             </span>
           </div>
         </router-link>
@@ -107,7 +124,6 @@ function selectMap(mapId: string) {
               </button>
             </div>
 
-            <!-- ADD CUSTOM MAP BUTTON IN DROPDOWN -->
             <div class="p-2 border-t border-slate-800 bg-slate-950/60">
               <button 
                 @click="mapStore.isMapSettingsOpen = true; isMapDropdownOpen = false"
@@ -122,13 +138,13 @@ function selectMap(mapId: string) {
       </div>
 
       <!-- MAIN NAVIGATION TABS -->
-      <nav class="hidden md:flex items-center gap-1 p-1 bg-slate-900/80 rounded-xl border border-slate-800">
+      <nav class="hidden lg:flex items-center gap-1 p-1 bg-slate-900/80 rounded-xl border border-slate-800">
         <router-link
           v-for="link in navLinks"
           :key="link.path"
           :to="link.path"
           :class="[
-            'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all',
+            'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all',
             route.path === link.path 
               ? 'bg-slate-800 text-amber-400 shadow-sm border border-slate-700' 
               : 'text-slate-400 hover:text-slate-200'
@@ -139,26 +155,89 @@ function selectMap(mapId: string) {
         </router-link>
       </nav>
 
-      <!-- RIGHT ACTIONS: MAP SETTINGS & BACKUP -->
+      <!-- RIGHT ACTIONS: USER AUTH, ADMIN, SYNC, NEW NADE -->
       <div class="flex items-center gap-2.5">
-        <button
-          @click="mapStore.isMapSettingsOpen = true"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-amber-400 text-xs font-bold rounded-xl transition-colors cursor-pointer"
-          title="Map & Radar Settings"
+        <!-- ADMIN PANEL LINK (IF ADMIN) -->
+        <router-link
+          v-if="authStore.isAdmin"
+          to="/admin"
+          :class="[
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all',
+            route.path === '/admin'
+              ? 'bg-amber-500 text-slate-950 font-black'
+              : 'bg-slate-900 hover:bg-slate-850 border border-slate-800 text-amber-400'
+          ]"
+          title="Admin Panel"
         >
-          <Settings2 class="w-3.5 h-3.5 text-amber-400" />
-          <span class="hidden sm:inline">Map Settings</span>
-        </button>
+          <ShieldCheck class="w-3.5 h-3.5" />
+          <span class="hidden sm:inline">Admin</span>
+        </router-link>
 
-        <button
-          @click="isDataModalOpen = true"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
-          title="Backup & Storage Settings"
-        >
-          <Database class="w-3.5 h-3.5 text-amber-400" />
-          <span class="hidden sm:inline">Data</span>
-        </button>
+        <!-- USER PROFILE / LOGIN BUTTON -->
+        <div class="relative">
+          <template v-if="authStore.isAuthenticated">
+            <button
+              @click="isUserDropdownOpen = !isUserDropdownOpen"
+              class="flex items-center gap-2 p-1 pl-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-colors cursor-pointer"
+            >
+              <span class="hidden sm:inline">{{ authStore.currentUser?.username }}</span>
+              <img 
+                :src="authStore.currentUser?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${authStore.currentUser?.username}`" 
+                class="w-6 h-6 rounded-lg bg-slate-950 border border-slate-700" 
+              />
+            </button>
 
+            <!-- USER DROPDOWN -->
+            <div 
+              v-if="isUserDropdownOpen"
+              class="absolute top-full right-0 mt-2 w-52 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in text-xs"
+            >
+              <div class="p-3 border-b border-slate-800 flex flex-col gap-0.5">
+                <span class="font-bold text-white">{{ authStore.currentUser?.username }}</span>
+                <span class="text-[10px] text-amber-400 font-mono font-semibold uppercase">{{ authStore.currentUser?.inGameRole || 'Player' }} • {{ authStore.currentUser?.role }}</span>
+              </div>
+
+              <router-link
+                to="/my-lineups"
+                @click="isUserDropdownOpen = false"
+                class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+              >
+                <BookMarked class="w-4 h-4 text-amber-400" />
+                <span>My Personal Lineups</span>
+              </router-link>
+
+              <router-link
+                v-if="authStore.isAdmin"
+                to="/admin"
+                @click="isUserDropdownOpen = false"
+                class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+              >
+                <ShieldCheck class="w-4 h-4 text-amber-400" />
+                <span>Admin Dashboard</span>
+              </router-link>
+
+              <button
+                @click="handleLogout"
+                class="flex items-center gap-2 px-3 py-2 text-rose-400 hover:bg-rose-500/10 transition-colors w-full text-left border-t border-slate-800 cursor-pointer"
+              >
+                <LogOut class="w-4 h-4" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </template>
+
+          <template v-else>
+            <button
+              @click="authStore.authMode = 'login'; authStore.isAuthModalOpen = true"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-200 hover:text-amber-400 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+            >
+              <User class="w-3.5 h-3.5 text-amber-400" />
+              <span>Sign In</span>
+            </button>
+          </template>
+        </div>
+
+        <!-- NEW NADE BUTTON -->
         <button
           @click="lineupStore.isAddModalOpen = true"
           class="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
@@ -178,5 +257,6 @@ function selectMap(mapId: string) {
       :is-open="mapStore.isMapSettingsOpen"
       @close="mapStore.isMapSettingsOpen = false"
     />
+    <AuthModal />
   </header>
 </template>

@@ -2,6 +2,7 @@
 import { ref, reactive, watch } from 'vue'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useMapStore } from '../../stores/mapStore'
+import { useAuthStore } from '../../stores/authStore'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { GrenadeType, TeamSide, ThrowType, TickrateType } from '../../types'
 import { 
@@ -11,13 +12,15 @@ import {
   Plus, 
   Trash2, 
   Check, 
-  HelpCircle,
-  Video,
-  Image as ImageIcon
+  Video, 
+  Image as ImageIcon,
+  Share2,
+  Lock
 } from 'lucide-vue-next'
 
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
+const authStore = useAuthStore()
 
 const formData = reactive({
   title: '',
@@ -32,6 +35,7 @@ const formData = reactive({
   originCoords: { x: 50, y: 50 },
   landingCoords: { x: 50, y: 30 },
   curveOffset: 0,
+  isTeamShared: true,
   videoUrl: '',
   imageUrl: '',
   description: '',
@@ -41,7 +45,6 @@ const formData = reactive({
   tags: ''
 })
 
-// Watch for coordinates picked via minimap placement mode
 watch(() => mapStore.tempPlacement, (newVal) => {
   if (newVal.origin) {
     formData.originCoords = { ...newVal.origin }
@@ -79,7 +82,7 @@ function handleSave() {
 
   const cleanInstructions = formData.instructions.filter(i => i.trim().length > 0)
 
-  lineupStore.addLineup({
+  const newLineup = lineupStore.addLineup({
     title: formData.title,
     mapId: formData.mapId,
     grenadeType: formData.grenadeType,
@@ -98,8 +101,16 @@ function handleSave() {
     instructions: cleanInstructions.length ? cleanInstructions : ['Execute throw alignment.'],
     consoleCommand: formData.consoleCommand || undefined,
     difficulty: formData.difficulty,
+    author: authStore.currentUser?.username || 'You',
     tags: tagsArray.length ? tagsArray : ['Custom']
   })
+
+  // Tag author info
+  if (authStore.currentUser) {
+    (newLineup as any).userId = authStore.currentUser.id;
+    (newLineup as any).authorName = authStore.currentUser.username;
+    (newLineup as any).isTeamShared = formData.isTeamShared
+  }
 
   lineupStore.isAddModalOpen = false
   resetForm()
@@ -115,6 +126,7 @@ function resetForm() {
   formData.instructions = ['']
   formData.consoleCommand = ''
   formData.tags = ''
+  formData.isTeamShared = true
 }
 </script>
 
@@ -133,7 +145,9 @@ function resetForm() {
           </div>
           <div>
             <h2 class="text-lg font-black tracking-tight text-white">Create New Grenade Lineup</h2>
-            <p class="text-xs text-slate-400">Add an indexed smoke, flash, molotov, or HE lineup with radar placement</p>
+            <p class="text-xs text-slate-400">
+              {{ authStore.currentUser ? `Creating as ${authStore.currentUser.username} (${authStore.currentUser.inGameRole})` : 'Indexed grenade guide' }}
+            </p>
           </div>
         </div>
 
@@ -145,9 +159,9 @@ function resetForm() {
         </button>
       </div>
 
-      <!-- BODY (FORM) -->
+      <!-- BODY -->
       <div class="flex-grow overflow-y-auto p-6 flex flex-col gap-5 text-xs">
-        <!-- ROW 1: TITLE & MAP -->
+        <!-- ROW 1: TITLE, MAP & PRIVACY -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="md:col-span-2 flex flex-col gap-1.5">
             <label class="font-bold text-slate-300">Lineup Title *</label>
@@ -172,7 +186,7 @@ function resetForm() {
           </div>
         </div>
 
-        <!-- ROW 2: GRENADE TYPE & SIDE & THROW TYPE -->
+        <!-- ROW 2: GRENADE TYPE, SIDE, THROW TYPE -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="flex flex-col gap-1.5">
             <label class="font-bold text-slate-300">Grenade Type</label>
@@ -216,12 +230,12 @@ function resetForm() {
           </div>
         </div>
 
-        <!-- ROW 3: RADAR COORDINATES & PICK BUTTON -->
+        <!-- ROW 3: RADAR COORDINATES PICKER -->
         <div class="p-4 bg-slate-950/80 border border-slate-800 rounded-xl flex flex-col gap-3">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <Crosshair class="w-4 h-4 text-amber-400" />
-              <span class="font-bold text-slate-200">Radar Map Positioning</span>
+              <span class="font-bold text-slate-200">Radar Positioning Coordinates</span>
             </div>
             <button 
               type="button"
@@ -229,7 +243,7 @@ function resetForm() {
               class="flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 rounded-lg font-bold text-xs transition-colors cursor-pointer"
             >
               <MapPin class="w-3.5 h-3.5" />
-              <span>Pick on Radar Map</span>
+              <span>Click to Pinpoint on Radar Map</span>
             </button>
           </div>
 
@@ -253,20 +267,20 @@ function resetForm() {
           </div>
         </div>
 
-        <!-- ROW 4: LOCATIONS & SITE -->
+        <!-- ROW 4: LOCATIONS, SITE, SHARING -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="flex flex-col gap-1.5">
-            <label class="font-bold text-slate-300">Standing Location (Start)</label>
+            <label class="font-bold text-slate-300">Standing Spot (Start)</label>
             <input 
               v-model="formData.startLocation" 
               type="text" 
-              placeholder="e.g. T Spawn / Trash Can" 
+              placeholder="e.g. T Spawn (Trash Can)" 
               class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/80"
             />
           </div>
 
           <div class="flex flex-col gap-1.5">
-            <label class="font-bold text-slate-300">Detonation Location (Target)</label>
+            <label class="font-bold text-slate-300">Landing Spot (Target)</label>
             <input 
               v-model="formData.endLocation" 
               type="text" 
@@ -342,7 +356,7 @@ function resetForm() {
             <input 
               v-model="formData.instructions[idx]" 
               type="text" 
-              placeholder="Describe step..."
+              placeholder="Describe alignment step..."
               class="flex-grow bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/80"
             />
             <button 
@@ -355,47 +369,53 @@ function resetForm() {
           </div>
         </div>
 
-        <!-- ROW 7: PRACTICE CONSOLE COMMAND & TAGS -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="flex flex-col gap-1.5">
-            <label class="font-bold text-slate-300">Practice Console Command</label>
-            <input 
-              v-model="formData.consoleCommand" 
-              type="text" 
-              placeholder="setpos ...; setang ..." 
-              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-amber-500/80"
-            />
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <label class="font-bold text-slate-300">Tags (comma separated)</label>
-            <input 
-              v-model="formData.tags" 
-              type="text" 
-              placeholder="Execute, Fast, Essential" 
-              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/80"
-            />
-          </div>
+        <!-- ROW 7: PRACTICE CONSOLE COMMAND -->
+        <div class="flex flex-col gap-1.5">
+          <label class="font-bold text-slate-300">Practice Console Command</label>
+          <input 
+            v-model="formData.consoleCommand" 
+            type="text" 
+            placeholder="setpos 1290.4 -430.1 -160.0; setang -12.4 94.2 0.0" 
+            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-amber-500/80"
+          />
         </div>
       </div>
 
-      <!-- FOOTER ACTIONS -->
-      <div class="flex items-center justify-end gap-3 p-5 border-t border-slate-800 bg-slate-950/60">
-        <button 
-          type="button"
-          @click="lineupStore.isAddModalOpen = false"
-          class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-        >
-          Cancel
-        </button>
-        <button 
-          type="button"
-          @click="handleSave"
-          class="flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
-        >
-          <Check class="w-4 h-4 stroke-[3]" />
-          <span>Save Lineup</span>
-        </button>
+      <!-- FOOTER -->
+      <div class="flex items-center justify-between p-5 border-t border-slate-800 bg-slate-950/60">
+        <!-- TEAM SHARING TOGGLE -->
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            @click="formData.isTeamShared = !formData.isTeamShared"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors cursor-pointer',
+              formData.isTeamShared ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-slate-800 text-slate-400'
+            ]"
+          >
+            <Share2 v-if="formData.isTeamShared" class="w-3.5 h-3.5" />
+            <Lock v-else class="w-3.5 h-3.5" />
+            <span>{{ formData.isTeamShared ? 'Shared with Team' : 'Private to My Account' }}</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button 
+            type="button"
+            @click="lineupStore.isAddModalOpen = false"
+            class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button"
+            @click="handleSave"
+            class="flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+          >
+            <Check class="w-4 h-4 stroke-[3]" />
+            <span>Save Lineup</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>

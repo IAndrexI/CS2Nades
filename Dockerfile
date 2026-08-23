@@ -5,29 +5,39 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package descriptors
+# Copy package files
 COPY package*.json ./
 
-# Install all dependencies
+# Install dependencies
 RUN npm ci
 
-# Copy source code and config
+# Copy source code and build
 COPY . .
-
-# Build production bundle with Vite
 RUN npm run build
 
 # ==========================================
-# Stage 2: Production Nginx Server
+# Stage 2: Production Node Server Runtime
 # ==========================================
-FROM nginx:alpine
+FROM node:20-alpine
 
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-# Copy compiled assets from builder
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Copy package files & install production dependencies only
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copy backend server code and built frontend dist
+COPY server/ ./server/
+COPY --from=builder /app/dist ./dist
+
+# Create persistent data directory
+RUN mkdir -p /app/server/data
+
+# Environment
+ENV NODE_ENV=production
+ENV PORT=80
+ENV DATA_DIR=/app/server/data
 
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server/server.js"]
