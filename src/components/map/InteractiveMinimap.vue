@@ -11,9 +11,9 @@ import {
   Maximize2, 
   MapPin, 
   Crosshair, 
-  Settings2,
-  Sparkles,
-  Layers
+  Settings2, 
+  Trash2,
+  ExternalLink
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -27,6 +27,7 @@ const isDragging = ref(false)
 const dragStart = ref({ x: 0, y: 0 })
 const hoveredLineup = ref<Lineup | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
+let hoverLeaveTimeout: any = null
 
 // Helper for Grenade Colors
 function getNadeColor(type: GrenadeType): string {
@@ -47,16 +48,13 @@ function getTrajectoryPath(origin: { x: number; y: number }, landing: { x: numbe
   const lx = landing.x * 10
   const ly = landing.y * 10
 
-  // Midpoint
   const mx = (ox + lx) / 2
   const my = (oy + ly) / 2
 
-  // Perpendicular vector for arching
   const dx = lx - ox
   const dy = ly - oy
   const dist = Math.sqrt(dx * dx + dy * dy)
   
-  // Arch height proportional to distance + curveOffset
   const archHeight = Math.min(Math.max(dist * 0.25, 20), 80) + (curveOffset * 2)
   
   const perpX = -dy / (dist || 1)
@@ -90,7 +88,7 @@ function resetZoom() {
 
 // Pan drag handlers
 function handleMouseDown(e: MouseEvent) {
-  if (e.button !== 0) return // Left click only
+  if (e.button !== 0) return
   
   if (mapStore.isPlacementMode) {
     handleMapClick(e)
@@ -111,14 +109,6 @@ function handleMouseMove(e: MouseEvent) {
       y: e.clientY - dragStart.value.y
     }
   }
-
-  if (hoveredLineup.value && mapContainer.value) {
-    const rect = mapContainer.value.getBoundingClientRect()
-    tooltipPosition.value = {
-      x: e.clientX - rect.left + 15,
-      y: e.clientY - rect.top + 15
-    }
-  }
 }
 
 function handleMouseUp() {
@@ -135,7 +125,6 @@ function getSvgPoint(e: MouseEvent): { x: number; y: number } | null {
   if (!ctm) return null
   const transformed = pt.matrixTransform(ctm.inverse())
   
-  // transformed.x and transformed.y are in 0..1000 SVG coordinate space
   const pctX = Math.round(Math.min(Math.max(transformed.x / 10, 0), 100) * 10) / 10
   const pctY = Math.round(Math.min(Math.max(transformed.y / 10, 0), 100) * 10) / 10
   return { x: pctX, y: pctY }
@@ -155,22 +144,44 @@ function handleMapClick(e: MouseEvent) {
   }
 }
 
-// Lineup marker interaction
-function handleLineupHover(lineup: Lineup | null, e?: MouseEvent) {
+// Lineup marker hover interaction with 180ms hysteresis to prevent flickering
+function handleLineupEnter(lineup: Lineup, e?: MouseEvent) {
+  if (hoverLeaveTimeout) {
+    clearTimeout(hoverLeaveTimeout)
+    hoverLeaveTimeout = null
+  }
   hoveredLineup.value = lineup
   lineupStore.setHoveredLineup(lineup)
-  if (lineup && e && mapContainer.value) {
+  if (e && mapContainer.value) {
     const rect = mapContainer.value.getBoundingClientRect()
-    tooltipPosition.value = {
-      x: e.clientX - rect.left + 15,
-      y: e.clientY - rect.top + 15
-    }
+    const rawX = e.clientX - rect.left + 16
+    const rawY = e.clientY - rect.top + 16
+    // Clamp inside container
+    const x = Math.min(Math.max(rawX, 10), rect.width - 280)
+    const y = Math.min(Math.max(rawY, 10), rect.height - 190)
+    tooltipPosition.value = { x, y }
   }
+}
+
+function handleLineupLeave() {
+  if (hoverLeaveTimeout) clearTimeout(hoverLeaveTimeout)
+  hoverLeaveTimeout = setTimeout(() => {
+    hoveredLineup.value = null
+    lineupStore.setHoveredLineup(null)
+  }, 180)
 }
 
 function handleLineupClick(lineup: Lineup, e: MouseEvent) {
   e.stopPropagation()
   lineupStore.openLineup(lineup)
+}
+
+function handleDeleteFromTooltip(lineup: Lineup, e: MouseEvent) {
+  e.stopPropagation()
+  if (confirm(`Delete lineup "${lineup.title}"?`)) {
+    lineupStore.deleteLineup(lineup.id)
+    hoveredLineup.value = null
+  }
 }
 
 onMounted(() => {
@@ -179,6 +190,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('mouseup', handleMouseUp)
+  if (hoverLeaveTimeout) clearTimeout(hoverLeaveTimeout)
 })
 </script>
 
@@ -220,17 +232,27 @@ onUnmounted(() => {
               'transition-all duration-200 cursor-pointer',
               hoveredLineup?.id === lineup.id ? 'opacity-100' : 'opacity-65 hover:opacity-100'
             ]"
-            @mouseenter="handleLineupHover(lineup, $event)"
-            @mouseleave="handleLineupHover(null)"
+            @mouseenter="handleLineupEnter(lineup, $event)"
+            @mouseleave="handleLineupLeave"
             @click="handleLineupClick(lineup, $event)"
           >
+            <!-- WIDE TRANSPARENT HIT-AREA (Prevents hover flickering) -->
+            <path 
+              :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
+              fill="none" 
+              stroke="transparent" 
+              stroke-width="28"
+              pointer-events="stroke"
+            />
+
             <!-- Outer Trajectory Glow Line -->
             <path 
               :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
               fill="none" 
               :stroke="getNadeColor(lineup.grenadeType)" 
-              :stroke-width="hoveredLineup?.id === lineup.id ? '4.5' : '3'"
+              :stroke-width="hoveredLineup?.id === lineup.id ? '5' : '3'"
               stroke-opacity="0.35"
+              pointer-events="none"
             />
 
             <!-- Inner Animated Dashed Line -->
@@ -240,6 +262,7 @@ onUnmounted(() => {
               :stroke="getNadeColor(lineup.grenadeType)" 
               :stroke-width="hoveredLineup?.id === lineup.id ? '2.5' : '1.8'"
               class="animate-trajectory"
+              pointer-events="none"
             />
           </g>
         </g>
@@ -251,10 +274,13 @@ onUnmounted(() => {
             :key="`origin-${lineup.id}`"
             :transform="`translate(${lineup.originCoords.x * 10}, ${lineup.originCoords.y * 10})`"
             class="cursor-pointer transition-transform duration-150 hover:scale-125"
-            @mouseenter="handleLineupHover(lineup, $event)"
-            @mouseleave="handleLineupHover(null)"
+            @mouseenter="handleLineupEnter(lineup, $event)"
+            @mouseleave="handleLineupLeave"
             @click="handleLineupClick(lineup, $event)"
           >
+            <!-- TRANSPARENT HIT-AREA -->
+            <circle cx="0" cy="0" r="28" fill="transparent" pointer-events="all" />
+
             <!-- Origin Pulse Ring -->
             <circle 
               cx="0" 
@@ -265,6 +291,7 @@ onUnmounted(() => {
               stroke-width="1.5" 
               stroke-dasharray="3 3"
               class="opacity-70"
+              pointer-events="none"
             />
             
             <!-- Origin Base Circle -->
@@ -275,10 +302,11 @@ onUnmounted(() => {
               :fill="lineup.side === 't' ? '#f97316' : lineup.side === 'ct' ? '#38bdf8' : '#334155'" 
               stroke="#0f172a" 
               stroke-width="2"
+              pointer-events="none"
             />
             
             <!-- Origin Dot Icon -->
-            <circle cx="0" cy="0" r="3" fill="#ffffff" />
+            <circle cx="0" cy="0" r="3" fill="#ffffff" pointer-events="none" />
           </g>
         </g>
 
@@ -289,10 +317,13 @@ onUnmounted(() => {
             :key="`landing-${lineup.id}`"
             :transform="`translate(${lineup.landingCoords.x * 10}, ${lineup.landingCoords.y * 10})`"
             class="cursor-pointer transition-transform duration-150 hover:scale-130"
-            @mouseenter="handleLineupHover(lineup, $event)"
-            @mouseleave="handleLineupHover(null)"
+            @mouseenter="handleLineupEnter(lineup, $event)"
+            @mouseleave="handleLineupLeave"
             @click="handleLineupClick(lineup, $event)"
           >
+            <!-- TRANSPARENT HIT-AREA -->
+            <circle cx="0" cy="0" r="28" fill="transparent" pointer-events="all" />
+
             <!-- Detonation Burst Radius -->
             <circle 
               cx="0" 
@@ -303,6 +334,7 @@ onUnmounted(() => {
               :stroke="getNadeColor(lineup.grenadeType)" 
               stroke-width="1.5"
               class="animate-pulse-glow"
+              pointer-events="none"
             />
 
             <!-- Inner Solid Badge with Icon -->
@@ -313,10 +345,11 @@ onUnmounted(() => {
               fill="#0f172a" 
               :stroke="getNadeColor(lineup.grenadeType)" 
               stroke-width="2"
+              pointer-events="none"
             />
 
             <!-- Type Indicator Dot -->
-            <circle cx="0" cy="0" r="4.5" :fill="getNadeColor(lineup.grenadeType)" />
+            <circle cx="0" cy="0" r="4.5" :fill="getNadeColor(lineup.grenadeType)" pointer-events="none" />
           </g>
         </g>
 
@@ -408,7 +441,7 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <!-- FLOATING HOVER TOOLTIP / HUD PREVIEW -->
+    <!-- STABLE HOVER TOOLTIP (Zero-flicker with quick delete & details) -->
     <div 
       v-if="hoveredLineup"
       class="absolute z-40 pointer-events-none transition-all duration-75"
@@ -417,15 +450,15 @@ onUnmounted(() => {
         top: `${tooltipPosition.y}px`
       }"
     >
-      <div class="w-64 p-3 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl text-slate-100 flex flex-col gap-2">
+      <div class="w-64 p-3 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl text-slate-100 flex flex-col gap-2 pointer-events-auto">
         <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1.5 min-w-0">
             <NadeIcon :type="hoveredLineup.grenadeType" :size="16" :filled="true" />
             <span class="font-bold text-xs text-white truncate">{{ hoveredLineup.title }}</span>
           </div>
           <span 
             :class="[
-              'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase',
+              'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase flex-shrink-0',
               hoveredLineup.side === 't' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
             ]"
           >
@@ -436,11 +469,11 @@ onUnmounted(() => {
         <div class="flex flex-col text-[11px] text-slate-400 gap-0.5">
           <div class="flex items-center justify-between">
             <span>From:</span>
-            <span class="text-slate-200 font-medium">{{ hoveredLineup.startLocation }}</span>
+            <span class="text-slate-200 font-medium truncate max-w-[130px]">{{ hoveredLineup.startLocation }}</span>
           </div>
           <div class="flex items-center justify-between">
             <span>To:</span>
-            <span class="text-slate-200 font-medium">{{ hoveredLineup.endLocation }}</span>
+            <span class="text-slate-200 font-medium truncate max-w-[130px]">{{ hoveredLineup.endLocation }}</span>
           </div>
           <div class="flex items-center justify-between pt-1 border-t border-slate-800">
             <span>Throw:</span>
@@ -448,8 +481,24 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="text-[10px] text-slate-500 italic text-center pt-1 border-t border-slate-800">
-          Click to view full guide & video
+        <!-- ACTIONS ROW -->
+        <div class="flex items-center justify-between pt-1.5 border-t border-slate-800 text-[10px]">
+          <button
+            @click="handleLineupClick(hoveredLineup, $event)"
+            class="text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
+          >
+            <ExternalLink class="w-3 h-3" />
+            <span>Open Guide</span>
+          </button>
+
+          <button
+            @click="handleDeleteFromTooltip(hoveredLineup, $event)"
+            class="text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer"
+            title="Delete this lineup"
+          >
+            <Trash2 class="w-3 h-3" />
+            <span>Delete</span>
+          </button>
         </div>
       </div>
     </div>

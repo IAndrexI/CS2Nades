@@ -179,14 +179,36 @@ export const useLineupStore = defineStore('lineup', () => {
     }
   }
 
-  function deleteLineup(id: string) {
+  async function deleteLineup(id: string) {
     const idx = customLineups.value.findIndex(l => l.id === id)
     if (idx >= 0) {
       customLineups.value.splice(idx, 1)
       if (activeLineup.value?.id === id) {
         activeLineup.value = null
       }
+      if (hoveredLineup.value?.id === id) {
+        hoveredLineup.value = null
+      }
+      // Also remove from favorites
+      const favIdx = favoriteIds.value.indexOf(id)
+      if (favIdx >= 0) favoriteIds.value.splice(favIdx, 1)
+
+      // Try server delete if online
+      try {
+        await axios.delete(`/api/lineups/${id}`)
+      } catch (e) {
+        // Ignored if offline or unauthorized
+      }
     }
+  }
+
+  function clearAllLineups() {
+    customLineups.value = []
+    favoriteIds.value = []
+    activeLineup.value = null
+    hoveredLineup.value = null
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(FAVORITES_KEY)
   }
 
   function exportJSON(): string {
@@ -348,6 +370,7 @@ export const useLineupStore = defineStore('lineup', () => {
     addLineup,
     updateLineup,
     deleteLineup,
+    clearAllLineups,
     exportJSON,
     importJSON,
     syncWithServer,

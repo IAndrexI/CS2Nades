@@ -14,7 +14,8 @@ import {
   Lock, 
   Share2, 
   Search,
-  BookMarked
+  BookMarked,
+  Trash2
 } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
@@ -61,6 +62,12 @@ const myLineups = computed(() => {
     return true
   })
 })
+
+function handleClearAll() {
+  if (confirm('Delete all your personal lineups?')) {
+    lineupStore.clearAllLineups()
+  }
+}
 </script>
 
 <template>
@@ -102,13 +109,24 @@ const myLineups = computed(() => {
         </div>
       </div>
 
-      <button
-        @click="lineupStore.isAddModalOpen = true"
-        class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
-      >
-        <Plus class="w-4 h-4 stroke-[3]" />
-        <span>Create My Lineup</span>
-      </button>
+      <div class="flex items-center gap-2.5">
+        <button
+          v-if="myLineups.length > 0"
+          @click="handleClearAll"
+          class="flex items-center gap-1.5 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+        >
+          <Trash2 class="w-3.5 h-3.5" />
+          <span>Clear All</span>
+        </button>
+
+        <button
+          @click="lineupStore.isAddModalOpen = true"
+          class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+        >
+          <Plus class="w-4 h-4 stroke-[3]" />
+          <span>Create My Lineup</span>
+        </button>
+      </div>
     </div>
 
     <!-- UNAUTHENTICATED HERO PROMPT -->

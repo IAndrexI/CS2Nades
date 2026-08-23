@@ -2,13 +2,20 @@
 import { useLineupStore } from '../../stores/lineupStore'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup } from '../../types'
-import { Heart, Play, ArrowRight } from 'lucide-vue-next'
+import { Heart, Play, ArrowRight, Trash2 } from 'lucide-vue-next'
 
 const props = defineProps<{
   lineup: Lineup
 }>()
 
 const lineupStore = useLineupStore()
+
+function handleDelete(e: MouseEvent) {
+  e.stopPropagation()
+  if (confirm(`Delete lineup "${props.lineup.title}"?`)) {
+    lineupStore.deleteLineup(props.lineup.id)
+  }
+}
 </script>
 
 <template>
@@ -29,7 +36,7 @@ const lineupStore = useLineupStore()
         <NadeIcon :type="lineup.grenadeType" :size="16" :filled="true" />
       </div>
 
-      <!-- TEAM SIDE BADGE (TOP RIGHT) -->
+      <!-- TEAM SIDE BADGE & DELETE (TOP RIGHT) -->
       <div class="absolute top-2.5 right-2.5 flex items-center gap-1.5">
         <span 
           :class="[
@@ -39,6 +46,15 @@ const lineupStore = useLineupStore()
         >
           {{ lineup.side }}
         </span>
+
+        <!-- DELETE BUTTON -->
+        <button
+          @click="handleDelete"
+          class="p-1 bg-black/70 hover:bg-rose-600 backdrop-blur-md rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+          title="Delete Lineup"
+        >
+          <Trash2 class="w-3 h-3" />
+        </button>
       </div>
 
       <!-- VIDEO INDICATOR -->

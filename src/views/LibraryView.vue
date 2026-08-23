@@ -13,7 +13,9 @@ import {
   Heart, 
   Plus, 
   Filter, 
-  Layers
+  Layers,
+  Trash2,
+  RefreshCw
 } from 'lucide-vue-next'
 
 const lineupStore = useLineupStore()
@@ -24,7 +26,6 @@ const selectedMapFilter = ref('all')
 const selectedNadeFilter = ref<string>('all')
 const selectedSideFilter = ref<string>('all')
 const showFavoritesOnly = ref(false)
-const showCustomOnly = ref(false)
 
 const allDisplayLineups = computed(() => {
   return lineupStore.allLineups.filter(lineup => {
@@ -48,11 +49,6 @@ const allDisplayLineups = computed(() => {
       return false
     }
 
-    // Custom filter
-    if (showCustomOnly.value && !lineup.isCustom) {
-      return false
-    }
-
     // Search query
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.toLowerCase()
@@ -66,6 +62,12 @@ const allDisplayLineups = computed(() => {
     return true
   })
 })
+
+function handleClearAll() {
+  if (confirm('Are you sure you want to delete ALL lineups? This cannot be undone.')) {
+    lineupStore.clearAllLineups()
+  }
+}
 </script>
 
 <template>
@@ -89,13 +91,37 @@ const allDisplayLineups = computed(() => {
         </div>
       </div>
 
-      <button
-        @click="lineupStore.isAddModalOpen = true"
-        class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
-      >
-        <Plus class="w-4 h-4 stroke-[3]" />
-        <span>Add Lineup</span>
-      </button>
+      <div class="flex items-center gap-2.5">
+        <!-- SYNC BUTTON -->
+        <button
+          @click="lineupStore.syncWithServer()"
+          :disabled="lineupStore.isSyncing"
+          class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+        >
+          <RefreshCw class="w-3.5 h-3.5 text-amber-400" :class="{ 'animate-spin': lineupStore.isSyncing }" />
+          <span>Sync Server</span>
+        </button>
+
+        <!-- CLEAR ALL BUTTON -->
+        <button
+          v-if="allDisplayLineups.length > 0"
+          @click="handleClearAll"
+          class="flex items-center gap-1.5 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          title="Delete all custom and saved lineups"
+        >
+          <Trash2 class="w-3.5 h-3.5" />
+          <span>Clear All</span>
+        </button>
+
+        <!-- ADD LINEUP -->
+        <button
+          @click="lineupStore.isAddModalOpen = true"
+          class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+        >
+          <Plus class="w-4 h-4 stroke-[3]" />
+          <span>Add Lineup</span>
+        </button>
+      </div>
     </div>
 
     <!-- FILTER BAR -->
@@ -127,6 +153,7 @@ const allDisplayLineups = computed(() => {
             <option value="flash">Flashes</option>
             <option value="molotov">Molotovs</option>
             <option value="he">HE Grenades</option>
+            <option value="decoy">Decoys</option>
           </select>
         </div>
 
@@ -138,12 +165,12 @@ const allDisplayLineups = computed(() => {
             class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500"
           >
             <option value="all">All Sides</option>
-            <option value="t">T Side</option>
-            <option value="ct">CT Side</option>
+            <option value="t">Terrorist (T)</option>
+            <option value="ct">Counter-Terrorist (CT)</option>
           </select>
         </div>
 
-        <!-- FAVORITES ONLY TOGGLE -->
+        <!-- FAVORITES TOGGLE -->
         <button
           @click="showFavoritesOnly = !showFavoritesOnly"
           :class="[
@@ -154,7 +181,7 @@ const allDisplayLineups = computed(() => {
           ]"
         >
           <Heart class="w-3.5 h-3.5" :class="{ 'fill-current': showFavoritesOnly }" />
-          <span>Favorites</span>
+          <span>Favorites Only</span>
         </button>
       </div>
 
@@ -164,13 +191,13 @@ const allDisplayLineups = computed(() => {
         <input 
           v-model="searchQuery"
           type="text" 
-          placeholder="Search by title, location, map..." 
+          placeholder="Search lineups, spots, tags..." 
           class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
         />
       </div>
     </div>
 
-    <!-- GRID -->
+    <!-- CARDS GRID -->
     <div 
       v-if="allDisplayLineups.length > 0"
       class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
@@ -182,16 +209,22 @@ const allDisplayLineups = computed(() => {
       />
     </div>
 
-    <!-- EMPTY -->
+    <!-- EMPTY STATE -->
     <div 
       v-else 
       class="flex flex-col items-center justify-center p-16 bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl text-center gap-3"
     >
-      <Search class="w-8 h-8 text-slate-600" />
-      <h3 class="text-sm font-bold text-slate-300">No Lineups Match Filters</h3>
+      <Grid class="w-8 h-8 text-slate-600" />
+      <h3 class="text-sm font-bold text-slate-300">No Lineups Found</h3>
       <p class="text-xs text-slate-500 max-w-sm">
-        Try clearing some filters or searching for another keyword.
+        Use the radar minimap or click "Add Lineup" above to create and index your first grenade throw!
       </p>
+      <button 
+        @click="lineupStore.isAddModalOpen = true"
+        class="px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 text-xs font-black rounded-xl shadow-md hover:from-amber-500 cursor-pointer"
+      >
+        Create Lineup
+      </button>
     </div>
 
     <!-- MODALS -->
