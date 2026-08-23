@@ -5,6 +5,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import axios from 'axios'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -31,6 +32,7 @@ const INITIAL_DB = {
     allowRegistration: true,
     defaultRadarMode: 'official',
     defaultRadarOpacity: 0.92,
+    steamApiKey: '',
     customRadars: {},
     customMaps: []
   },
@@ -116,9 +118,188 @@ function requireAdmin(req, res, next) {
 
 app.use(authenticateToken)
 
+// Helper: Resolve Steam Profile (Username & Avatar) from SteamID64 or Profile Link
+async function fetchSteamProfile(input) {
+  if (!input || typeof input !== 'string') return null
+  const cleanInput = input.trim()
+
+  let steamId64 = ''
+  let vanityName = ''
+
+  // 1. Check if input is a full Steam URL
+  const profileMatch = cleanInput.match(/steamcommunity\.com\/profiles\/(\d{17})/i)
+  const idMatch = cleanInput.match(/steamcommunity\.com\/id\/([a-zA-Z0-9_-]+)/i)
+
+  if (profileMatch) {
+    steamId64 = profileMatch[1]
+  } else if (idMatch) {
+    vanityName = idMatch[1]
+  } else if (/^\d{17}$/.test(cleanInput)) {
+    steamId64 = cleanInput
+  } else {
+    vanityName = cleanInput.replace(/[^a-zA-Z0-9_-]/g, '')
+  }
+
+  const queryUrl = steamId64 
+    ? `https://steamcommunity.com/profiles/${steamId64}/?xml=1` 
+    : `https://steamcommunity.com/id/${vanityName}/?xml=1`
+
+  try {
+    const res = await axios.get(queryUrl, { 
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SteamProfileFetcher' },
+      timeout: 6000 
+    })
+    const xml = res.data
+
+    if (typeof xml === 'string' && xml.includes('<profile>')) {
+      const usernameMatch = xml.match(/<steamID><!\[CDATA\[(.*?)\]\]><\/steamID>/) || xml.match(/<steamID>(.*?)<\/steamID>/)
+      const avatarMatch = xml.match(/<avatarFull><!\[CDATA\[(.*?)\]\]><\/avatarFull>/) || xml.match(/<avatarFull>(.*?)<\/avatarFull>/)
+      const sidMatch = xml.match(/<steamID64>(\d+)<\/steamID64>/)
+
+      const username = usernameMatch ? usernameMatch[1] : (vanityName || 'SteamPlayer')
+      const avatar = avatarMatch ? avatarMatch[1] : `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`
+      const resolvedSteamId = sidMatch ? sidMatch[1] : steamId64
+
+      return {
+        steamId: resolvedSteamId || `steam-${Date.now()}`,
+        username,
+        avatar
+      }
+    }
+  } catch (e) {
+    console.warn('[Steam] Public XML fetch failed, using fallback parser:', e.message)
+  }
+
+  // Fallback if Steam XML is rate limited or private
+  const fallbackUsername = vanityName || (steamId64 ? `Steam_${steamId64.slice(-4)}` : cleanInput)
+  return {
+    steamId: steamId64 || `steam-${Date.now()}`,
+    username: fallbackUsername,
+    avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(fallbackUsername)}`
+  }
+}
+
 // ==========================================
 // AUTH ROUTES
 // ==========================================
+
+// 1. Steam Connect & Sign-In endpoint
+app.post('/api/auth/steam-sync', async (req, res) => {
+  db = loadDB()
+  const { steamInput, inGameRole } = req.body
+
+  if (!steamInput) {
+    return res.status(400).json({ error: 'Please enter a Steam Profile URL, SteamID64, or Custom URL' })
+  }
+
+  const profile = await fetchSteamProfile(steamInput)
+  if (!profile) {
+    return res.status(400).json({ error: 'Could not resolve Steam profile' })
+  }
+
+  // Check if user with this steamId already exists
+  let user = db.users.find(u => (u.steamId && u.steamId === profile.steamId) || u.username.toLowerCase() === profile.username.toLowerCase())
+
+  if (user) {
+    // Update existing user avatar/username with latest Steam data
+    user.username = profile.username
+    user.avatar = profile.avatar
+    if (!user.steamId) user.steamId = profile.steamId
+    if (inGameRole) user.inGameRole = inGameRole
+  } else {
+    // Register new user from Steam
+    const role = db.users.length === 0 ? 'admin' : 'player'
+    user = {
+      id: `usr-steam-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      steamId: profile.steamId,
+      username: profile.username,
+      email: '',
+      passwordHash: '',
+      role,
+      inGameRole: inGameRole || 'Entry',
+      avatar: profile.avatar,
+      createdAt: new Date().toISOString()
+    }
+    db.users.push(user)
+  }
+
+  saveDB(db)
+
+  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '30d' })
+  const { passwordHash, ...userSafe } = user
+
+  res.json({ token, user: userSafe })
+})
+
+// 2. Steam OpenID Redirect URL generator
+app.get('/api/auth/steam/login', (req, res) => {
+  const host = req.get('host')
+  const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'
+  const returnTo = `${protocol}://${host}/api/auth/steam/callback`
+  const realm = `${protocol}://${host}/`
+
+  const steamOpenIdUrl = `https://steamcommunity.com/openid/login?` +
+    `openid.ns=http://specs.openid.net/auth/2.0&` +
+    `openid.mode=checkid_setup&` +
+    `openid.return_to=${encodeURIComponent(returnTo)}&` +
+    `openid.realm=${encodeURIComponent(realm)}&` +
+    `openid.identity=http://specs.openid.net/auth/2.0/identifier_select&` +
+    `openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select`
+
+  res.redirect(steamOpenIdUrl)
+})
+
+// 3. Steam OpenID Callback
+app.get('/api/auth/steam/callback', async (req, res) => {
+  try {
+    const claimedId = req.query['openid.claimed_id']
+    if (!claimedId || typeof claimedId !== 'string') {
+      return res.redirect('/?auth_error=Steam%20login%20failed')
+    }
+
+    const steamIdMatch = claimedId.match(/\/id\/(\d+)/) || claimedId.match(/profiles\/(\d+)/)
+    const steamId64 = steamIdMatch ? steamIdMatch[1] : null
+
+    if (!steamId64) {
+      return res.redirect('/?auth_error=Could%20not%20extract%20Steam%20ID')
+    }
+
+    const profile = await fetchSteamProfile(steamId64)
+    db = loadDB()
+
+    let user = db.users.find(u => u.steamId === steamId64 || u.username.toLowerCase() === profile.username.toLowerCase())
+
+    if (user) {
+      user.username = profile.username
+      user.avatar = profile.avatar
+      user.steamId = steamId64
+    } else {
+      const role = db.users.length === 0 ? 'admin' : 'player'
+      user = {
+        id: `usr-steam-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        steamId: steamId64,
+        username: profile.username,
+        email: '',
+        passwordHash: '',
+        role,
+        inGameRole: 'Entry',
+        avatar: profile.avatar,
+        createdAt: new Date().toISOString()
+      }
+      db.users.push(user)
+    }
+
+    saveDB(db)
+
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '30d' })
+    res.redirect(`/?steam_token=${encodeURIComponent(token)}`)
+  } catch (err) {
+    console.error('Steam callback error:', err)
+    res.redirect('/?auth_error=Steam%20authentication%20error')
+  }
+})
+
+// Standard Username & Password Registration
 app.post('/api/auth/register', (req, res) => {
   db = loadDB()
   const { username, email, password, inGameRole } = req.body
@@ -136,7 +317,6 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(400).json({ error: 'Username is already taken' })
   }
 
-  // First user ever created gets admin role automatically
   const role = db.users.length === 0 ? 'admin' : 'player'
   const salt = bcrypt.genSaltSync(10)
   const newUser = {
@@ -247,7 +427,6 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'Cannot delete your own admin account' })
   }
   db.users = db.users.filter(u => u.id !== id)
-  // Also clean up or unassign user lineups if needed
   saveDB(db)
   res.json({ success: true })
 })
@@ -271,14 +450,13 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
 })
 
 // ==========================================
-// LINEUPS API (MULTI-USER & TEAM SHARING)
+// LINEUPS API
 // ==========================================
 app.get('/api/lineups', (req, res) => {
   db = loadDB()
   const userId = req.user ? req.user.id : null
   const isAdmin = req.user && req.user.role === 'admin'
 
-  // Return public lineups + user's own private lineups
   const visibleLineups = db.lineups.filter(l => {
     if (isAdmin) return true
     if (l.isTeamShared || l.isVerified) return true
@@ -315,7 +493,6 @@ app.put('/api/lineups/:id', requireAuth, (req, res) => {
   const index = db.lineups.findIndex(l => l.id === id)
   if (index === -1) return res.status(404).json({ error: 'Lineup not found' })
 
-  // Only author or admin can edit
   if (db.lineups[index].userId !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Permission denied to edit this lineup' })
   }

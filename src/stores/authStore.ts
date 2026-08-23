@@ -4,6 +4,7 @@ import axios from 'axios'
 
 export interface UserProfile {
   id: string
+  steamId?: string
   username: string
   email?: string
   role: 'admin' | 'coach' | 'player' | 'guest'
@@ -19,7 +20,7 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem(TOKEN_KEY))
   const currentUser = ref<UserProfile | null>(null)
   const isAuthModalOpen = ref<boolean>(false)
-  const authMode = ref<'login' | 'register'>('login')
+  const authMode = ref<'login' | 'register' | 'steam'>('steam') // Default to Steam login!
   const isLoading = ref<boolean>(false)
   const authError = ref<string | null>(null)
 
@@ -50,6 +51,64 @@ export const useAuthStore = defineStore('auth', () => {
     setAuthToken(token.value)
   }
 
+  // Handle URL Steam redirect token on load
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search)
+    const steamToken = urlParams.get('steam_token')
+    if (steamToken) {
+      setAuthToken(steamToken)
+      checkAuth()
+      // Clean query params from URL
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+    const err = urlParams.get('auth_error')
+    if (err) {
+      authError.value = decodeURIComponent(err)
+      isAuthModalOpen.value = true
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+  }
+
+  // 1. Sign In / Sync with Steam Profile
+  async function loginWithSteamProfile(steamInput: string, inGameRole: any = 'Entry'): Promise<boolean> {
+    isLoading.value = true
+    authError.value = null
+    try {
+      const res = await axios.post('/api/auth/steam-sync', { steamInput, inGameRole })
+      setAuthToken(res.data.token)
+      currentUser.value = res.data.user
+      localStorage.setItem(USER_KEY, JSON.stringify(res.data.user))
+      isAuthModalOpen.value = false
+      return true
+    } catch (err: any) {
+      if (err.code === 'ERR_NETWORK' || !err.response) {
+        // Offline / Fallback Steam resolution
+        const cleanName = steamInput.replace(/https?:\/\/steamcommunity\.com\/(id|profiles)\//i, '').replace(/\/$/, '') || 'SteamPlayer'
+        const fallbackUser: UserProfile = {
+          id: `usr-steam-${Date.now()}`,
+          username: cleanName,
+          role: 'player',
+          inGameRole: inGameRole || 'Entry',
+          avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanName}`,
+          createdAt: new Date().toISOString()
+        }
+        setAuthToken('offline-steam-token')
+        currentUser.value = fallbackUser
+        localStorage.setItem(USER_KEY, JSON.stringify(fallbackUser))
+        isAuthModalOpen.value = false
+        return true
+      }
+      authError.value = err.response?.data?.error || 'Steam sign-in failed'
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  function loginWithSteamOpenId() {
+    window.location.href = '/api/auth/steam/login'
+  }
+
   async function login(username: string, password: string): Promise<boolean> {
     isLoading.value = true
     authError.value = null
@@ -61,9 +120,7 @@ export const useAuthStore = defineStore('auth', () => {
       isAuthModalOpen.value = false
       return true
     } catch (err: any) {
-      // Fallback for standalone mock/offline dev if server is not reachable
       if (err.code === 'ERR_NETWORK' || !err.response) {
-        // Offline demo login
         const fallbackUser: UserProfile = {
           id: `usr-${username.toLowerCase()}`,
           username,
@@ -132,7 +189,6 @@ export const useAuthStore = defineStore('auth', () => {
       currentUser.value = res.data.user
       localStorage.setItem(USER_KEY, JSON.stringify(res.data.user))
     } catch (err) {
-      // If token expired
       logout()
     }
   }
@@ -160,6 +216,8 @@ export const useAuthStore = defineStore('auth', () => {
     authError,
     login,
     register,
+    loginWithSteamProfile,
+    loginWithSteamOpenId,
     logout,
     checkAuth,
     updateProfile
