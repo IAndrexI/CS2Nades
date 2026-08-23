@@ -1,0 +1,38 @@
+.edit-team-form {
+  &__btn {
+    @include button-default(true);
+
+    flex: 1 0;
+
+    &.--save {
+      @include button-primary(true);
+    }
+  }
+
+  &__button-wrapper {
+    @include spacing('gap', 'xs');
+    @include spacing('margin-top', 'xs');
+
+    display: flex;
+  }
+
+  &__input {
+    &:not(:first-of-type) {
+      @include spacing('margin-top', 's');
+    }
+  }
+
+  &__label {
+    @include spacing('margin-top', 'sm');
+
+    font-size: 0.9rem;
+  }
+
+  &__uploader {
+    @include spacing('margin-top', 'xs');
+  }
+
+  &__headline {
+    @include form-header;
+  }
+}

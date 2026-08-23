@@ -1,0 +1,25 @@
+.utility-view {
+  &__fab-group {
+    display: flex;
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 10;
+
+    & > :not(:first-of-type) {
+      margin-left: 8px;
+    }
+
+    @include viewport_mq3 {
+      right: 34px;
+    }
+  }
+
+  &__floating-add {
+    background-color: var(--color-green);
+
+    &:hover {
+      background-color: darken($color--green, 15%);
+    }
+  }
+}

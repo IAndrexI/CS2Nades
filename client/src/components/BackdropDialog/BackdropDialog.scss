@@ -1,0 +1,73 @@
+.backdrop-dialog {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: 0.3s ease-in-out fade;
+  z-index: 10;
+
+  @include viewport_mq3 {
+    left: 70px;
+  }
+
+  &__content {
+    padding: 8px;
+    background-color: var(--color-bg-secondary);
+    min-width: 100%;
+    overflow-y: auto;
+    max-height: 100dvh;
+    min-height: 100%;
+    position: relative;
+
+    @include viewport_mq3 {
+      min-height: unset;
+      max-height: calc(100dvh - 24px);
+      padding: 12px;
+      height: auto;
+      min-width: 320px;
+      border-radius: 10px;
+      animation: 0.3s ease-in-out expand;
+
+      &.-fullscreen {
+        position: absolute;
+        inset: 24px;
+        bottom: 84px;
+        padding: 8px;
+
+        & > :first-child {
+          border-radius: 8px;
+          overflow: hidden;
+        }
+      }
+    }
+
+    @include viewport_mq7 {
+      padding: 16px;
+      min-width: 360px;
+
+      &.-fullscreen {
+        padding: 8px;
+      }
+    }
+  }
+
+  &__close-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    color: var(--color-text-contrast);
+    transition: transform 0.3s ease;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 50%;
+    background-color: rgba(black, 0.1);
+
+    &:hover {
+      transform: scale(1.05);
+    }
+  }
+}

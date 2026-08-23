@@ -1,0 +1,11 @@
+.strat-list {
+  @include spacing('gap', 's');
+
+  padding-bottom: 72px;
+  display: flex;
+  flex-direction: column;
+
+  .strat-item {
+    animation: simple-stagger 0.5s ease both;
+  }
+}

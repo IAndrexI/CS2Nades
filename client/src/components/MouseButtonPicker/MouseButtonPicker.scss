@@ -1,0 +1,29 @@
+.mouse-button-picker {
+  position: relative;
+  width: 42px;
+  height: 42px;
+
+  color: var(--color-text);
+
+  &:not(.-readonly) {
+    cursor: pointer;
+  }
+
+  @include viewport_mq3 {
+    width: 50px;
+    height: 50px;
+  }
+
+  @include viewport_mq7 {
+    width: 56px;
+    height: 56px;
+  }
+
+  &__image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+}

@@ -1,0 +1,57 @@
+.team-create-form {
+  @include form-container;
+
+  transition: height 0.3s ease;
+
+  &__headline {
+    @include form-header;
+  }
+
+  &__label {
+    align-self: flex-start;
+    font-size: 0.9rem;
+    margin: 16px 0 6px 2px;
+  }
+
+  &__input {
+    width: 100%;
+
+    &:not(:first-of-type) {
+      margin-top: 16px;
+    }
+  }
+
+  &__server-wrapper {
+    margin-top: 16px;
+    display: flex;
+
+    & > :nth-of-type(1) {
+      flex: 2 0;
+    }
+
+    & > :nth-of-type(2) {
+      margin-left: 8px;
+      flex: 1 0;
+    }
+  }
+
+  &__submit {
+    @include button-primary(true);
+  }
+
+  &__register-text {
+    margin-top: 8px;
+  }
+
+  &__register-link {
+    font-weight: bold;
+    margin-left: 4px;
+    color: var(--color-green);
+    cursor: pointer;
+  }
+
+  &__error {
+    @include error-notification;
+    @include spacing('margin-bottom', 'xs');
+  }
+}

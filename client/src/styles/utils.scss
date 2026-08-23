@@ -1,0 +1,73 @@
+@mixin abs-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+%hidden-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@mixin flex-gap($gap) {
+  // https://coryrylan.com/blog/css-gap-space-with-flexbox
+  display: inline-flex;
+  flex-wrap: wrap;
+  margin: calc(-1 * #{$gap}) 0 0 calc(-1 * #{$gap});
+  width: calc(100% + #{$gap});
+
+  & > * {
+    margin: $gap 0 0 $gap;
+  }
+}
+
+@mixin slideFromX($offset, $count, $animId) {
+  opacity: 0;
+
+  @for $i from 1 through $count {
+    &:nth-child(#{$i}) {
+      animation: slideIn-#{$animId} 0.5s ease-out calc(#{$i} * 0.05s) normal forwards;
+    }
+  }
+  @keyframes slideIn-#{$animId} {
+    0% {
+      transform: translateX($offset) scale(1.1);
+      opacity: 0;
+    }
+    100% {
+      transform: translateX(0) scale(1);
+      opacity: 1;
+    }
+  }
+}
+
+@mixin slideFromY($offset, $count, $animId) {
+  opacity: 0;
+
+  @for $i from 1 through $count {
+    &:nth-child(#{$i}) {
+      animation: slideIn-#{$animId} 0.5s ease-out calc(#{$i} * 0.07s) normal forwards;
+    }
+  }
+  @keyframes slideIn-#{$animId} {
+    0% {
+      transform: translateY($offset) scale(1.1);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+  }
+}
+
+@mixin theme($theme) {
+  @at-root body.-#{$theme} & {
+    @content;
+  }
+}

@@ -1,0 +1,83 @@
+.strats-view {
+  overflow-y: hidden;
+
+  &__fab-group {
+    display: flex;
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 10;
+    gap: 16px;
+
+    @include viewport_only(mq1) {
+      gap: 8px;
+      flex-direction: column;
+      overflow: hidden;
+      border-radius: 999px;
+      padding: 2px;
+    }
+
+    @include viewport_mq3 {
+      right: 36px;
+    }
+  }
+
+  &__fab-group-buttons {
+    display: flex;
+    gap: 16px;
+    transition-behavior: allow-discrete;
+
+    @include viewport_only(mq1) {
+      gap: 8px;
+      flex-direction: column;
+      transition:
+        transform 0.3s ease,
+        opacity 0.3s ease;
+      opacity: 0;
+      transform: translateY(100%);
+
+      display: none;
+
+      &.-open {
+        transform: translateY(0);
+        opacity: 1;
+        display: flex;
+      }
+    }
+  }
+
+  &__floating-add {
+    background-color: var(--color-green-80);
+
+    &:hover {
+      background-color: var(--color-green);
+    }
+  }
+
+  &__floating-game-mode {
+    @include viewport_range(mq1, mq2) {
+      display: none;
+    }
+  }
+
+  &__floating-mobile-toggle {
+    @include viewport_mq2 {
+      display: none;
+    }
+  }
+
+  &__strat-list {
+    margin-top: 24px;
+
+    &.-game-mode {
+      margin-top: 0;
+    }
+  }
+}
+
+@starting-style {
+  .strats-view__fab-group-buttons.-open {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}

@@ -1,0 +1,127 @@
+.member-item {
+  @include spacing('padding', '2xs xs 2xs 2xs');
+
+  @include viewport_mq2 {
+    @include spacing('padding', 's sm s s');
+  }
+
+  @include viewport_mq5 {
+    @include spacing('padding', 'sm md sm sm');
+  }
+
+  background: var(--color-bg);
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  box-shadow: $shadow-subtle;
+
+  &__avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+
+    @include viewport_mq2 {
+      width: 64px;
+      height: 64px;
+    }
+
+    .-online & {
+      border: 2px solid var(--color-green);
+    }
+  }
+
+  &__text {
+    @include spacing('margin-left', '18px');
+
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  &__name {
+    @include typo_emphasis;
+
+    @include viewport_mq2 {
+      @include typo_hl3;
+    }
+
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+  }
+
+  &__role {
+    @include typo_subline(var(--color-text-tertiary));
+  }
+
+  &__tag {
+    @include tag-pill;
+
+    white-space: nowrap;
+
+    &.-online {
+      background-color: var(--color-green);
+    }
+
+    @include viewport_mq2 {
+      &:not(.-online)::before {
+        content: 'last online';
+      }
+    }
+  }
+
+  &__button-group {
+    @include spacing('gap', '2xs');
+
+    display: flex;
+    margin-left: auto;
+  }
+
+  &__btn {
+    @include icon-button;
+  }
+
+  &__checkbox {
+    @include spacing('margin-right', '2xs');
+
+    @include viewport_mq2 {
+      @include spacing('margin-right', 's');
+    }
+  }
+
+  &__btn-label {
+    display: none;
+
+    @include viewport_mq5 {
+      display: initial;
+    }
+  }
+
+  &__color-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+  }
+
+  &__steam-icon {
+    margin-right: 8px;
+    width: 16px;
+    height: 16px;
+    & path {
+      fill: var(--color-text);
+    }
+  }
+}
+
+//* vue-swatches overrides
+.vue-swatches {
+  $root: &;
+  &[data-disabled] {
+    #{$root}__trigger__wrapper {
+      cursor: default;
+      pointer-events: none;
+    }
+  }
+}

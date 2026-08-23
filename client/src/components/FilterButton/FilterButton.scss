@@ -1,0 +1,28 @@
+.filter-button {
+  position: relative;
+
+  &__button {
+    & > svg {
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  &__indicator {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    border-radius: 50%;
+    background-color: var(--color-accent);
+    width: 20px;
+    height: 20px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--color-text-contrast);
+    text-shadow: $shadow-subtle;
+    box-shadow: $shadow-subtle;
+  }
+}

@@ -1,0 +1,69 @@
+.cookie-banner {
+  @include spacing('padding', s);
+
+  border-radius: 8px;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: 10;
+  background-color: var(--color-bg-secondary);
+
+  @include viewport_mq3 {
+    @include spacing('padding', sm);
+
+    width: 400px;
+    bottom: 32px;
+    left: 102px;
+  }
+
+  @include viewport_mq6 {
+    @include spacing('padding', md);
+
+    width: 500px;
+    bottom: 64px;
+    left: 134px;
+  }
+
+  &__options {
+    @include spacing('margin-top', 's');
+
+    display: flex;
+    align-items: center;
+  }
+
+  &__checkbox-label {
+    @include spacing('margin-left', '3xs');
+  }
+
+  &__checkbox {
+    &:not(:first-of-type) {
+      @include spacing('margin-left', 's');
+    }
+
+    &[disabled] + label {
+      color: var(--color-text-secondary);
+    }
+  }
+
+  &__btn-wrapper {
+    @include spacing('margin-top', 's');
+
+    display: flex;
+  }
+
+  &__btn {
+    @include button-default;
+    @include spacing('padding', '2xs sm');
+
+    font-weight: $weight-bold;
+
+    &.--accept {
+      @include button-primary;
+    }
+
+    &:first-of-type {
+      @include spacing('margin-right', '2xs');
+    }
+  }
+}

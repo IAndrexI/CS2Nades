@@ -1,0 +1,110 @@
+.profile-view {
+  @include viewport_mq3 {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  &__content {
+    @include view-content;
+
+    width: 100%;
+
+    @include viewport_mq3 {
+      width: 80%;
+    }
+
+    @include viewport_mq5 {
+      width: 60%;
+    }
+
+    @include grid();
+  }
+
+  &__detail {
+    @include fieldset;
+
+    width: unset;
+    order: 2;
+
+    @include grid-cell(12, 1);
+
+    @include viewport_range(mq1, mq3) {
+      @include spacing('margin-top', sm);
+      @include spacing('margin-bottom', '2xs');
+    }
+
+    @include viewport_mq3 {
+      @include grid-cell(8, 1);
+
+      order: 1;
+    }
+  }
+
+  &__avatar {
+    @include grid-cell(12, 1);
+
+    justify-self: center;
+    order: 1;
+    width: 200px;
+    object-fit: cover;
+    border-radius: 50%;
+    box-shadow: $shadow-subtle;
+
+    @include viewport_mq3 {
+      @include grid-cell(4, 9);
+
+      justify-self: end;
+      order: 2;
+      max-width: 100%;
+    }
+  }
+
+  &__btn-wrapper {
+    @include grid-cell(12, 1);
+    order: 3;
+    color: var(--color-bg);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    flex-grow: 0;
+    margin-top: auto;
+
+    @include viewport_mq3 {
+      gap: 12px;
+    }
+  }
+
+  &__btn {
+    @include button-danger;
+
+    &.--export {
+      background-color: var(--color-yellow);
+      border-color: var(--color-yellow-dark);
+    }
+  }
+
+  &__steam-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  &__steam-button {
+    @include button-primary;
+
+    background: #1b2838;
+    border-color: #171a21;
+
+    &:focus,
+    &:hover,
+    :active {
+      background: #2a475e;
+      border-color: #1b2838;
+    }
+
+    // display: flex;
+    // align-items: center;
+    // gap: 4px;
+  }
+}
