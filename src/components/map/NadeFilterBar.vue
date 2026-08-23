@@ -162,20 +162,20 @@ const activeCount = computed(() => lineupStore.filteredLineups.length)
         </select>
       </div>
 
-      <!-- MAP DISPLAY TOGGLES (Callouts, Trajectories) -->
+      <!-- MAP DISPLAY TOGGLES -->
       <div class="flex items-center gap-3">
         <button
           @click="mapStore.showTrajectories = !mapStore.showTrajectories"
           :class="[
             'flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors cursor-pointer',
             mapStore.showTrajectories
-              ? 'text-amber-400 font-medium'
+              ? 'text-amber-400 font-medium bg-amber-500/10 border border-amber-500/30'
               : 'text-slate-500 hover:text-slate-300'
           ]"
-          title="Toggle Trajectory Arcs"
+          title="Toggle: Show all trajectories at once vs only on hover/click"
         >
           <Sparkles class="w-3.5 h-3.5" />
-          <span>Trajectories</span>
+          <span>All Arcs</span>
         </button>
 
         <button
@@ -183,10 +183,10 @@ const activeCount = computed(() => lineupStore.filteredLineups.length)
           :class="[
             'flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors cursor-pointer',
             mapStore.showCallouts
-              ? 'text-sky-400 font-medium'
+              ? 'text-sky-400 font-medium bg-sky-500/10 border border-sky-500/30'
               : 'text-slate-500 hover:text-slate-300'
           ]"
-          title="Toggle Map Callout Names"
+          title="Toggle spot name labels on radar (off by default — use /callouts tab for full guide)"
         >
           <Layers class="w-3.5 h-3.5" />
           <span>Callouts</span>

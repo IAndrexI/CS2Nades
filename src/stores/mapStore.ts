@@ -6,6 +6,15 @@ import type { GrenadeType, TeamSide, ThrowType, MapInfo } from '../types'
 const CUSTOM_MAPS_KEY = 'cs2_stratbook_custom_maps'
 const CUSTOM_RADARS_KEY = 'cs2_stratbook_custom_radars'
 const RADAR_SETTINGS_KEY = 'cs2_stratbook_radar_settings'
+const CUSTOM_CALLOUTS_KEY = 'cs2_stratbook_custom_callouts'
+
+export interface CalloutItem {
+  id: string
+  name: string
+  site?: string
+  coords: { x: number; y: number }
+  isCustom?: boolean
+}
 
 export const useMapStore = defineStore('map', () => {
   // State
@@ -16,9 +25,10 @@ export const useMapStore = defineStore('map', () => {
   const selectedSite = ref<string>('all')
   const searchQuery = ref<string>('')
   
-  // Custom maps and custom uploaded radar images
+  // Custom maps, uploaded radars, and custom callouts
   const customMaps = ref<MapInfo[]>([])
   const customRadarImages = ref<Record<string, string>>({}) // mapId -> dataURL or custom image URL
+  const customCallouts = ref<Record<string, CalloutItem[]>>({}) // mapId -> custom callouts array
 
   // Radar Display Settings
   const radarOpacity = ref<number>(0.92)
@@ -28,13 +38,17 @@ export const useMapStore = defineStore('map', () => {
   // Viewport & Overlays
   const zoomLevel = ref<number>(1)
   const panOffset = ref<{ x: number; y: number }>({ x: 0, y: 0 })
-  const showCallouts = ref<boolean>(true)
+  const showCallouts = ref<boolean>(false) // OFF BY DEFAULT on main radar for clean CSNADES view!
   const showSiteMarkers = ref<boolean>(false) // Off by default to avoid duplicate red circles over official radar A/B markers
   const showTrajectories = ref<boolean>(true)
   const isTacticsMode = ref<boolean>(false)
   const isPlacementMode = ref<boolean>(false)
   const placementStep = ref<'origin' | 'landing'>('origin')
   const tempPlacement = ref<{ origin?: { x: number; y: number }; landing?: { x: number; y: number } }>({})
+
+  // csnades.gg Style Selection State
+  const selectedLandingSpotKey = ref<string | null>(null) // Selected target spot on radar
+  const selectedOriginSpotKey = ref<string | null>(null)
 
   // Load from Storage
   function loadStorage() {
@@ -44,6 +58,9 @@ export const useMapStore = defineStore('map', () => {
 
       const storedRadars = localStorage.getItem(CUSTOM_RADARS_KEY)
       if (storedRadars) customRadarImages.value = JSON.parse(storedRadars)
+
+      const storedCallouts = localStorage.getItem(CUSTOM_CALLOUTS_KEY)
+      if (storedCallouts) customCallouts.value = JSON.parse(storedCallouts)
 
       const storedSettings = localStorage.getItem(RADAR_SETTINGS_KEY)
       if (storedSettings) {
@@ -60,6 +77,7 @@ export const useMapStore = defineStore('map', () => {
     try {
       localStorage.setItem(CUSTOM_MAPS_KEY, JSON.stringify(customMaps.value))
       localStorage.setItem(CUSTOM_RADARS_KEY, JSON.stringify(customRadarImages.value))
+      localStorage.setItem(CUSTOM_CALLOUTS_KEY, JSON.stringify(customCallouts.value))
       localStorage.setItem(RADAR_SETTINGS_KEY, JSON.stringify({
         radarOpacity: radarOpacity.value,
         radarMode: radarMode.value
@@ -71,7 +89,7 @@ export const useMapStore = defineStore('map', () => {
 
   loadStorage()
 
-  watch([customMaps, customRadarImages, radarOpacity, radarMode], () => {
+  watch([customMaps, customRadarImages, customCallouts, radarOpacity, radarMode], () => {
     saveStorage()
   }, { deep: true })
 
@@ -83,7 +101,6 @@ export const useMapStore = defineStore('map', () => {
   // Current active map
   const currentMap = computed<MapInfo>(() => {
     const base = availableMaps.value.find(m => m.id === currentMapId.value) || MAPS_DATA[0]
-    // If there is a user custom radar image for this map, inject it
     const customImg = customRadarImages.value[base.id]
     if (customImg) {
       return {
@@ -95,10 +112,19 @@ export const useMapStore = defineStore('map', () => {
     return base
   })
 
+  // Combined Callouts for current active map (Built-in + Custom)
+  const currentMapCallouts = computed<CalloutItem[]>(() => {
+    const baseCallouts = currentMap.value.callouts || []
+    const custom = customCallouts.value[currentMapId.value] || []
+    return [...baseCallouts, ...custom]
+  })
+
   // Actions
   function setMap(mapId: string) {
     if (availableMaps.value.some(m => m.id === mapId)) {
       currentMapId.value = mapId
+      selectedLandingSpotKey.value = null
+      selectedOriginSpotKey.value = null
       resetZoom()
     }
   }
@@ -129,6 +155,28 @@ export const useMapStore = defineStore('map', () => {
     }
   }
 
+  // Callout Management Actions
+  function addCustomCallout(mapId: string, callout: Omit<CalloutItem, 'id' | 'isCustom'>) {
+    if (!customCallouts.value[mapId]) {
+      customCallouts.value[mapId] = []
+    }
+    const newCallout: CalloutItem = {
+      ...callout,
+      id: `custom-callout-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      isCustom: true
+    }
+    customCallouts.value[mapId].push(newCallout)
+    saveStorage()
+    return newCallout
+  }
+
+  function deleteCustomCallout(mapId: string, calloutId: string) {
+    if (customCallouts.value[mapId]) {
+      customCallouts.value[mapId] = customCallouts.value[mapId].filter(c => c.id !== calloutId)
+      saveStorage()
+    }
+  }
+
   function toggleNadeType(type: GrenadeType) {
     const idx = selectedNadeTypes.value.indexOf(type)
     if (idx >= 0) {
@@ -136,6 +184,7 @@ export const useMapStore = defineStore('map', () => {
     } else {
       selectedNadeTypes.value.push(type)
     }
+    selectedLandingSpotKey.value = null
   }
 
   function selectOnlyNadeType(type: GrenadeType) {
@@ -144,22 +193,40 @@ export const useMapStore = defineStore('map', () => {
     } else {
       selectedNadeTypes.value = [type]
     }
+    selectedLandingSpotKey.value = null
   }
 
   function setSide(side: TeamSide) {
     selectedSide.value = side
+    selectedLandingSpotKey.value = null
   }
 
   function setSite(site: string) {
     selectedSite.value = site
+    selectedLandingSpotKey.value = null
   }
 
   function setThrowType(throwType: string) {
     selectedThrowType.value = throwType
+    selectedLandingSpotKey.value = null
   }
 
   function setSearchQuery(query: string) {
     searchQuery.value = query
+  }
+
+  function selectLandingSpot(spotKey: string | null) {
+    if (selectedLandingSpotKey.value === spotKey) {
+      selectedLandingSpotKey.value = null
+      selectedOriginSpotKey.value = null
+    } else {
+      selectedLandingSpotKey.value = spotKey
+      selectedOriginSpotKey.value = null
+    }
+  }
+
+  function selectOriginSpot(originKey: string | null) {
+    selectedOriginSpotKey.value = originKey
   }
 
   function resetFilters() {
@@ -168,6 +235,8 @@ export const useMapStore = defineStore('map', () => {
     selectedThrowType.value = 'all'
     selectedSite.value = 'all'
     searchQuery.value = ''
+    selectedLandingSpotKey.value = null
+    selectedOriginSpotKey.value = null
   }
 
   function resetZoom() {
@@ -193,6 +262,8 @@ export const useMapStore = defineStore('map', () => {
     availableMaps,
     customMaps,
     customRadarImages,
+    customCallouts,
+    currentMapCallouts,
     radarOpacity,
     radarMode,
     isMapSettingsOpen,
@@ -210,17 +281,23 @@ export const useMapStore = defineStore('map', () => {
     isPlacementMode,
     placementStep,
     tempPlacement,
+    selectedLandingSpotKey,
+    selectedOriginSpotKey,
     setMap,
     setCustomRadarImage,
     resetCustomRadarImage,
     addCustomMap,
     deleteCustomMap,
+    addCustomCallout,
+    deleteCustomCallout,
     toggleNadeType,
     selectOnlyNadeType,
     setSide,
     setSite,
     setThrowType,
     setSearchQuery,
+    selectLandingSpot,
+    selectOriginSpot,
     resetFilters,
     resetZoom,
     startPlacement,

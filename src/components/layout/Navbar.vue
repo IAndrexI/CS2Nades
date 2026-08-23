@@ -43,9 +43,9 @@ const isDataModalOpen = ref(false)
 
 const navLinks = [
   { name: NAV_LABELS.radar, path: '/', icon: MapIcon },
+  { name: NAV_LABELS.callouts, path: '/callouts', icon: Layers },
   { name: NAV_LABELS.gameRoom, path: '/game-room', icon: Radio, isLive: true },
   { name: NAV_LABELS.strats, path: '/strats', icon: BookOpen },
-  { name: NAV_LABELS.tactics, path: '/tactics', icon: PenTool },
   { name: NAV_LABELS.library, path: '/library', icon: Grid },
   { name: NAV_LABELS.myLineups, path: '/my-lineups', icon: BookMarked }
 ]

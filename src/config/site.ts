@@ -20,11 +20,12 @@ export const BRANDING = {
 
 // ── NAVIGATION TAB LABELS ──────────────────────────────────
 export const NAV_LABELS = {
-  radar:     'Radar Minimap',
+  radar:     'Radar',
   strats:    'Stratbook',
   tactics:   'Tactics Board',
   library:   'Lineup Library',
   myLineups: 'My Lineups',
+  callouts:  'Callouts',
   gameRoom:  'Game Room',
   admin:     'Admin',
 }

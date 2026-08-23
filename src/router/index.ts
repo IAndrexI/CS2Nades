@@ -6,6 +6,7 @@ import LibraryView from '../views/LibraryView.vue'
 import MyLineupsView from '../views/MyLineupsView.vue'
 import GameRoomView from '../views/GameRoomView.vue'
 import AdminView from '../views/AdminView.vue'
+import CalloutsView from '../views/CalloutsView.vue'
 
 const routes = [
   {
@@ -32,6 +33,11 @@ const routes = [
     path: '/my-lineups',
     name: 'my-lineups',
     component: MyLineupsView
+  },
+  {
+    path: '/callouts',
+    name: 'callouts',
+    component: CalloutsView
   },
   {
     path: '/game-room',
