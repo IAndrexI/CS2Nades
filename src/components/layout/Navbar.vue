@@ -5,8 +5,10 @@ import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useAdminStore } from '../../stores/adminStore'
+import { BRANDING, NAV_LABELS } from '../../config/site'
 import DataSyncModal from '../common/DataSyncModal.vue'
 import MapSettingsModal from '../map/MapSettingsModal.vue'
+import LineupConflictModal from '../lineups/LineupConflictModal.vue'
 
 import { 
   Crosshair, 
@@ -23,7 +25,9 @@ import {
   ShieldCheck,
   LogOut,
   UserCheck,
-  BookMarked
+  BookMarked,
+  Radio,
+  RefreshCw
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -38,11 +42,12 @@ const isUserDropdownOpen = ref(false)
 const isDataModalOpen = ref(false)
 
 const navLinks = [
-  { name: 'Radar Minimap', path: '/', icon: MapIcon },
-  { name: 'Stratbook', path: '/strats', icon: BookOpen },
-  { name: 'Tactics Board', path: '/tactics', icon: PenTool },
-  { name: 'Lineup Library', path: '/library', icon: Grid },
-  { name: 'My Lineups', path: '/my-lineups', icon: BookMarked }
+  { name: NAV_LABELS.radar, path: '/', icon: MapIcon },
+  { name: NAV_LABELS.gameRoom, path: '/game-room', icon: Radio, isLive: true },
+  { name: NAV_LABELS.strats, path: '/strats', icon: BookOpen },
+  { name: NAV_LABELS.tactics, path: '/tactics', icon: PenTool },
+  { name: NAV_LABELS.library, path: '/library', icon: Grid },
+  { name: NAV_LABELS.myLineups, path: '/my-lineups', icon: BookMarked }
 ]
 
 function selectMap(mapId: string) {
@@ -54,12 +59,16 @@ function handleLogout() {
   authStore.logout()
   isUserDropdownOpen.value = false
 }
+
+async function handleSyncLineups() {
+  await lineupStore.syncWithServer()
+}
 </script>
 
 <template>
   <header class="navbar-wrapper w-full bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-      <!-- LOGO & BRANDING (CUSTOMIZABLE VIA ADMIN) -->
+      <!-- LOGO & BRANDING (CONFIGURABLE VIA SITE.TS & ADMIN) -->
       <div class="flex items-center gap-6">
         <router-link to="/" class="flex items-center gap-2.5 group cursor-pointer">
           <div class="p-2 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-transform">
@@ -67,10 +76,10 @@ function handleLogout() {
           </div>
           <div class="flex flex-col">
             <span class="text-sm font-black tracking-wider text-white uppercase group-hover:text-amber-400 transition-colors">
-              {{ adminStore.settings.siteTitle || 'CS2 STRATBOOK' }}
+              {{ adminStore.settings.siteTitle || BRANDING.siteTitle }}
             </span>
             <span class="text-[10px] font-mono text-amber-500/90 font-bold -mt-0.5 tracking-widest uppercase">
-              {{ adminStore.settings.teamName || 'PRO TACTICS' }} // SELF-HOSTED
+              {{ adminStore.settings.teamName || BRANDING.teamName }} // {{ BRANDING.tagline }}
             </span>
           </div>
         </router-link>
@@ -150,13 +159,24 @@ function handleLogout() {
               : 'text-slate-400 hover:text-slate-200'
           ]"
         >
-          <component :is="link.icon" class="w-3.5 h-3.5" />
+          <component :is="link.icon" class="w-3.5 h-3.5" :class="{ 'text-emerald-400 animate-pulse': link.isLive }" />
           <span>{{ link.name }}</span>
         </router-link>
       </nav>
 
-      <!-- RIGHT ACTIONS: USER AUTH, ADMIN, SYNC, NEW NADE -->
+      <!-- RIGHT ACTIONS: SYNC, USER AUTH, ADMIN, NEW NADE -->
       <div class="flex items-center gap-2.5">
+        <!-- SERVER LINEUP SYNC BUTTON -->
+        <button
+          @click="handleSyncLineups"
+          :disabled="lineupStore.isSyncing"
+          class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          :title="lineupStore.lastSyncTime ? `Last synced at ${lineupStore.lastSyncTime}` : 'Sync with Server'"
+        >
+          <RefreshCw class="w-3.5 h-3.5 text-amber-400" :class="{ 'animate-spin': lineupStore.isSyncing }" />
+          <span class="hidden sm:inline">Sync</span>
+        </button>
+
         <!-- ADMIN PANEL LINK (IF ADMIN) -->
         <router-link
           v-if="authStore.isAdmin"
@@ -198,6 +218,15 @@ function handleLogout() {
               </div>
 
               <router-link
+                to="/game-room"
+                @click="isUserDropdownOpen = false"
+                class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+              >
+                <Radio class="w-4 h-4 text-emerald-400" />
+                <span>Live Game Room</span>
+              </router-link>
+
+              <router-link
                 to="/my-lineups"
                 @click="isUserDropdownOpen = false"
                 class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
@@ -228,7 +257,7 @@ function handleLogout() {
 
           <template v-else>
             <button
-              @click="authStore.authMode = 'login'; authStore.isAuthModalOpen = true"
+              @click="authStore.authMode = 'steam'; authStore.isAuthModalOpen = true"
               class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-200 hover:text-amber-400 text-xs font-bold rounded-xl transition-colors cursor-pointer"
             >
               <User class="w-3.5 h-3.5 text-amber-400" />
@@ -257,5 +286,6 @@ function handleLogout() {
       :is-open="mapStore.isMapSettingsOpen"
       @close="mapStore.isMapSettingsOpen = false"
     />
+    <LineupConflictModal />
   </header>
 </template>

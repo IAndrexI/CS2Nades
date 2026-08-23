@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import axios from 'axios'
 import { DEFAULT_LINEUPS } from '../data/defaultLineups'
 import { useMapStore } from './mapStore'
 import type { Lineup, GrenadeType } from '../types'
@@ -225,6 +226,104 @@ export const useLineupStore = defineStore('lineup', () => {
     }
   }
 
+  // Server Sync and Conflict Resolution
+  const isSyncing = ref<boolean>(false)
+  const isConflictModalOpen = ref<boolean>(false)
+  const pendingConflicts = ref<Array<{ id: string; local: Lineup; server: Lineup }>>([])
+  const lastSyncTime = ref<string | null>(localStorage.getItem('cs2_stratbook_last_sync'))
+
+  async function syncWithServer() {
+    isSyncing.value = true
+    try {
+      const res = await axios.get('/api/lineups')
+      const serverLineups: Lineup[] = res.data
+
+      const newConflicts: Array<{ id: string; local: Lineup; server: Lineup }> = []
+      const localMap = new Map(customLineups.value.map(l => [l.id, l]))
+
+      for (const serverItem of serverLineups) {
+        const localItem = localMap.get(serverItem.id)
+        if (!localItem) {
+          // No conflict, just add server lineup
+          customLineups.value.push({ ...serverItem, isCustom: true })
+        } else {
+          // Check if contents actually differ
+          const isDifferent = 
+            localItem.title !== serverItem.title ||
+            localItem.grenadeType !== serverItem.grenadeType ||
+            localItem.originCoords.x !== serverItem.originCoords.x ||
+            localItem.originCoords.y !== serverItem.originCoords.y ||
+            localItem.landingCoords.x !== serverItem.landingCoords.x ||
+            localItem.landingCoords.y !== serverItem.landingCoords.y ||
+            localItem.startLocation !== serverItem.startLocation ||
+            localItem.endLocation !== serverItem.endLocation
+
+          if (isDifferent) {
+            newConflicts.push({
+              id: serverItem.id,
+              local: localItem,
+              server: serverItem
+            })
+          }
+        }
+      }
+
+      if (newConflicts.length > 0) {
+        pendingConflicts.value = newConflicts
+        isConflictModalOpen.value = true
+      }
+
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      lastSyncTime.value = now
+      localStorage.setItem('cs2_stratbook_last_sync', now)
+      return { success: true, conflictCount: newConflicts.length }
+    } catch (e: any) {
+      console.warn('Server sync offline / unavailable:', e.message)
+      return { success: false, error: e.message }
+    } finally {
+      isSyncing.value = false
+    }
+  }
+
+  function resolveConflict(conflictId: string, choice: 'local' | 'server' | 'both') {
+    const conflictIndex = pendingConflicts.value.findIndex(c => c.id === conflictId)
+    if (conflictIndex === -1) return
+
+    const { local, server } = pendingConflicts.value[conflictIndex]
+    const localIndex = customLineups.value.findIndex(l => l.id === conflictId)
+
+    if (choice === 'server') {
+      if (localIndex >= 0) {
+        customLineups.value[localIndex] = { ...server, isCustom: true }
+      }
+    } else if (choice === 'both') {
+      // Keep local and add server copy with unique ID
+      const duplicatedServer: Lineup = {
+        ...server,
+        id: `server-copy-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        title: `${server.title} (Server Copy)`,
+        isCustom: true
+      }
+      customLineups.value.push(duplicatedServer)
+    }
+    // If 'local', do nothing (local version stays)
+
+    pendingConflicts.value.splice(conflictIndex, 1)
+    if (pendingConflicts.value.length === 0) {
+      isConflictModalOpen.value = false
+    }
+  }
+
+  async function pushToServer(lineup: Lineup) {
+    try {
+      await axios.post('/api/lineups', lineup)
+      return true
+    } catch (e) {
+      console.warn('Could not push lineup to server:', e)
+      return false
+    }
+  }
+
   return {
     allLineups,
     customLineups,
@@ -237,6 +336,10 @@ export const useLineupStore = defineStore('lineup', () => {
     isAddModalOpen,
     isEditMode,
     editingLineup,
+    isSyncing,
+    isConflictModalOpen,
+    pendingConflicts,
+    lastSyncTime,
     openLineup,
     closeLineup,
     setHoveredLineup,
@@ -246,6 +349,9 @@ export const useLineupStore = defineStore('lineup', () => {
     updateLineup,
     deleteLineup,
     exportJSON,
-    importJSON
+    importJSON,
+    syncWithServer,
+    resolveConflict,
+    pushToServer
   }
 })

@@ -3,6 +3,8 @@ import cors from 'cors'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import http from 'http'
+import { Server } from 'socket.io'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import axios from 'axios'
@@ -11,6 +13,14 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
+const server = http.createServer(app)
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+})
+
 const PORT = process.env.PORT || 5000
 const JWT_SECRET = process.env.JWT_SECRET || 'cs2-stratbook-secret-key-2026'
 
@@ -37,6 +47,15 @@ const INITIAL_DB = {
     customMaps: []
   },
   users: [],
+  groups: [
+    {
+      id: 'grp-main-squad',
+      name: 'Main Roster (Auto-Allow)',
+      description: 'Default competitive 5-stack squad with instant room access',
+      memberUsernames: ['admin'],
+      createdAt: new Date().toISOString()
+    }
+  ],
   lineups: [],
   strats: []
 }
@@ -45,7 +64,9 @@ function loadDB() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf-8')
-      return JSON.parse(data)
+      const parsed = JSON.parse(data)
+      if (!parsed.groups) parsed.groups = INITIAL_DB.groups
+      return parsed
     }
   } catch (err) {
     console.error('Error reading db file:', err)
@@ -118,7 +139,7 @@ function requireAdmin(req, res, next) {
 
 app.use(authenticateToken)
 
-// Helper: Resolve Steam Profile (Username & Avatar) from SteamID64 or Profile Link
+// Helper: Resolve Steam Profile
 async function fetchSteamProfile(input) {
   if (!input || typeof input !== 'string') return null
   const cleanInput = input.trim()
@@ -126,7 +147,6 @@ async function fetchSteamProfile(input) {
   let steamId64 = ''
   let vanityName = ''
 
-  // 1. Check if input is a full Steam URL
   const profileMatch = cleanInput.match(/steamcommunity\.com\/profiles\/(\d{17})/i)
   const idMatch = cleanInput.match(/steamcommunity\.com\/id\/([a-zA-Z0-9_-]+)/i)
 
@@ -170,7 +190,6 @@ async function fetchSteamProfile(input) {
     console.warn('[Steam] Public XML fetch failed, using fallback parser:', e.message)
   }
 
-  // Fallback if Steam XML is rate limited or private
   const fallbackUsername = vanityName || (steamId64 ? `Steam_${steamId64.slice(-4)}` : cleanInput)
   return {
     steamId: steamId64 || `steam-${Date.now()}`,
@@ -182,8 +201,6 @@ async function fetchSteamProfile(input) {
 // ==========================================
 // AUTH ROUTES
 // ==========================================
-
-// 1. Steam Connect & Sign-In endpoint
 app.post('/api/auth/steam-sync', async (req, res) => {
   db = loadDB()
   const { steamInput, inGameRole } = req.body
@@ -197,17 +214,14 @@ app.post('/api/auth/steam-sync', async (req, res) => {
     return res.status(400).json({ error: 'Could not resolve Steam profile' })
   }
 
-  // Check if user with this steamId already exists
   let user = db.users.find(u => (u.steamId && u.steamId === profile.steamId) || u.username.toLowerCase() === profile.username.toLowerCase())
 
   if (user) {
-    // Update existing user avatar/username with latest Steam data
     user.username = profile.username
     user.avatar = profile.avatar
     if (!user.steamId) user.steamId = profile.steamId
     if (inGameRole) user.inGameRole = inGameRole
   } else {
-    // Register new user from Steam
     const role = db.users.length === 0 ? 'admin' : 'player'
     user = {
       id: `usr-steam-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -231,7 +245,6 @@ app.post('/api/auth/steam-sync', async (req, res) => {
   res.json({ token, user: userSafe })
 })
 
-// 2. Steam OpenID Redirect URL generator
 app.get('/api/auth/steam/login', (req, res) => {
   const host = req.get('host')
   const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'
@@ -249,7 +262,6 @@ app.get('/api/auth/steam/login', (req, res) => {
   res.redirect(steamOpenIdUrl)
 })
 
-// 3. Steam OpenID Callback
 app.get('/api/auth/steam/callback', async (req, res) => {
   try {
     const claimedId = req.query['openid.claimed_id']
@@ -299,7 +311,6 @@ app.get('/api/auth/steam/callback', async (req, res) => {
   }
 })
 
-// Standard Username & Password Registration
 app.post('/api/auth/register', (req, res) => {
   db = loadDB()
   const { username, email, password, inGameRole } = req.body
@@ -393,6 +404,51 @@ app.put('/api/auth/profile', requireAuth, (req, res) => {
 })
 
 // ==========================================
+// SQUAD GROUPS (AUTO-ALLOW MEMBERS)
+// ==========================================
+app.get('/api/groups', (req, res) => {
+  db = loadDB()
+  res.json(db.groups || [])
+})
+
+app.post('/api/groups', requireAuth, (req, res) => {
+  db = loadDB()
+  const { name, description, memberUsernames } = req.body
+
+  const newGroup = {
+    id: `grp-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    name: name || 'New Squad Group',
+    description: description || '',
+    memberUsernames: Array.isArray(memberUsernames) ? memberUsernames : [req.user.username],
+    createdAt: new Date().toISOString()
+  }
+
+  if (!db.groups) db.groups = []
+  db.groups.push(newGroup)
+  saveDB(db)
+  res.json(newGroup)
+})
+
+app.put('/api/groups/:id', requireAuth, (req, res) => {
+  db = loadDB()
+  const { id } = req.params
+  const index = db.groups.findIndex(g => g.id === id)
+  if (index === -1) return res.status(404).json({ error: 'Group not found' })
+
+  db.groups[index] = { ...db.groups[index], ...req.body }
+  saveDB(db)
+  res.json(db.groups[index])
+})
+
+app.delete('/api/groups/:id', requireAdmin, (req, res) => {
+  db = loadDB()
+  const { id } = req.params
+  db.groups = db.groups.filter(g => g.id !== id)
+  saveDB(db)
+  res.json({ success: true })
+})
+
+// ==========================================
 // ADMIN USER MANAGEMENT
 // ==========================================
 app.get('/api/admin/users', requireAdmin, (req, res) => {
@@ -471,9 +527,20 @@ app.post('/api/lineups', requireAuth, (req, res) => {
   db = loadDB()
   const lineupData = req.body
 
+  const existingIndex = db.lineups.findIndex(l => l.id === lineupData.id)
+  if (existingIndex >= 0) {
+    db.lineups[existingIndex] = {
+      ...db.lineups[existingIndex],
+      ...lineupData,
+      updatedAt: new Date().toISOString().split('T')[0]
+    }
+    saveDB(db)
+    return res.json(db.lineups[existingIndex])
+  }
+
   const newLineup = {
     ...lineupData,
-    id: `lineup-${Date.now()}-${Math.random().toString(36).substr(2, 7)}`,
+    id: lineupData.id || `lineup-${Date.now()}-${Math.random().toString(36).substr(2, 7)}`,
     userId: req.user.id,
     authorName: req.user.username,
     isTeamShared: lineupData.isTeamShared !== undefined ? lineupData.isTeamShared : true,
@@ -563,13 +630,156 @@ app.delete('/api/strats/:id', requireAuth, (req, res) => {
   res.json({ success: true })
 })
 
+// ==========================================
+// SOCKET.IO REAL-TIME GAME ROOM RELAY
+// ==========================================
+const gameRooms = new Map() // roomId -> { code, host, mapId, members: [], drawings: [], activeLineups: [] }
+
+io.on('connection', (socket) => {
+  let currentRoomId = null
+  let currentUserInfo = null
+
+  socket.on('room:join', ({ roomCode, user, groupId }) => {
+    db = loadDB()
+    const cleanCode = (roomCode || 'SQUAD').toUpperCase().trim()
+    currentRoomId = cleanCode
+    currentUserInfo = user || { username: `Player_${socket.id.slice(0, 4)}`, inGameRole: 'Entry' }
+
+    // Check if user is in an auto-allow squad group
+    let isAutoAllowed = false
+    if (db.groups && currentUserInfo.username) {
+      isAutoAllowed = db.groups.some(g => 
+        (groupId ? g.id === groupId : true) && 
+        g.memberUsernames.some(u => u.toLowerCase() === currentUserInfo.username.toLowerCase())
+      )
+    }
+
+    if (!gameRooms.has(cleanCode)) {
+      gameRooms.set(cleanCode, {
+        code: cleanCode,
+        host: currentUserInfo.username,
+        mapId: 'mirage',
+        members: [],
+        drawings: [],
+        activeLineups: []
+      })
+    }
+
+    const room = gameRooms.get(cleanCode)
+    
+    // Add member if not already present
+    const existingMemberIdx = room.members.findIndex(m => m.username === currentUserInfo.username)
+    const memberData = {
+      socketId: socket.id,
+      username: currentUserInfo.username,
+      avatar: currentUserInfo.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUserInfo.username}`,
+      inGameRole: currentUserInfo.inGameRole || 'Entry',
+      isAutoAllowed,
+      isHost: room.host === currentUserInfo.username
+    }
+
+    if (existingMemberIdx >= 0) {
+      room.members[existingMemberIdx] = memberData
+    } else {
+      room.members.push(memberData)
+    }
+
+    socket.join(cleanCode)
+
+    // Send initial room state to joining member
+    socket.emit('room:state', {
+      roomCode: room.code,
+      host: room.host,
+      mapId: room.mapId,
+      members: room.members,
+      drawings: room.drawings,
+      activeLineups: room.activeLineups
+    })
+
+    // Broadcast member update to all teammates in room
+    io.to(cleanCode).emit('room:members', room.members)
+    io.to(cleanCode).emit('room:announcement', {
+      text: `${currentUserInfo.username} joined the Game Room ${isAutoAllowed ? '(Squad Auto-Allowed)' : ''}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    })
+  })
+
+  // Live Tactics Board Drawings Relay
+  socket.on('room:draw', (strokeData) => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId)) return
+    const room = gameRooms.get(currentRoomId)
+    room.drawings.push(strokeData)
+    // Broadcast stroke to all other players in room
+    socket.to(currentRoomId).emit('room:stroke', strokeData)
+  })
+
+  socket.on('room:clear_drawings', () => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId)) return
+    const room = gameRooms.get(currentRoomId)
+    room.drawings = []
+    io.to(currentRoomId).emit('room:drawings_cleared')
+  })
+
+  // Live Lineup Push Relay (instant tactical execute)
+  socket.on('room:push_lineup', (lineup) => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId)) return
+    const room = gameRooms.get(currentRoomId)
+    
+    // Add to active broadcast list
+    room.activeLineups.push(lineup)
+    io.to(currentRoomId).emit('room:lineup_broadcast', {
+      lineup,
+      pushedBy: currentUserInfo?.username || 'Teammate',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    })
+  })
+
+  // Map Change by Host
+  socket.on('room:switch_map', (mapId) => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId)) return
+    const room = gameRooms.get(currentRoomId)
+    room.mapId = mapId
+    room.drawings = [] // reset drawings on new map
+    io.to(currentRoomId).emit('room:map_changed', mapId)
+  })
+
+  // Squad Chat Message
+  socket.on('room:chat', (messageText) => {
+    if (!currentRoomId) return
+    io.to(currentRoomId).emit('room:chat_message', {
+      username: currentUserInfo?.username || 'Teammate',
+      avatar: currentUserInfo?.avatar,
+      inGameRole: currentUserInfo?.inGameRole,
+      text: messageText,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    })
+  })
+
+  // Disconnect handler
+  socket.on('disconnect', () => {
+    if (currentRoomId && gameRooms.has(currentRoomId)) {
+      const room = gameRooms.get(currentRoomId)
+      room.members = room.members.filter(m => m.socketId !== socket.id)
+      io.to(currentRoomId).emit('room:members', room.members)
+      if (room.members.length === 0) {
+        // Clean up empty room after 10 mins
+        setTimeout(() => {
+          if (gameRooms.get(currentRoomId)?.members.length === 0) {
+            gameRooms.delete(currentRoomId)
+          }
+        }, 600000)
+      }
+    }
+  })
+})
+
 // SERVE PRODUCTION STATIC SPA (IF BUILT)
 const DIST_DIR = path.join(__dirname, '../dist')
 if (fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR))
 }
 
-// Catch-all handler for SPA history fallback (Express 5 compatible)
+// Catch-all handler for SPA history fallback
 app.use((req, res) => {
   const indexPath = path.join(DIST_DIR, 'index.html')
   if (fs.existsSync(indexPath)) {
@@ -579,6 +789,6 @@ app.use((req, res) => {
   }
 })
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[CS2 Stratbook Server] Running on http://0.0.0.0:${PORT}`)
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`[CS2 Stratbook Server] Running on http://0.0.0.0:${PORT} with Socket.io Game Room support`)
 })

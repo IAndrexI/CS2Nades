@@ -125,22 +125,31 @@ function handleMouseUp() {
   isDragging.value = false
 }
 
-// Handle Map Clicks for Placement Mode
-function handleMapClick(e: MouseEvent) {
-  if (!svgElement.value) return
+// Handle Map Clicks for Placement Mode with 100% Mathematical Precision
+function getSvgPoint(e: MouseEvent): { x: number; y: number } | null {
+  if (!svgElement.value) return null
+  const pt = svgElement.value.createSVGPoint()
+  pt.x = e.clientX
+  pt.y = e.clientY
+  const ctm = svgElement.value.getScreenCTM()
+  if (!ctm) return null
+  const transformed = pt.matrixTransform(ctm.inverse())
   
-  const rect = svgElement.value.getBoundingClientRect()
-  const clickX = ((e.clientX - rect.left) / rect.width) * 100
-  const clickY = ((e.clientY - rect.top) / rect.height) * 100
+  // transformed.x and transformed.y are in 0..1000 SVG coordinate space
+  const pctX = Math.round(Math.min(Math.max(transformed.x / 10, 0), 100) * 10) / 10
+  const pctY = Math.round(Math.min(Math.max(transformed.y / 10, 0), 100) * 10) / 10
+  return { x: pctX, y: pctY }
+}
 
-  const clampedX = Math.round(Math.min(Math.max(clickX, 0), 100) * 10) / 10
-  const clampedY = Math.round(Math.min(Math.max(clickY, 0), 100) * 10) / 10
+function handleMapClick(e: MouseEvent) {
+  const coords = getSvgPoint(e)
+  if (!coords) return
 
   if (mapStore.placementStep === 'origin') {
-    mapStore.tempPlacement.origin = { x: clampedX, y: clampedY }
+    mapStore.tempPlacement.origin = { x: coords.x, y: coords.y }
     mapStore.placementStep = 'landing'
   } else if (mapStore.placementStep === 'landing') {
-    mapStore.tempPlacement.landing = { x: clampedX, y: clampedY }
+    mapStore.tempPlacement.landing = { x: coords.x, y: coords.y }
     mapStore.isPlacementMode = false
     lineupStore.isAddModalOpen = true
   }

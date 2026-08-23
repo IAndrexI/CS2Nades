@@ -4,6 +4,7 @@ import StratbookView from '../views/StratbookView.vue'
 import TacticsBoardView from '../views/TacticsBoardView.vue'
 import LibraryView from '../views/LibraryView.vue'
 import MyLineupsView from '../views/MyLineupsView.vue'
+import GameRoomView from '../views/GameRoomView.vue'
 import AdminView from '../views/AdminView.vue'
 
 const routes = [
@@ -31,6 +32,11 @@ const routes = [
     path: '/my-lineups',
     name: 'my-lineups',
     component: MyLineupsView
+  },
+  {
+    path: '/game-room',
+    name: 'game-room',
+    component: GameRoomView
   },
   {
     path: '/admin',

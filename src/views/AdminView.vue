@@ -3,6 +3,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useAuthStore } from '../stores/authStore'
 import { useAdminStore } from '../stores/adminStore'
 import { useLineupStore } from '../stores/lineupStore'
+import { useGameRoomStore } from '../stores/gameRoomStore'
 import { 
   ShieldCheck, 
   Sliders, 
@@ -23,8 +24,13 @@ const authStore = useAuthStore()
 const adminStore = useAdminStore()
 const lineupStore = useLineupStore()
 
-const activeTab = ref<'branding' | 'users' | 'lineups' | 'system'>('branding')
+const activeTab = ref<'branding' | 'users' | 'groups' | 'system'>('branding')
 const saveSuccess = ref(false)
+
+// Squad group form
+const newGroupName = ref('')
+const newGroupDescription = ref('')
+const newGroupMembers = ref('')
 
 const brandingForm = reactive({
   siteTitle: adminStore.settings.siteTitle,
@@ -84,6 +90,17 @@ async function handleDeleteUser(userId: string, username: string) {
   if (confirm(`Are you sure you want to delete user "${username}"?`)) {
     await adminStore.deleteUser(userId)
   }
+}
+
+async function handleAddSquadGroup() {
+  if (!newGroupName.value.trim()) return
+  const gameRoomStore = useGameRoomStore()
+  const members = newGroupMembers.value.split(',').map(m => m.trim()).filter(Boolean)
+  await gameRoomStore.createGroup(newGroupName.value.trim(), newGroupDescription.value.trim(), members)
+  newGroupName.value = ''
+  newGroupDescription.value = ''
+  newGroupMembers.value = ''
+  alert('Squad Group Created!')
 }
 </script>
 
@@ -157,6 +174,17 @@ async function handleDeleteUser(userId: string, username: string) {
         >
           <Users class="w-3.5 h-3.5" />
           <span>User Accounts ({{ adminStore.usersList.length }})</span>
+        </button>
+
+        <button
+          @click="activeTab = 'groups'"
+          :class="[
+            'flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all cursor-pointer',
+            activeTab === 'groups' ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-white'
+          ]"
+        >
+          <ShieldCheck class="w-3.5 h-3.5" />
+          <span>Squad Groups (Auto-Allow)</span>
         </button>
 
         <button
@@ -315,7 +343,6 @@ async function handleDeleteUser(userId: string, username: string) {
                   </span>
                 </td>
                 <td class="p-3.5 text-right flex items-center justify-end gap-2">
-                  <!-- CHANGE ROLE SELECT -->
                   <select 
                     :value="user.role"
                     @change="handleUpdateUserRole(user.id, ($event.target as HTMLSelectElement).value)"
@@ -327,7 +354,6 @@ async function handleDeleteUser(userId: string, username: string) {
                     <option value="guest">Guest</option>
                   </select>
 
-                  <!-- DELETE USER -->
                   <button
                     v-if="user.id !== authStore.currentUser?.id"
                     @click="handleDeleteUser(user.id, user.username)"
@@ -343,7 +369,52 @@ async function handleDeleteUser(userId: string, username: string) {
         </div>
       </div>
 
-      <!-- TAB 3: PROXMOX & SYSTEM STORAGE -->
+      <!-- TAB 3: SQUAD GROUPS (AUTO-ALLOW ROOM ACCESS) -->
+      <div v-else-if="activeTab === 'groups'" class="p-6 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col gap-6 shadow-xl text-xs text-slate-300">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-black uppercase tracking-wider text-white">Squad Groups & Auto-Allow Roster</h2>
+            <p class="text-xs text-slate-400 mt-0.5">
+              Users added to squad groups are automatically allowed into live Game Rooms without host approval.
+            </p>
+          </div>
+        </div>
+
+        <!-- CREATE NEW SQUAD GROUP -->
+        <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col gap-3">
+          <span class="font-bold text-amber-400 uppercase tracking-wide text-xs">Create Squad Roster Group</span>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input 
+              v-model="newGroupName" 
+              type="text" 
+              placeholder="Group Name (e.g. Main 5-Stack)"
+              class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white"
+            />
+            <input 
+              v-model="newGroupDescription" 
+              type="text" 
+              placeholder="Description (e.g. Competitive Roster)"
+              class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white"
+            />
+            <input 
+              v-model="newGroupMembers" 
+              type="text" 
+              placeholder="Usernames (comma separated)"
+              class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white"
+            />
+          </div>
+          <div class="flex justify-end">
+            <button
+              @click="handleAddSquadGroup"
+              class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-md cursor-pointer"
+            >
+              Add Squad Group
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: PROXMOX & SYSTEM STORAGE -->
       <div v-else class="p-6 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col gap-4 shadow-xl text-xs text-slate-300">
         <h2 class="text-sm font-black uppercase tracking-wider text-white">Self-Hosted LXC & Database Status</h2>
         
@@ -362,7 +433,7 @@ async function handleDeleteUser(userId: string, username: string) {
             <span class="font-bold text-white text-xs">Portainer Stack Sync</span>
             <span class="text-emerald-400 font-bold flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span>Running Node.js API + Static Server</span>
+              <span>Running Node.js + Socket.io Server</span>
             </span>
             <p class="text-slate-500 text-[11px]">
               Ready for single-container deployment or multi-container swarm.
