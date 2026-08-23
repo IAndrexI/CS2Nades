@@ -13,7 +13,10 @@ import {
   Crosshair, 
   Settings2, 
   Trash2,
-  ExternalLink
+  ExternalLink,
+  X,
+  Copy,
+  Check
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -27,6 +30,8 @@ const isDragging = ref(false)
 const dragStart = ref({ x: 0, y: 0 })
 const hoveredLineup = ref<Lineup | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
+const isPinned = ref(false)
+const copiedCommand = ref(false)
 let hoverLeaveTimeout: any = null
 
 // Helper for Grenade Colors
@@ -144,44 +149,82 @@ function handleMapClick(e: MouseEvent) {
   }
 }
 
-// Lineup marker hover interaction with 180ms hysteresis to prevent flickering
+// Fixed Anchored Tooltip Positioning
 function handleLineupEnter(lineup: Lineup, e?: MouseEvent) {
   if (hoverLeaveTimeout) {
     clearTimeout(hoverLeaveTimeout)
     hoverLeaveTimeout = null
   }
+
+  // If already hovering this lineup, keep existing position locked so it NEVER shifts under the user's mouse
+  if (hoveredLineup.value?.id === lineup.id) return
+
   hoveredLineup.value = lineup
   lineupStore.setHoveredLineup(lineup)
+
   if (e && mapContainer.value) {
     const rect = mapContainer.value.getBoundingClientRect()
-    const rawX = e.clientX - rect.left + 16
-    const rawY = e.clientY - rect.top + 16
-    // Clamp inside container
-    const x = Math.min(Math.max(rawX, 10), rect.width - 280)
-    const y = Math.min(Math.max(rawY, 10), rect.height - 190)
-    tooltipPosition.value = { x, y }
+    const cardWidth = 280
+    const cardHeight = 220
+
+    let posX = e.clientX - rect.left + 20
+    let posY = e.clientY - rect.top - 40
+
+    // Prevent overflowing map bounds
+    if (posX + cardWidth > rect.width - 15) {
+      posX = e.clientX - rect.left - cardWidth - 20
+    }
+    if (posY + cardHeight > rect.height - 15) {
+      posY = rect.height - cardHeight - 15
+    }
+    if (posX < 15) posX = 15
+    if (posY < 15) posY = 15
+
+    tooltipPosition.value = { x: Math.round(posX), y: Math.round(posY) }
+  }
+}
+
+function handleTooltipEnter() {
+  if (hoverLeaveTimeout) {
+    clearTimeout(hoverLeaveTimeout)
+    hoverLeaveTimeout = null
   }
 }
 
 function handleLineupLeave() {
+  if (isPinned.value) return // If clicked to pin, keep open
   if (hoverLeaveTimeout) clearTimeout(hoverLeaveTimeout)
   hoverLeaveTimeout = setTimeout(() => {
     hoveredLineup.value = null
     lineupStore.setHoveredLineup(null)
-  }, 180)
+  }, 350) // 350ms grace period so user can easily move cursor to floating GUI
 }
 
 function handleLineupClick(lineup: Lineup, e: MouseEvent) {
   e.stopPropagation()
-  lineupStore.openLineup(lineup)
+  isPinned.value = true
+  hoveredLineup.value = lineup
+}
+
+function closeTooltip() {
+  isPinned.value = false
+  hoveredLineup.value = null
+  lineupStore.setHoveredLineup(null)
 }
 
 function handleDeleteFromTooltip(lineup: Lineup, e: MouseEvent) {
   e.stopPropagation()
   if (confirm(`Delete lineup "${lineup.title}"?`)) {
     lineupStore.deleteLineup(lineup.id)
-    hoveredLineup.value = null
+    closeTooltip()
   }
+}
+
+function handleCopyCommand(command: string, e: MouseEvent) {
+  e.stopPropagation()
+  navigator.clipboard.writeText(command)
+  copiedCommand.value = true
+  setTimeout(() => { copiedCommand.value = false }, 2000)
 }
 
 onMounted(() => {
@@ -201,6 +244,7 @@ onUnmounted(() => {
     @wheel="handleWheel"
     @mousedown="handleMouseDown"
     @mousemove="handleMouseMove"
+    @click="closeTooltip"
     :class="[
       mapStore.isPlacementMode ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-grab'
     ]"
@@ -236,12 +280,12 @@ onUnmounted(() => {
             @mouseleave="handleLineupLeave"
             @click="handleLineupClick(lineup, $event)"
           >
-            <!-- WIDE TRANSPARENT HIT-AREA (Prevents hover flickering) -->
+            <!-- WIDE TRANSPARENT HIT-AREA (Prevents cursor dropping through gaps) -->
             <path 
               :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
               fill="none" 
               stroke="transparent" 
-              stroke-width="28"
+              stroke-width="30"
               pointer-events="stroke"
             />
 
@@ -279,7 +323,7 @@ onUnmounted(() => {
             @click="handleLineupClick(lineup, $event)"
           >
             <!-- TRANSPARENT HIT-AREA -->
-            <circle cx="0" cy="0" r="28" fill="transparent" pointer-events="all" />
+            <circle cx="0" cy="0" r="30" fill="transparent" pointer-events="all" />
 
             <!-- Origin Pulse Ring -->
             <circle 
@@ -322,7 +366,7 @@ onUnmounted(() => {
             @click="handleLineupClick(lineup, $event)"
           >
             <!-- TRANSPARENT HIT-AREA -->
-            <circle cx="0" cy="0" r="28" fill="transparent" pointer-events="all" />
+            <circle cx="0" cy="0" r="30" fill="transparent" pointer-events="all" />
 
             <!-- Detonation Burst Radius -->
             <circle 
@@ -441,59 +485,88 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <!-- STABLE HOVER TOOLTIP (Zero-flicker with quick delete & details) -->
+    <!-- STATIC ANCHORED INTERACTIVE POPUP (Stays still so you can click & select anything) -->
     <div 
       v-if="hoveredLineup"
-      class="absolute z-40 pointer-events-none transition-all duration-75"
+      class="absolute z-40 transition-all duration-100"
       :style="{
         left: `${tooltipPosition.x}px`,
         top: `${tooltipPosition.y}px`
       }"
+      @mouseenter="handleTooltipEnter"
+      @mouseleave="handleLineupLeave"
+      @click.stop
     >
-      <div class="w-64 p-3 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl text-slate-100 flex flex-col gap-2 pointer-events-auto">
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-1.5 min-w-0">
-            <NadeIcon :type="hoveredLineup.grenadeType" :size="16" :filled="true" />
+      <div class="w-72 p-3.5 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl text-slate-100 flex flex-col gap-2.5 animate-fade-in">
+        <!-- HEADER -->
+        <div class="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <NadeIcon :type="hoveredLineup.grenadeType" :size="18" :filled="true" />
             <span class="font-bold text-xs text-white truncate">{{ hoveredLineup.title }}</span>
           </div>
-          <span 
-            :class="[
-              'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase flex-shrink-0',
-              hoveredLineup.side === 't' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
-            ]"
-          >
-            {{ hoveredLineup.side }}
-          </span>
+
+          <div class="flex items-center gap-1.5">
+            <span 
+              :class="[
+                'px-1.5 py-0.5 rounded text-[9px] font-black uppercase font-mono',
+                hoveredLineup.side === 't' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+              ]"
+            >
+              {{ hoveredLineup.side }}
+            </span>
+            <button
+              @click="closeTooltip"
+              class="p-0.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
+            >
+              <X class="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
-        <div class="flex flex-col text-[11px] text-slate-400 gap-0.5">
+        <!-- DETAILS -->
+        <div class="flex flex-col text-[11px] text-slate-300 gap-1">
           <div class="flex items-center justify-between">
-            <span>From:</span>
-            <span class="text-slate-200 font-medium truncate max-w-[130px]">{{ hoveredLineup.startLocation }}</span>
+            <span class="text-slate-500 font-medium">Stand:</span>
+            <span class="text-white font-semibold truncate max-w-[150px]">{{ hoveredLineup.startLocation }}</span>
           </div>
           <div class="flex items-center justify-between">
-            <span>To:</span>
-            <span class="text-slate-200 font-medium truncate max-w-[130px]">{{ hoveredLineup.endLocation }}</span>
+            <span class="text-slate-500 font-medium">Land:</span>
+            <span class="text-white font-semibold truncate max-w-[150px]">{{ hoveredLineup.endLocation }}</span>
           </div>
-          <div class="flex items-center justify-between pt-1 border-t border-slate-800">
-            <span>Throw:</span>
-            <span class="text-amber-400 font-bold uppercase">{{ hoveredLineup.throwType.replace('_', ' ') }}</span>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-500 font-medium">Throw:</span>
+            <span class="text-amber-400 font-bold uppercase font-mono text-[10px]">{{ hoveredLineup.throwType.replace('_', ' ') }}</span>
           </div>
+        </div>
+
+        <!-- CONSOLE COMMAND (IF EXISTS) -->
+        <div v-if="hoveredLineup.consoleCommand" class="pt-1">
+          <button
+            @click="handleCopyCommand(hoveredLineup.consoleCommand, $event)"
+            class="w-full flex items-center justify-between px-2 py-1 bg-slate-950 border border-slate-800 hover:border-amber-500/50 rounded-lg text-[10px] text-slate-300 font-mono transition-colors cursor-pointer"
+          >
+            <span class="truncate max-w-[180px]">setpos / setang</span>
+            <span class="text-amber-400 font-bold flex items-center gap-1">
+              <Check v-if="copiedCommand" class="w-3 h-3 text-emerald-400" />
+              <Copy v-else class="w-3 h-3" />
+              <span>{{ copiedCommand ? 'Copied' : 'Copy' }}</span>
+            </span>
+          </button>
         </div>
 
         <!-- ACTIONS ROW -->
-        <div class="flex items-center justify-between pt-1.5 border-t border-slate-800 text-[10px]">
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px]">
           <button
-            @click="handleLineupClick(hoveredLineup, $event)"
-            class="text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
+            @click="lineupStore.openLineup(hoveredLineup); closeTooltip()"
+            class="px-3 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 text-slate-950 font-black rounded-lg shadow transition-all flex items-center gap-1.5 cursor-pointer text-xs"
           >
-            <ExternalLink class="w-3 h-3" />
+            <ExternalLink class="w-3 h-3 stroke-[2.5]" />
             <span>Open Guide</span>
           </button>
 
           <button
             @click="handleDeleteFromTooltip(hoveredLineup, $event)"
-            class="text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer"
+            class="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition-colors cursor-pointer"
             title="Delete this lineup"
           >
             <Trash2 class="w-3 h-3" />

@@ -59,26 +59,29 @@ const hasRadarImage = computed(() => !!props.mapInfo.radarImage && mapStore.rada
       </g>
     </g>
 
-    <!-- LAYER 3: BOMB SITE A ZONE GLOW & LETTER -->
-    <g 
-      v-if="mapInfo.sites?.a"
-      :transform="`translate(${mapInfo.sites.a.x * 10}, ${mapInfo.sites.a.y * 10})`"
-      class="site-marker-a"
-    >
-      <circle cx="0" cy="0" r="32" fill="#ef4444" fill-opacity="0.15" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 4" />
-      <circle cx="0" cy="0" r="16" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" />
-      <text x="0" y="6" font-size="16" font-weight="900" text-anchor="middle" fill="#fee2e2" font-family="monospace">A</text>
-    </g>
+    <!-- LAYER 3 & 4: BOMB SITES (Only rendered if showSiteMarkers enabled or in blueprint mode) -->
+    <g v-if="mapStore.showSiteMarkers || mapStore.radarMode === 'blueprint'">
+      <!-- Bomb Site A -->
+      <g 
+        v-if="mapInfo.sites?.a"
+        :transform="`translate(${mapInfo.sites.a.x * 10}, ${mapInfo.sites.a.y * 10})`"
+        class="site-marker-a"
+      >
+        <circle cx="0" cy="0" r="28" fill="#ef4444" fill-opacity="0.15" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 4" />
+        <circle cx="0" cy="0" r="14" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" />
+        <text x="0" y="5" font-size="14" font-weight="900" text-anchor="middle" fill="#fee2e2" font-family="monospace">A</text>
+      </g>
 
-    <!-- LAYER 4: BOMB SITE B ZONE GLOW & LETTER -->
-    <g 
-      v-if="mapInfo.sites?.b"
-      :transform="`translate(${mapInfo.sites.b.x * 10}, ${mapInfo.sites.b.y * 10})`"
-      class="site-marker-b"
-    >
-      <circle cx="0" cy="0" r="32" fill="#ef4444" fill-opacity="0.15" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 4" />
-      <circle cx="0" cy="0" r="16" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" />
-      <text x="0" y="6" font-size="16" font-weight="900" text-anchor="middle" fill="#fee2e2" font-family="monospace">B</text>
+      <!-- Bomb Site B -->
+      <g 
+        v-if="mapInfo.sites?.b"
+        :transform="`translate(${mapInfo.sites.b.x * 10}, ${mapInfo.sites.b.y * 10})`"
+        class="site-marker-b"
+      >
+        <circle cx="0" cy="0" r="28" fill="#ef4444" fill-opacity="0.15" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 4" />
+        <circle cx="0" cy="0" r="14" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" />
+        <text x="0" y="5" font-size="14" font-weight="900" text-anchor="middle" fill="#fee2e2" font-family="monospace">B</text>
+      </g>
     </g>
 
     <!-- LAYER 5: CALLOUT LABELS (IF ENABLED) -->

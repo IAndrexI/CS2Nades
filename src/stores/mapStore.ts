@@ -29,6 +29,7 @@ export const useMapStore = defineStore('map', () => {
   const zoomLevel = ref<number>(1)
   const panOffset = ref<{ x: number; y: number }>({ x: 0, y: 0 })
   const showCallouts = ref<boolean>(true)
+  const showSiteMarkers = ref<boolean>(false) // Off by default to avoid duplicate red circles over official radar A/B markers
   const showTrajectories = ref<boolean>(true)
   const isTacticsMode = ref<boolean>(false)
   const isPlacementMode = ref<boolean>(false)
@@ -203,6 +204,7 @@ export const useMapStore = defineStore('map', () => {
     zoomLevel,
     panOffset,
     showCallouts,
+    showSiteMarkers,
     showTrajectories,
     isTacticsMode,
     isPlacementMode,
