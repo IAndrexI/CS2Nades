@@ -1,0 +1,130 @@
+export type GrenadeType = 'smoke' | 'flash' | 'molotov' | 'he' | 'decoy'
+
+export type TeamSide = 'all' | 't' | 'ct'
+
+export type ThrowType = 
+  | 'standing' 
+  | 'jumpthrow' 
+  | 'runthrow' 
+  | 'run_jumpthrow' 
+  | 'crouch' 
+  | 'crouch_jumpthrow' 
+  | 'left_right_click' 
+  | 'w_jumpthrow'
+
+export type MovementType = 'stationary' | 'walking' | 'running' | 'crouched'
+
+export type TickrateType = 'cs2_subtick' | '64_tick' | '128_tick' | 'all'
+
+export interface Coordinates {
+  x: number // percentage 0-100 across map viewBox
+  y: number // percentage 0-100 down map viewBox
+}
+
+export interface MapCallout {
+  id: string
+  name: string
+  site?: 'A' | 'B' | 'Mid' | 'Spawn' | 'Other'
+  coords: Coordinates
+}
+
+export interface MapInfo {
+  id: string
+  name: string
+  code: string // e.g. de_mirage
+  activePool: boolean
+  radarImage?: string
+  viewBox: string
+  sites: {
+    a: Coordinates
+    b: Coordinates
+  }
+  callouts: MapCallout[]
+  description: string
+  thumbnail: string
+}
+
+export interface Lineup {
+  id: string
+  title: string
+  mapId: string
+  grenadeType: GrenadeType
+  side: TeamSide
+  throwType: ThrowType
+  movementType?: MovementType
+  tickrate: TickrateType
+  
+  // Map positioning
+  originCoords: Coordinates // Where the player stands
+  landingCoords: Coordinates // Where the grenade detonates
+  curveOffset?: number // Trajectory curve control
+  
+  // Locations & Tags
+  startLocation: string // e.g. "T Spawn", "Palace", "Banana"
+  endLocation: string // e.g. "A Site Stairs", "Window", "Coffins"
+  site?: 'A' | 'B' | 'Mid' | 'Spawn' | 'General'
+  tags: string[]
+  
+  // Media & Guides
+  videoUrl?: string // YouTube, Streamable, or direct MP4
+  imageUrl?: string // Main lineup preview image / gif
+  standingScreenshot?: string // Where to stand
+  aimScreenshot?: string // Where crosshair aligns
+  
+  // Instructions
+  description?: string
+  instructions: string[]
+  consoleCommand?: string // setpos / setang command
+  
+  // Metadata
+  difficulty: 'easy' | 'medium' | 'hard'
+  author?: string
+  isCustom?: boolean
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface StratPlayerAssignment {
+  slot: 1 | 2 | 3 | 4 | 5
+  role: 'IGL' | 'Entry' | 'Support' | 'Lurker' | 'AWP' | 'Flex'
+  playerName?: string
+  lineupIds: string[]
+  instructions: string
+  position: Coordinates
+}
+
+export interface StratPhase {
+  id: string
+  name: string // e.g. "01 - Spawn & Default", "02 - Utility Execute", "03 - Post-Plant"
+  description: string
+  durationSeconds?: number
+  playerAssignments: StratPlayerAssignment[]
+}
+
+export interface Strategy {
+  id: string
+  title: string
+  mapId: string
+  side: 't' | 'ct'
+  buyType: 'full_buy' | 'semi_buy' | 'force_buy' | 'eco' | 'pistol'
+  targetSite?: 'A' | 'B' | 'Mid' | 'Default' | 'Fast' | 'Fake'
+  summary: string
+  phases: StratPhase[]
+  tacticsDrawings?: TacticsElement[]
+  tags: string[]
+  isCustom?: boolean
+  createdAt: string
+  updatedAt?: string
+}
+
+export type TacticsElementType = 'line' | 'arrow' | 'circle' | 'text' | 'player_icon' | 'smoke_cloud' | 'flash_burst' | 'molotov_fire'
+
+export interface TacticsElement {
+  id: string
+  type: TacticsElementType
+  color: string
+  points: Coordinates[]
+  text?: string
+  playerRole?: string
+  radius?: number
+}

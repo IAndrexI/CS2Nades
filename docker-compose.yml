@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  cs2-stratbook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cs2-stratbook
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - NODE_ENV=production
+    labels:
+      - "io.portainer.accesscontrol.teams=admin"
