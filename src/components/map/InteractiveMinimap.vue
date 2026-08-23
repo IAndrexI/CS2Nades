@@ -10,10 +10,10 @@ import {
   ZoomOut, 
   Maximize2, 
   MapPin, 
-  Crosshair,
-  User,
+  Crosshair, 
+  Settings2,
   Sparkles,
-  Info
+  Layers
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -92,13 +92,11 @@ function resetZoom() {
 function handleMouseDown(e: MouseEvent) {
   if (e.button !== 0) return // Left click only
   
-  // If placement mode is active, handle coordinate click
   if (mapStore.isPlacementMode) {
     handleMapClick(e)
     return
   }
 
-  // Otherwise start panning
   isDragging.value = true
   dragStart.value = {
     x: e.clientX - mapStore.panOffset.x,
@@ -114,7 +112,6 @@ function handleMouseMove(e: MouseEvent) {
     }
   }
 
-  // Update tooltip position for hover
   if (hoveredLineup.value && mapContainer.value) {
     const rect = mapContainer.value.getBoundingClientRect()
     tooltipPosition.value = {
@@ -145,7 +142,6 @@ function handleMapClick(e: MouseEvent) {
   } else if (mapStore.placementStep === 'landing') {
     mapStore.tempPlacement.landing = { x: clampedX, y: clampedY }
     mapStore.isPlacementMode = false
-    // Open add lineup modal
     lineupStore.isAddModalOpen = true
   }
 }
@@ -200,7 +196,7 @@ onUnmounted(() => {
         viewBox="0 0 1000 1000" 
         class="w-full h-full max-w-[960px] max-h-[960px] drop-shadow-[0_0_24px_rgba(0,0,0,0.8)]"
       >
-        <!-- LAYER 1: BASE VECTOR BLUEPRINT MAP -->
+        <!-- LAYER 1: BASE VECTOR / REAL RADAR OVERVIEW -->
         <VectorMapBlueprint 
           :map-info="mapStore.currentMap" 
           :show-callouts="mapStore.showCallouts"
@@ -213,7 +209,7 @@ onUnmounted(() => {
             :key="`traj-${lineup.id}`"
             :class="[
               'transition-all duration-200 cursor-pointer',
-              hoveredLineup?.id === lineup.id ? 'opacity-100' : 'opacity-60 hover:opacity-100'
+              hoveredLineup?.id === lineup.id ? 'opacity-100' : 'opacity-65 hover:opacity-100'
             ]"
             @mouseenter="handleLineupHover(lineup, $event)"
             @mouseleave="handleLineupHover(null)"
@@ -224,8 +220,8 @@ onUnmounted(() => {
               :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
               fill="none" 
               :stroke="getNadeColor(lineup.grenadeType)" 
-              :stroke-width="hoveredLineup?.id === lineup.id ? '4' : '2.5'"
-              stroke-opacity="0.3"
+              :stroke-width="hoveredLineup?.id === lineup.id ? '4.5' : '3'"
+              stroke-opacity="0.35"
             />
 
             <!-- Inner Animated Dashed Line -->
@@ -294,7 +290,7 @@ onUnmounted(() => {
               cy="0" 
               :r="hoveredLineup?.id === lineup.id ? '22' : '16'" 
               :fill="getNadeColor(lineup.grenadeType)" 
-              fill-opacity="0.25" 
+              fill-opacity="0.3" 
               :stroke="getNadeColor(lineup.grenadeType)" 
               stroke-width="1.5"
               class="animate-pulse-glow"
@@ -310,14 +306,13 @@ onUnmounted(() => {
               stroke-width="2"
             />
 
-            <!-- Little Type Indicator Dot -->
+            <!-- Type Indicator Dot -->
             <circle cx="0" cy="0" r="4.5" :fill="getNadeColor(lineup.grenadeType)" />
           </g>
         </g>
 
-        <!-- LAYER 5: TEMPORARY PLACEMENT PINS (WHEN ADDING A LINEUP) -->
+        <!-- LAYER 5: TEMPORARY PLACEMENT PINS -->
         <g v-if="mapStore.isPlacementMode" class="placement-pins-layer">
-          <!-- Temporary Origin Pin -->
           <g 
             v-if="mapStore.tempPlacement.origin" 
             :transform="`translate(${mapStore.tempPlacement.origin.x * 10}, ${mapStore.tempPlacement.origin.y * 10})`"
@@ -327,7 +322,6 @@ onUnmounted(() => {
             <text x="0" y="-14" font-size="12" font-weight="bold" fill="#22c55e" text-anchor="middle">ORIGIN</text>
           </g>
 
-          <!-- Temporary Landing Pin -->
           <g 
             v-if="mapStore.tempPlacement.landing" 
             :transform="`translate(${mapStore.tempPlacement.landing.x * 10}, ${mapStore.tempPlacement.landing.y * 10})`"
@@ -357,7 +351,7 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <!-- FLOATING MAP CONTROLS (ZOOM & RESET) -->
+    <!-- FLOATING MAP CONTROLS (ZOOM & SETTINGS) -->
     <div class="absolute bottom-4 right-4 z-20 flex flex-col gap-1.5 p-1.5 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl shadow-xl">
       <button 
         @click="zoomIn"
@@ -380,6 +374,13 @@ onUnmounted(() => {
       >
         <Maximize2 class="w-4 h-4" />
       </button>
+      <button 
+        @click="mapStore.isMapSettingsOpen = true"
+        title="Custom Radar / Map Settings"
+        class="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer border-t border-slate-800 mt-0.5"
+      >
+        <Settings2 class="w-4 h-4" />
+      </button>
     </div>
 
     <!-- FLOATING MAP INFO BADGE (BOTTOM LEFT) -->
@@ -390,6 +391,12 @@ onUnmounted(() => {
       </div>
       <span class="text-slate-600">|</span>
       <span class="text-[11px] font-mono">{{ Math.round(mapStore.zoomLevel * 100) }}% Zoom</span>
+      <button 
+        @click="mapStore.isMapSettingsOpen = true" 
+        class="text-[10px] text-amber-400 hover:underline font-bold ml-1"
+      >
+        Change Radar
+      </button>
     </div>
 
     <!-- FLOATING HOVER TOOLTIP / HUD PREVIEW -->

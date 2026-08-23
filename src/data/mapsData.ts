@@ -6,6 +6,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Mirage',
     code: 'de_mirage',
     activePool: true,
+    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_mirage_radar_psd.png',
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 74, y: 38 },
@@ -22,13 +23,13 @@ export const MAPS_DATA: MapInfo[] = [
       { id: 'jungle', name: 'Jungle', site: 'A', coords: { x: 64, y: 28 } },
       { id: 'ticket', name: 'Ticket Booth', site: 'A', coords: { x: 72, y: 24 } },
       { id: 'connector', name: 'Connector', site: 'Mid', coords: { x: 55, y: 44 } },
-      { id: 'mid_window', name: 'Window (Snipers)', site: 'Mid', coords: { x: 49, y: 37 } },
+      { id: 'mid_window', name: 'Window', site: 'Mid', coords: { x: 49, y: 37 } },
       { id: 'top_mid', name: 'Top Mid', site: 'Mid', coords: { x: 44, y: 66 } },
       { id: 'catwalk', name: 'Catwalk / Short', site: 'Mid', coords: { x: 38, y: 45 } },
       { id: 'underpass', name: 'Underpass', site: 'Mid', coords: { x: 50, y: 55 } },
       { id: 'b_apartments', name: 'B Apps', site: 'B', coords: { x: 20, y: 58 } },
       { id: 'b_site', name: 'B Site', site: 'B', coords: { x: 28, y: 30 } },
-      { id: 'market', name: 'Market / Kitchen', site: 'B', coords: { x: 42, y: 24 } },
+      { id: 'market', name: 'Market', site: 'B', coords: { x: 42, y: 24 } },
       { id: 'b_short', name: 'B Short', site: 'B', coords: { x: 32, y: 42 } },
       { id: 'van', name: 'Van', site: 'B', coords: { x: 19, y: 36 } },
       { id: 'bench', name: 'Bench', site: 'B', coords: { x: 32, y: 23 } }
@@ -41,6 +42,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Inferno',
     code: 'de_inferno',
     activePool: true,
+    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_inferno_radar_psd.png',
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 68, y: 32 },
@@ -54,14 +56,12 @@ export const MAPS_DATA: MapInfo[] = [
       { id: 'b_site', name: 'B Site', site: 'B', coords: { x: 28, y: 22 } },
       { id: 'coffins', name: 'Coffins', site: 'B', coords: { x: 35, y: 20 } },
       { id: 'church', name: 'Ruins / Church', site: 'B', coords: { x: 40, y: 24 } },
-      { id: 'ct_banana', name: 'CT Banana / Spools', site: 'B', coords: { x: 32, y: 28 } },
       { id: 'mid', name: 'Mid', site: 'Mid', coords: { x: 48, y: 60 } },
       { id: 'second_mid', name: 'Second Mid', site: 'Mid', coords: { x: 60, y: 68 } },
       { id: 'apartments', name: 'A Apps / Boiler', site: 'A', coords: { x: 65, y: 50 } },
-      { id: 'short_a', name: 'Short A / Truck', site: 'A', coords: { x: 58, y: 38 } },
+      { id: 'short_a', name: 'Short A', site: 'A', coords: { x: 58, y: 38 } },
       { id: 'long_a', name: 'Long A / Arch', site: 'A', coords: { x: 74, y: 42 } },
-      { id: 'a_site', name: 'A Site / Pit', site: 'A', coords: { x: 68, y: 32 } },
-      { id: 'pit', name: 'Pit / Moto', site: 'A', coords: { x: 78, y: 28 } }
+      { id: 'a_site', name: 'A Site / Pit', site: 'A', coords: { x: 68, y: 32 } }
     ],
     description: 'Choke-point heavy Italian village map demanding precise utility usage down Banana and complex Arch/Library executes.',
     thumbnail: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80'
@@ -71,6 +71,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Dust II',
     code: 'de_dust2',
     activePool: true,
+    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_dust2_radar_psd.png',
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 78, y: 28 },
@@ -98,6 +99,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Nuke',
     code: 'de_nuke',
     activePool: true,
+    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_nuke_radar_psd.png',
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 50, y: 45 },
@@ -125,6 +127,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Ancient',
     code: 'de_ancient',
     activePool: true,
+    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_ancient_radar_psd.png',
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 74, y: 35 },
@@ -149,6 +152,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Anubis',
     code: 'de_anubis',
     activePool: true,
+    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_anubis_radar_psd.png',
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 74, y: 32 },
@@ -173,6 +177,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Vertigo',
     code: 'de_vertigo',
     activePool: true,
+    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_vertigo_radar_psd.png',
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 72, y: 38 },
@@ -195,6 +200,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Overpass',
     code: 'de_overpass',
     activePool: false,
+    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_overpass_radar_psd.png',
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 65, y: 35 },
@@ -207,8 +213,7 @@ export const MAPS_DATA: MapInfo[] = [
       { id: 'b_site', name: 'B Site / Pillar', site: 'B', coords: { x: 35, y: 55 } },
       { id: 'water', name: 'Water / Construction', site: 'Mid', coords: { x: 35, y: 72 } },
       { id: 'toilets', name: 'Toilets / Restrooms', site: 'A', coords: { x: 55, y: 50 } },
-      { id: 'a_site', name: 'A Site (Van)', site: 'A', coords: { x: 65, y: 35 } },
-      { id: 'fountain', name: 'Fountain / Park', site: 'Mid', coords: { x: 45, y: 65 } }
+      { id: 'a_site', name: 'A Site (Van)', site: 'A', coords: { x: 65, y: 35 } }
     ],
     description: 'Sprawling Berlin park and canal map with rich tactical depth and deep vertical monster pushes.',
     thumbnail: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80'
@@ -218,6 +223,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Train',
     code: 'de_train',
     activePool: true,
+    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_train_radar_psd.png',
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 48, y: 38 },
@@ -239,6 +245,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Cache',
     code: 'de_cache',
     activePool: false,
+    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_cache_radar_psd.png',
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 72, y: 32 },

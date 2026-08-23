@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
 import DataSyncModal from '../common/DataSyncModal.vue'
+import MapSettingsModal from '../map/MapSettingsModal.vue'
 import { 
   Crosshair, 
   Map as MapIcon, 
@@ -12,7 +13,9 @@ import {
   Grid, 
   Plus, 
   Database, 
-  ChevronDown
+  ChevronDown,
+  Settings2,
+  Layers
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -69,27 +72,51 @@ function selectMap(mapId: string) {
           <!-- DROPDOWN MENU -->
           <div 
             v-if="isMapDropdownOpen"
-            class="absolute top-full left-0 mt-2 w-56 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in"
+            class="absolute top-full left-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in"
           >
-            <div class="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-              Active Duty & Reserve Maps
+            <div class="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+              <span>Select Map</span>
+              <button 
+                @click="mapStore.isMapSettingsOpen = true; isMapDropdownOpen = false" 
+                class="text-amber-400 hover:underline flex items-center gap-1 text-[10px] lowercase"
+              >
+                <Settings2 class="w-3 h-3" />
+                <span>custom radars</span>
+              </button>
             </div>
-            <button
-              v-for="map in mapStore.availableMaps"
-              :key="map.id"
-              @click="selectMap(map.id)"
-              :class="[
-                'flex items-center justify-between px-3 py-2 text-xs font-semibold text-left transition-colors cursor-pointer',
-                mapStore.currentMapId === map.id 
-                  ? 'bg-amber-500/20 text-amber-400 font-bold' 
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              ]"
-            >
-              <span>{{ map.name }}</span>
-              <span v-if="map.activePool" class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
-                ACTIVE
-              </span>
-            </button>
+
+            <div class="max-h-60 overflow-y-auto">
+              <button
+                v-for="map in mapStore.availableMaps"
+                :key="map.id"
+                @click="selectMap(map.id)"
+                :class="[
+                  'w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-left transition-colors cursor-pointer',
+                  mapStore.currentMapId === map.id 
+                    ? 'bg-amber-500/20 text-amber-400 font-bold' 
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                ]"
+              >
+                <span>{{ map.name }}</span>
+                <span v-if="map.isCustom" class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  CUSTOM
+                </span>
+                <span v-else-if="map.activePool" class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
+                  ACTIVE
+                </span>
+              </button>
+            </div>
+
+            <!-- ADD CUSTOM MAP BUTTON IN DROPDOWN -->
+            <div class="p-2 border-t border-slate-800 bg-slate-950/60">
+              <button 
+                @click="mapStore.isMapSettingsOpen = true; isMapDropdownOpen = false"
+                class="w-full py-1.5 px-2 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Layers class="w-3.5 h-3.5 text-amber-400" />
+                <span>Custom Radar / Map Settings</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -112,15 +139,24 @@ function selectMap(mapId: string) {
         </router-link>
       </nav>
 
-      <!-- RIGHT ACTIONS: SYNC / BACKUP -->
+      <!-- RIGHT ACTIONS: MAP SETTINGS & BACKUP -->
       <div class="flex items-center gap-2.5">
+        <button
+          @click="mapStore.isMapSettingsOpen = true"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-amber-400 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+          title="Map & Radar Settings"
+        >
+          <Settings2 class="w-3.5 h-3.5 text-amber-400" />
+          <span class="hidden sm:inline">Map Settings</span>
+        </button>
+
         <button
           @click="isDataModalOpen = true"
           class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
           title="Backup & Storage Settings"
         >
           <Database class="w-3.5 h-3.5 text-amber-400" />
-          <span class="hidden sm:inline">Data & Sync</span>
+          <span class="hidden sm:inline">Data</span>
         </button>
 
         <button
@@ -133,10 +169,14 @@ function selectMap(mapId: string) {
       </div>
     </div>
 
-    <!-- DATA SYNC MODAL -->
+    <!-- MODALS -->
     <DataSyncModal 
       :is-open="isDataModalOpen" 
       @close="isDataModalOpen = false" 
+    />
+    <MapSettingsModal
+      :is-open="mapStore.isMapSettingsOpen"
+      @close="mapStore.isMapSettingsOpen = false"
     />
   </header>
 </template>

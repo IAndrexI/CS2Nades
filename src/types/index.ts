@@ -33,7 +33,8 @@ export interface MapInfo {
   name: string
   code: string // e.g. de_mirage
   activePool: boolean
-  radarImage?: string
+  radarImage?: string // Official / Default radar image URL or local path
+  customRadarImage?: string // User uploaded custom radar image
   viewBox: string
   sites: {
     a: Coordinates
@@ -42,6 +43,7 @@ export interface MapInfo {
   callouts: MapCallout[]
   description: string
   thumbnail: string
+  isCustom?: boolean
 }
 
 export interface Lineup {
@@ -95,7 +97,7 @@ export interface StratPlayerAssignment {
 
 export interface StratPhase {
   id: string
-  name: string // e.g. "01 - Spawn & Default", "02 - Utility Execute", "03 - Post-Plant"
+  name: string
   description: string
   durationSeconds?: number
   playerAssignments: StratPlayerAssignment[]
