@@ -177,6 +177,11 @@ export const useMapStore = defineStore('map', () => {
     }
   }
 
+  function clearCustomCallouts(mapId: string) {
+    customCallouts.value[mapId] = []
+    saveStorage()
+  }
+
   function toggleNadeType(type: GrenadeType) {
     const idx = selectedNadeTypes.value.indexOf(type)
     if (idx >= 0) {
@@ -290,6 +295,7 @@ export const useMapStore = defineStore('map', () => {
     deleteCustomMap,
     addCustomCallout,
     deleteCustomCallout,
+    clearCustomCallouts,
     toggleNadeType,
     selectOnlyNadeType,
     setSide,

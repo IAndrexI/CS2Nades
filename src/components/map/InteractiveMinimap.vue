@@ -4,7 +4,6 @@ import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
 import VectorMapBlueprint from './VectorMapBlueprint.vue'
 import NadeIcon from '../common/NadeIcon.vue'
-import LineupCard from '../lineups/LineupCard.vue'
 import type { Lineup, GrenadeType } from '../../types'
 import { 
   ZoomIn, 
@@ -18,10 +17,9 @@ import {
   X,
   Copy,
   Check,
-  ChevronRight,
-  Layers,
   Sparkles,
-  Play
+  Play,
+  Layers
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -34,11 +32,14 @@ const svgElement = ref<SVGSVGElement | null>(null)
 const isDragging = ref(false)
 const dragStart = ref({ x: 0, y: 0 })
 const hoveredLineup = ref<Lineup | null>(null)
-const hoveredLandingSpotKey = ref<string | null>(null)
+const selectedLineupId = ref<string | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
 const isPinned = ref(false)
 const copiedCommand = ref(false)
 let hoverLeaveTimeout: any = null
+
+// Live cursor placement preview
+const liveCursorCoords = ref<{ x: number; y: number } | null>(null)
 
 // Helper for Grenade Colors
 function getNadeColor(type: GrenadeType): string {
@@ -52,72 +53,24 @@ function getNadeColor(type: GrenadeType): string {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// CSNADES.GG GROUPING: GROUP LINEUPS BY TARGET LANDING SPOT
-// ─────────────────────────────────────────────────────────────
-export interface LandingGroup {
-  key: string
-  endLocation: string
-  landingCoords: { x: number; y: number }
-  grenadeType: GrenadeType
-  lineups: Lineup[]
-}
-
-const landingGroups = computed<LandingGroup[]>(() => {
-  const groups = new Map<string, LandingGroup>()
-
-  lineupStore.filteredLineups.forEach(lineup => {
-    // Cluster key based on 1.5% coordinate snap or exact endLocation
-    const coordKey = `${Math.round(lineup.landingCoords.x * 0.7)},${Math.round(lineup.landingCoords.y * 0.7)}_${lineup.grenadeType}`
-    const key = `${lineup.endLocation.toLowerCase().trim()}_${lineup.grenadeType}`
-
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        endLocation: lineup.endLocation,
-        landingCoords: lineup.landingCoords,
-        grenadeType: lineup.grenadeType,
-        lineups: [lineup]
-      })
-    } else {
-      groups.get(key)!.lineups.push(lineup)
-    }
-  })
-
-  return Array.from(groups.values())
-})
-
-// Lineups for currently selected landing spot
-const selectedLandingGroup = computed<LandingGroup | null>(() => {
-  if (!mapStore.selectedLandingSpotKey) return null
-  return landingGroups.value.find(g => g.key === mapStore.selectedLandingSpotKey) || null
-})
-
 // Lineups that should display active trajectories
 const visibleTrajectories = computed<Lineup[]>(() => {
-  if (selectedLandingGroup.value) {
-    // If a landing spot is selected, show trajectories for that spot
-    if (mapStore.selectedOriginSpotKey) {
-      return selectedLandingGroup.value.lineups.filter(l => l.id === mapStore.selectedOriginSpotKey)
-    }
-    return selectedLandingGroup.value.lineups
+  if (selectedLineupId.value) {
+    return lineupStore.filteredLineups.filter(l => l.id === selectedLineupId.value)
   }
-
-  if (hoveredLandingSpotKey.value) {
-    const group = landingGroups.value.find(g => g.key === hoveredLandingSpotKey.value)
-    return group ? group.lineups : []
-  }
-
   if (hoveredLineup.value) {
     return [hoveredLineup.value]
   }
-
-  // If user enabled "Always show all trajectories", show filtered lineups
   if (mapStore.showTrajectories) {
     return lineupStore.filteredLineups
   }
-
   return []
+})
+
+// Selected Lineup for docked drawer
+const activeLineup = computed<Lineup | null>(() => {
+  if (!selectedLineupId.value) return null
+  return lineupStore.filteredLineups.find(l => l.id === selectedLineupId.value) || null
 })
 
 // Calculate SVG Bezier curve path between Origin and Landing
@@ -188,24 +141,33 @@ function handleMouseMove(e: MouseEvent) {
       y: e.clientY - dragStart.value.y
     }
   }
+
+  // Update live cursor coordinates for placement mode
+  if (mapStore.isPlacementMode) {
+    const coords = getSvgPoint(e)
+    if (coords) {
+      liveCursorCoords.value = coords
+    }
+  }
 }
 
 function handleMouseUp() {
   isDragging.value = false
 }
 
-// Handle Map Clicks for Placement Mode with 100% Mathematical Precision
+// ─────────────────────────────────────────────────────────────
+// BULLETPROOF COORDINATE SYSTEM: Direct SVG Rendered Bounding Box
+// ─────────────────────────────────────────────────────────────
 function getSvgPoint(e: MouseEvent): { x: number; y: number } | null {
   if (!svgElement.value) return null
-  const pt = svgElement.value.createSVGPoint()
-  pt.x = e.clientX
-  pt.y = e.clientY
-  const ctm = svgElement.value.getScreenCTM()
-  if (!ctm) return null
-  const transformed = pt.matrixTransform(ctm.inverse())
+  const rect = svgElement.value.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return null
   
-  const pctX = Math.round(Math.min(Math.max(transformed.x / 10, 0), 100) * 10) / 10
-  const pctY = Math.round(Math.min(Math.max(transformed.y / 10, 0), 100) * 10) / 10
+  const rawX = ((e.clientX - rect.left) / rect.width) * 100
+  const rawY = ((e.clientY - rect.top) / rect.height) * 100
+  
+  const pctX = Math.round(Math.min(Math.max(rawX, 0), 100) * 10) / 10
+  const pctY = Math.round(Math.min(Math.max(rawY, 0), 100) * 10) / 10
   return { x: pctX, y: pctY }
 }
 
@@ -219,6 +181,7 @@ function handleMapClick(e: MouseEvent) {
   } else if (mapStore.placementStep === 'landing') {
     mapStore.tempPlacement.landing = { x: coords.x, y: coords.y }
     mapStore.isPlacementMode = false
+    liveCursorCoords.value = null
     lineupStore.isAddModalOpen = true
   }
 }
@@ -226,23 +189,13 @@ function handleMapClick(e: MouseEvent) {
 // ─────────────────────────────────────────────────────────────
 // CSNADES.GG INTERACTION HANDLERS
 // ─────────────────────────────────────────────────────────────
-function handleLandingPinClick(group: LandingGroup, e: MouseEvent) {
+function handleLandingPinClick(lineup: Lineup, e: MouseEvent) {
   e.stopPropagation()
-  mapStore.selectLandingSpot(group.key)
-}
-
-function handleLandingPinEnter(group: LandingGroup) {
-  hoveredLandingSpotKey.value = group.key
-}
-
-function handleLandingPinLeave() {
-  hoveredLandingSpotKey.value = null
-}
-
-function handleOriginPinClick(lineup: Lineup, e: MouseEvent) {
-  e.stopPropagation()
-  mapStore.selectOriginSpot(lineup.id)
-  lineupStore.openLineup(lineup)
+  if (selectedLineupId.value === lineup.id) {
+    selectedLineupId.value = null
+  } else {
+    selectedLineupId.value = lineup.id
+  }
 }
 
 function handleLineupEnter(lineup: Lineup, e?: MouseEvent) {
@@ -303,6 +256,7 @@ function handleDeleteFromTooltip(lineup: Lineup, e: MouseEvent) {
   e.stopPropagation()
   if (confirm(`Delete lineup "${lineup.title}"?`)) {
     lineupStore.deleteLineup(lineup.id)
+    if (selectedLineupId.value === lineup.id) selectedLineupId.value = null
     closeTooltip()
   }
 }
@@ -316,8 +270,7 @@ function handleCopyCommand(command: string, e: MouseEvent) {
 
 function handleBackgroundMapClick() {
   closeTooltip()
-  mapStore.selectedLandingSpotKey = null
-  mapStore.selectedOriginSpotKey = null
+  selectedLineupId.value = null
 }
 
 onMounted(() => {
@@ -356,7 +309,7 @@ onUnmounted(() => {
           viewBox="0 0 1000 1000" 
           class="w-full h-full max-w-[960px] max-h-[960px] drop-shadow-[0_0_24px_rgba(0,0,0,0.8)]"
         >
-          <!-- LAYER 1: CLEAN OFFICIAL RADAR OVERVIEW -->
+          <!-- LAYER 1: CLEAN SIMPLERADAR VECTOR / PSD RADAR OVERVIEW -->
           <VectorMapBlueprint 
             :map-info="mapStore.currentMap" 
             :show-callouts="mapStore.showCallouts"
@@ -369,11 +322,11 @@ onUnmounted(() => {
               :key="`traj-${lineup.id}`"
               :class="[
                 'transition-all duration-200 cursor-pointer',
-                hoveredLineup?.id === lineup.id || mapStore.selectedOriginSpotKey === lineup.id ? 'opacity-100' : 'opacity-75'
+                hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? 'opacity-100' : 'opacity-70'
               ]"
               @mouseenter="handleLineupEnter(lineup, $event)"
               @mouseleave="handleLineupLeave"
-              @click="handleOriginPinClick(lineup, $event)"
+              @click="handleLandingPinClick(lineup, $event)"
             >
               <!-- WIDE TRANSPARENT HIT-AREA -->
               <path 
@@ -389,8 +342,8 @@ onUnmounted(() => {
                 :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
                 fill="none" 
                 :stroke="getNadeColor(lineup.grenadeType)" 
-                :stroke-width="hoveredLineup?.id === lineup.id ? '5.5' : '3.5'"
-                :stroke-opacity="hoveredLineup?.id === lineup.id ? '0.6' : '0.35'"
+                :stroke-width="hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? '5.5' : '3.5'"
+                :stroke-opacity="hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? '0.6' : '0.35'"
                 pointer-events="none"
               />
 
@@ -399,7 +352,7 @@ onUnmounted(() => {
                 :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
                 fill="none" 
                 :stroke="getNadeColor(lineup.grenadeType)" 
-                :stroke-width="hoveredLineup?.id === lineup.id ? '3' : '2'"
+                :stroke-width="hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? '3' : '2'"
                 class="animate-trajectory"
                 pointer-events="none"
               />
@@ -407,24 +360,24 @@ onUnmounted(() => {
           </g>
 
           <!-- LAYER 3: THROW ORIGIN PINS (PLAYER STANDING SPOTS) -->
-          <!-- Displayed when a landing spot is selected, or when hovering/browsing -->
-          <g v-if="selectedLandingGroup || mapStore.showTrajectories" class="origin-markers-layer">
+          <g class="origin-markers-layer">
             <g 
-              v-for="lineup in (selectedLandingGroup ? selectedLandingGroup.lineups : lineupStore.filteredLineups)" 
+              v-for="lineup in (selectedLineupId ? visibleTrajectories : lineupStore.filteredLineups)" 
               :key="`origin-${lineup.id}`"
               :transform="`translate(${lineup.originCoords.x * 10}, ${lineup.originCoords.y * 10})`"
               class="cursor-pointer transition-transform duration-150 hover:scale-130"
               @mouseenter="handleLineupEnter(lineup, $event)"
               @mouseleave="handleLineupLeave"
-              @click="handleOriginPinClick(lineup, $event)"
+              @click="handleLandingPinClick(lineup, $event)"
             >
+              <!-- TRANSPARENT HIT-AREA -->
               <circle cx="0" cy="0" r="28" fill="transparent" pointer-events="all" />
 
               <!-- Origin Outer Pulse -->
               <circle 
                 cx="0" 
                 cy="0" 
-                :r="hoveredLineup?.id === lineup.id || mapStore.selectedOriginSpotKey === lineup.id ? '18' : '13'" 
+                :r="hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? '18' : '13'" 
                 fill="none" 
                 :stroke="getNadeColor(lineup.grenadeType)" 
                 stroke-width="2" 
@@ -448,29 +401,29 @@ onUnmounted(() => {
             </g>
           </g>
 
-          <!-- LAYER 4: CSNADES.GG TARGET LANDING PINS -->
+          <!-- LAYER 4: CSNADES.GG TARGET LANDING PINS FOR EVERY FILTERED LINEUP -->
           <g class="landing-markers-layer">
             <g 
-              v-for="group in landingGroups" 
-              :key="`landing-group-${group.key}`"
-              :transform="`translate(${group.landingCoords.x * 10}, ${group.landingCoords.y * 10})`"
-              class="cursor-pointer transition-transform duration-150 hover:scale-125"
-              @mouseenter="handleLandingPinEnter(group)"
-              @mouseleave="handleLandingPinLeave"
-              @click="handleLandingPinClick(group, $event)"
+              v-for="lineup in lineupStore.filteredLineups" 
+              :key="`landing-${lineup.id}`"
+              :transform="`translate(${lineup.landingCoords.x * 10}, ${lineup.landingCoords.y * 10})`"
+              class="cursor-pointer transition-transform duration-150 hover:scale-130"
+              @mouseenter="handleLineupEnter(lineup, $event)"
+              @mouseleave="handleLineupLeave"
+              @click="handleLandingPinClick(lineup, $event)"
             >
               <!-- TRANSPARENT HIT-AREA -->
               <circle cx="0" cy="0" r="30" fill="transparent" pointer-events="all" />
 
-              <!-- Active Selection / Hover Ring -->
+              <!-- Active Selection / Hover Pulse Ring -->
               <circle 
                 cx="0" 
                 cy="0" 
-                :r="mapStore.selectedLandingSpotKey === group.key ? '26' : '18'" 
-                :fill="getNadeColor(group.grenadeType)" 
-                :fill-opacity="mapStore.selectedLandingSpotKey === group.key ? '0.4' : '0.2'" 
-                :stroke="getNadeColor(group.grenadeType)" 
-                :stroke-width="mapStore.selectedLandingSpotKey === group.key ? '3' : '1.5'"
+                :r="selectedLineupId === lineup.id || hoveredLineup?.id === lineup.id ? '24' : '16'" 
+                :fill="getNadeColor(lineup.grenadeType)" 
+                :fill-opacity="selectedLineupId === lineup.id || hoveredLineup?.id === lineup.id ? '0.4' : '0.2'" 
+                :stroke="getNadeColor(lineup.grenadeType)" 
+                :stroke-width="selectedLineupId === lineup.id ? '3' : '1.5'"
                 class="animate-pulse-glow"
                 pointer-events="none"
               />
@@ -479,44 +432,45 @@ onUnmounted(() => {
               <circle 
                 cx="0" 
                 cy="0" 
-                r="12" 
+                r="11" 
                 fill="#0f172a" 
-                :stroke="getNadeColor(group.grenadeType)" 
+                :stroke="getNadeColor(lineup.grenadeType)" 
                 stroke-width="2"
                 pointer-events="none"
               />
 
-              <!-- Badge Dot Indicator -->
-              <circle cx="0" cy="0" r="4.5" :fill="getNadeColor(group.grenadeType)" pointer-events="none" />
-
-              <!-- Lineup Count Pill if multiple -->
-              <g v-if="group.lineups.length > 1" transform="translate(10, -10)" pointer-events="none">
-                <circle cx="0" cy="0" r="6.5" fill="#f59e0b" stroke="#0f172a" stroke-width="1.5" />
-                <text x="0" y="3" font-size="8" font-weight="900" text-anchor="middle" fill="#0f172a" font-family="monospace">
-                  {{ group.lineups.length }}
-                </text>
-              </g>
+              <!-- Type Indicator Dot -->
+              <circle cx="0" cy="0" r="4.5" :fill="getNadeColor(lineup.grenadeType)" pointer-events="none" />
             </g>
           </g>
 
-          <!-- LAYER 5: TEMPORARY PLACEMENT PINS -->
+          <!-- LAYER 5: LIVE PLACEMENT MODE PINS (Precise & Interactive) -->
           <g v-if="mapStore.isPlacementMode" class="placement-pins-layer">
+            <!-- Fixed Origin Pin after Step 1 -->
             <g 
               v-if="mapStore.tempPlacement.origin" 
               :transform="`translate(${mapStore.tempPlacement.origin.x * 10}, ${mapStore.tempPlacement.origin.y * 10})`"
             >
               <circle cx="0" cy="0" r="18" fill="#22c55e" fill-opacity="0.3" stroke="#22c55e" stroke-width="2" class="animate-pulse" />
               <circle cx="0" cy="0" r="8" fill="#22c55e" stroke="#ffffff" stroke-width="2" />
-              <text x="0" y="-14" font-size="12" font-weight="bold" fill="#22c55e" text-anchor="middle">ORIGIN</text>
+              <text x="0" y="-14" font-size="12" font-weight="bold" fill="#22c55e" text-anchor="middle">STAND HERE</text>
             </g>
 
-            <g 
-              v-if="mapStore.tempPlacement.landing" 
-              :transform="`translate(${mapStore.tempPlacement.landing.x * 10}, ${mapStore.tempPlacement.landing.y * 10})`"
-            >
-              <circle cx="0" cy="0" r="22" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" class="animate-pulse" />
-              <circle cx="0" cy="0" r="10" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
-              <text x="0" y="-16" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">TARGET</text>
+            <!-- Real-time Trajectory Arc from Origin to live mouse cursor in Step 2 -->
+            <g v-if="mapStore.placementStep === 'landing' && mapStore.tempPlacement.origin && liveCursorCoords">
+              <path 
+                :d="getTrajectoryPath(mapStore.tempPlacement.origin, liveCursorCoords)"
+                fill="none" 
+                stroke="#de9b35" 
+                stroke-width="2.5" 
+                stroke-dasharray="6 6"
+                class="animate-trajectory"
+              />
+              <g :transform="`translate(${liveCursorCoords.x * 10}, ${liveCursorCoords.y * 10})`">
+                <circle cx="0" cy="0" r="20" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" class="animate-pulse" />
+                <circle cx="0" cy="0" r="8" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
+                <text x="0" y="-14" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">LANDING SPOT</text>
+              </g>
             </g>
           </g>
         </svg>
@@ -581,7 +535,7 @@ onUnmounted(() => {
         <span class="text-[11px] font-mono">{{ Math.round(mapStore.zoomLevel * 100) }}% Zoom</span>
         <button 
           @click="mapStore.isMapSettingsOpen = true" 
-          class="text-[10px] text-amber-400 hover:underline font-bold ml-1"
+          class="text-[10px] text-amber-400 hover:underline font-bold ml-1 cursor-pointer"
         >
           Change Radar
         </button>
@@ -676,89 +630,78 @@ onUnmounted(() => {
     </div>
 
     <!-- ───────────────────────────────────────────────────────────── -->
-    <!-- CSNADES.GG SPOT LINEUPS DRAWER (DOCKED BELOW RADAR WHEN PIN CLICKED) -->
+    <!-- CSNADES.GG DOCKED LINEUP CARD (WHEN PIN IS CLICKED) -->
     <!-- ───────────────────────────────────────────────────────────── -->
     <div 
-      v-if="selectedLandingGroup"
+      v-if="activeLineup"
       class="csnades-spot-drawer p-5 bg-slate-900/95 backdrop-blur-xl border border-amber-500/40 rounded-2xl shadow-2xl flex flex-col gap-4 animate-fade-in"
     >
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <div class="flex items-center gap-3">
           <div class="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-            <NadeIcon :type="selectedLandingGroup.grenadeType" :size="22" :filled="true" />
+            <NadeIcon :type="activeLineup.grenadeType" :size="22" :filled="true" />
           </div>
           <div>
             <div class="flex items-center gap-2">
               <h3 class="text-base font-black uppercase text-white tracking-wide">
-                {{ selectedLandingGroup.endLocation }}
+                {{ activeLineup.title }}
               </h3>
-              <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono text-[11px] font-bold">
-                {{ selectedLandingGroup.lineups.length }} Throws Available
+              <span 
+                :class="[
+                  'px-2 py-0.5 rounded text-xs font-bold uppercase font-mono',
+                  activeLineup.side === 't' ? 'bg-amber-500/20 text-amber-400' : 'bg-sky-500/20 text-sky-400'
+                ]"
+              >
+                {{ activeLineup.side }} Side
               </span>
             </div>
-            <p class="text-xs text-slate-400">
-              Select a player standing spot on the radar or below to view exact crosshair positioning and throw timing
+            <p class="text-xs text-slate-400 mt-0.5">
+              From <strong class="text-slate-200">{{ activeLineup.startLocation }}</strong> to <strong class="text-slate-200">{{ activeLineup.endLocation }}</strong>
             </p>
           </div>
         </div>
 
         <button 
-          @click="mapStore.selectedLandingSpotKey = null"
+          @click="selectedLineupId = null"
           class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-          title="Close Selection"
+          title="Close"
         >
           <X class="w-5 h-5" />
         </button>
       </div>
 
-      <!-- SPOT CARDS GRID -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        <div 
-          v-for="l in selectedLandingGroup.lineups" 
-          :key="l.id"
-          @click="handleOriginPinClick(l, $event)"
-          :class="[
-            'p-3.5 bg-slate-950/90 border rounded-xl flex flex-col gap-2.5 transition-all cursor-pointer group',
-            mapStore.selectedOriginSpotKey === l.id 
-              ? 'border-amber-500 shadow-lg shadow-amber-500/20' 
-              : 'border-slate-800 hover:border-slate-700 hover:bg-slate-900'
-          ]"
-        >
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-white group-hover:text-amber-400 transition-colors truncate max-w-[160px]">
-              {{ l.title }}
-            </span>
-            <span 
-              :class="[
-                'px-1.5 py-0.5 rounded text-[9px] font-bold uppercase',
-                l.side === 't' ? 'bg-amber-500/20 text-amber-400' : 'bg-sky-500/20 text-sky-400'
-              ]"
-            >
-              {{ l.side }}
-            </span>
+      <!-- SPOT DETAILS & ACTIONS -->
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3 text-xs">
+          <div class="px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800 text-slate-300">
+            <span class="text-slate-500 mr-1">Throw:</span>
+            <strong class="text-amber-400 uppercase font-mono">{{ activeLineup.throwType.replace('_', ' ') }}</strong>
           </div>
-
-          <div class="flex items-center justify-between text-[11px] text-slate-400">
-            <span>From: <strong class="text-slate-200">{{ l.startLocation }}</strong></span>
-            <span class="text-amber-400 font-mono font-bold uppercase text-[10px]">
-              {{ l.throwType.replace('_', ' ') }}
-            </span>
+          <div class="px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800 text-slate-300">
+            <span class="text-slate-500 mr-1">Tickrate:</span>
+            <strong class="text-emerald-400 uppercase font-mono">{{ activeLineup.tickrate || 'CS2 Subtick' }}</strong>
           </div>
-
-          <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px]">
-            <span class="text-slate-500 flex items-center gap-1">
-              <Play class="w-3 h-3 text-amber-400" />
-              <span>View Guide</span>
-            </span>
-
-            <button
-              @click.stop="handleDeleteFromTooltip(l, $event)"
-              class="text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-slate-800 transition-colors"
-              title="Delete Lineup"
-            >
-              <Trash2 class="w-3.5 h-3.5" />
-            </button>
+          <div class="px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800 text-slate-300">
+            <span class="text-slate-500 mr-1">Difficulty:</span>
+            <strong class="text-white capitalize">{{ activeLineup.difficulty || 'Easy' }}</strong>
           </div>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <button
+            @click="lineupStore.openLineup(activeLineup)"
+            class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+          >
+            <Play class="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Open Full Video & Crosshair Guide</span>
+          </button>
+
+          <button
+            @click="handleDeleteFromTooltip(activeLineup, $event)"
+            class="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+          >
+            <Trash2 class="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>

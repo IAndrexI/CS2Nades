@@ -13,7 +13,8 @@ import {
   ZoomIn, 
   ZoomOut, 
   Maximize2,
-  Crosshair
+  Crosshair,
+  RotateCcw
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -34,18 +35,17 @@ const filteredCallouts = computed(() => {
   return all.filter(c => c.name.toLowerCase().includes(q) || (c.site && c.site.toLowerCase().includes(q)))
 })
 
-// Coordinate calculation using SVG CTM matrix
+// Coordinate calculation using direct SVG bounding box (100% precision)
 function handleMapClick(e: MouseEvent) {
   if (!isAddingCallout.value || !svgElement.value) return
-  const pt = svgElement.value.createSVGPoint()
-  pt.x = e.clientX
-  pt.y = e.clientY
-  const ctm = svgElement.value.getScreenCTM()
-  if (!ctm) return
-  const transformed = pt.matrixTransform(ctm.inverse())
+  const rect = svgElement.value.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return
+
+  const rawX = ((e.clientX - rect.left) / rect.width) * 100
+  const rawY = ((e.clientY - rect.top) / rect.height) * 100
   
-  const pctX = Math.round(Math.min(Math.max(transformed.x / 10, 0), 100) * 10) / 10
-  const pctY = Math.round(Math.min(Math.max(transformed.y / 10, 0), 100) * 10) / 10
+  const pctX = Math.round(Math.min(Math.max(rawX, 0), 100) * 10) / 10
+  const pctY = Math.round(Math.min(Math.max(rawY, 0), 100) * 10) / 10
 
   newCalloutCoords.value = { x: pctX, y: pctY }
 }
@@ -70,8 +70,14 @@ function handleCancelAdd() {
 }
 
 function handleDeleteCallout(id: string) {
-  if (confirm('Delete this custom callout?')) {
+  if (confirm('Delete this callout?')) {
     mapStore.deleteCustomCallout(mapStore.currentMapId, id)
+  }
+}
+
+function handleClearAll() {
+  if (confirm(`Clear all callouts for ${mapStore.currentMap.name}?`)) {
+    mapStore.clearCustomCallouts(mapStore.currentMapId)
   }
 }
 </script>
@@ -86,13 +92,13 @@ function handleDeleteCallout(id: string) {
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <h1 class="text-xl font-black uppercase text-white tracking-wide">Map Callouts Guide</h1>
+            <h1 class="text-xl font-black uppercase text-white tracking-wide">Custom Callouts Editor</h1>
             <span class="px-2 py-0.5 rounded bg-slate-800 text-sky-400 text-xs font-mono font-bold">
               {{ mapStore.currentMap.name }} ({{ filteredCallouts.length }} Callouts)
             </span>
           </div>
           <p class="text-xs text-slate-400 mt-0.5">
-            Official competitive CS2 radar callouts and custom team spot markers
+            Click anywhere on the radar map to drop custom team spot callout pins
           </p>
         </div>
       </div>
@@ -109,6 +115,17 @@ function handleDeleteCallout(id: string) {
           </option>
         </select>
 
+        <!-- CLEAR ALL BUTTON -->
+        <button
+          v-if="filteredCallouts.length > 0"
+          @click="handleClearAll"
+          class="flex items-center gap-1.5 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+          title="Clear all callouts for this map"
+        >
+          <Trash2 class="w-3.5 h-3.5" />
+          <span>Clear All</span>
+        </button>
+
         <!-- ADD CALLOUT BUTTON -->
         <button
           @click="isAddingCallout = !isAddingCallout"
@@ -121,7 +138,7 @@ function handleDeleteCallout(id: string) {
         >
           <Plus v-if="!isAddingCallout" class="w-4 h-4 stroke-[3]" />
           <X v-else class="w-4 h-4" />
-          <span>{{ isAddingCallout ? 'Cancel' : 'Add Custom Callout' }}</span>
+          <span>{{ isAddingCallout ? 'Cancel' : 'Add Callout' }}</span>
         </button>
       </div>
     </div>
@@ -151,7 +168,7 @@ function handleDeleteCallout(id: string) {
             <g class="callouts-pins-layer">
               <g 
                 v-for="callout in filteredCallouts" 
-                :key="callout.id"
+                :key="callout.id" 
                 :transform="`translate(${callout.coords.x * 10}, ${callout.coords.y * 10})`"
                 class="transition-transform duration-150 hover:scale-125"
               >
@@ -273,6 +290,17 @@ function handleDeleteCallout(id: string) {
         <!-- CALLOUTS LIST -->
         <div class="flex-grow overflow-y-auto flex flex-col gap-1.5 pr-1 text-xs">
           <div 
+            v-if="filteredCallouts.length === 0" 
+            class="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500"
+          >
+            <Layers class="w-8 h-8 stroke-[1.5] mb-2 text-slate-600" />
+            <p class="font-bold text-xs text-slate-400">No Callouts Added Yet</p>
+            <p class="text-[11px] text-slate-500 mt-1 max-w-[200px]">
+              Click "Add Callout" and click on the radar to drop your team's custom spots.
+            </p>
+          </div>
+
+          <div 
             v-for="callout in filteredCallouts" 
             :key="callout.id"
             class="flex items-center justify-between p-2.5 bg-slate-950/80 hover:bg-slate-850 border border-slate-800/80 rounded-xl transition-colors"
@@ -291,10 +319,9 @@ function handleDeleteCallout(id: string) {
               </span>
 
               <button
-                v-if="callout.isCustom"
                 @click="handleDeleteCallout(callout.id)"
                 class="p-1 text-slate-500 hover:text-rose-400 rounded transition-colors cursor-pointer"
-                title="Delete custom callout"
+                title="Delete callout"
               >
                 <Trash2 class="w-3 h-3" />
               </button>
