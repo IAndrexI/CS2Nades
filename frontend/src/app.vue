@@ -26,7 +26,7 @@ const boardRef = ref(null);
 
 // Lineups Database State
 const lineups = ref([]);
-const showModal = ref('false');
+const showModal = ref(false); // Fixed: changed from string 'false' to boolean false
 const newLineup = ref({ map: 'Mirage', title: '', type: 'Smoke', description: '', author: '' });
 
 // Fetch data on mount
