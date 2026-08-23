@@ -1,35 +1,26 @@
 {
-  "name": "csgo-stratbook",
-  "version": "3.0.0",
+  "name": "cs2nades",
+  "private": true,
+  "version": "0.0.0",
   "type": "module",
-  "description": "",
   "scripts": {
-    "start": "npm run start --workspace server",
-    "dev": "concurrently \"npm run dev --workspace server\" \"npm run dev --workspace client\"",
-    "dev:lp": "npm run dev --workspace landingpage",
-    "build": "npm run build --workspaces --if-present",
-    "deploy:prod": "git push prod master --force",
-    "deploy": "git push staging master --force"
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "tsx": "4.15.6",
-    "zx": "8.1.2"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "workspaces": [
-    "server",
-    "client",
-    "landingpage"
-  ],
-  "engines": {
-    "node": "18.18.0"
-  },
-  "volta": {
-    "node": "18.18.0"
+    "axios": "^1.19.0",
+    "pinia": "^4.0.3",
+    "socket.io-client": "^4.8.3",
+    "vue": "^3.5.40",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@types/node": "^24.13.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/tsconfig": "^0.9.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0",
+    "vue-tsc": "^3.3.8"
   }
 }
