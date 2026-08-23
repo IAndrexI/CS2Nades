@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Navbar from './components/layout/Navbar.vue'
+import AuthModal from './components/auth/AuthModal.vue'
 </script>
 
 <template>
@@ -24,9 +25,12 @@ import Navbar from './components/layout/Navbar.vue'
           <span>•</span>
           <span>CS2 Subtick Calibrated</span>
           <span>•</span>
-          <span>Offline & Cloud Capable</span>
+          <span>Offline &amp; Cloud Capable</span>
         </div>
       </div>
     </footer>
+
+    <!-- GLOBAL MODALS — rendered at root level so they are ALWAYS on top of every element -->
+    <AuthModal />
   </div>
 </template>

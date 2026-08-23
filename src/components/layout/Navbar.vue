@@ -7,7 +7,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useAdminStore } from '../../stores/adminStore'
 import DataSyncModal from '../common/DataSyncModal.vue'
 import MapSettingsModal from '../map/MapSettingsModal.vue'
-import AuthModal from '../auth/AuthModal.vue'
+
 import { 
   Crosshair, 
   Map as MapIcon, 
@@ -257,6 +257,5 @@ function handleLogout() {
       :is-open="mapStore.isMapSettingsOpen"
       @close="mapStore.isMapSettingsOpen = false"
     />
-    <AuthModal />
   </header>
 </template>
