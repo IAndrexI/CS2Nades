@@ -107,24 +107,24 @@ watch(() => props.initialTargetUserId, (newId) => {
 <template>
   <div
     v-if="isOpen"
-    class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fade-in"
+    class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fade-in"
     @click.self="emit('close')"
   >
-    <div class="w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-[75vh]">
+    <div class="my-auto w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-[88vh] sm:h-[80vh] max-h-[92vh] sm:max-h-[85vh]">
       <!-- LEFT SIDEBAR: CONTACTS LIST -->
-      <div class="w-full md:w-72 bg-slate-950 p-4 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col justify-between shrink-0">
-        <div class="flex flex-col gap-3">
+      <div class="w-full md:w-72 bg-slate-950 p-4 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col justify-between shrink-0 max-h-[30vh] md:max-h-none">
+        <div class="flex flex-col gap-3 min-h-0 flex-1">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <MessageSquare class="w-4 h-4 text-amber-400" />
               <h3 class="text-sm font-black uppercase text-white">Direct Messages</h3>
             </div>
-            <button @click="emit('close')" class="md:hidden text-slate-400 hover:text-white">
+            <button @click="emit('close')" class="md:hidden text-slate-400 hover:text-white p-1 cursor-pointer">
               <X class="w-4 h-4" />
             </button>
           </div>
 
-          <div class="flex flex-col gap-1 overflow-y-auto max-h-[55vh]">
+          <div class="flex flex-col gap-1 overflow-y-auto flex-1 scrollbar-thin">
             <div
               v-if="contacts.length === 0"
               class="text-center p-6 text-slate-500 text-xs italic"
@@ -160,7 +160,7 @@ watch(() => props.initialTargetUserId, (newId) => {
 
         <button
           @click="emit('close')"
-          class="hidden md:flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+          class="hidden md:flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-white text-xs font-bold transition-colors cursor-pointer mt-2"
         >
           <X class="w-4 h-4" />
           <span>Close Chat</span>
@@ -168,7 +168,7 @@ watch(() => props.initialTargetUserId, (newId) => {
       </div>
 
       <!-- RIGHT SIDEBAR: ACTIVE CHAT MESSAGES -->
-      <div class="flex-1 flex flex-col justify-between bg-slate-900">
+      <div class="flex-1 flex flex-col justify-between bg-slate-900 min-h-0">
         <!-- HEADER -->
         <div class="p-4 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between">
           <div class="flex items-center gap-3">
@@ -176,10 +176,17 @@ watch(() => props.initialTargetUserId, (newId) => {
               {{ contacts.find(c => c.id === selectedContactId)?.username ? ('Chat with ' + contacts.find(c => c.id === selectedContactId)?.username) : 'Direct Message' }}
             </span>
           </div>
+          <button
+            @click="emit('close')"
+            class="hidden md:block p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Close Chat"
+          >
+            <X class="w-4 h-4" />
+          </button>
         </div>
 
         <!-- MESSAGES FEED -->
-        <div ref="chatContainerRef" class="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
+        <div ref="chatContainerRef" class="flex-1 p-4 overflow-y-auto flex flex-col gap-3 scrollbar-thin">
           <div v-if="messages.length === 0" class="m-auto text-center text-slate-500 text-xs italic">
             Send a private message to begin the conversation
           </div>

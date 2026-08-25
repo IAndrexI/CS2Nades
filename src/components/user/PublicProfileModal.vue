@@ -46,10 +46,10 @@ watch(() => props.isOpen, (open) => {
 <template>
   <div
     v-if="isOpen && profile"
-    class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+    class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex justify-center items-start sm:items-center animate-fade-in"
     @click.self="emit('close')"
   >
-    <div class="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+    <div class="my-auto w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh]">
       <!-- PROFILE BANNER -->
       <div class="relative h-36 w-full bg-slate-950">
         <img

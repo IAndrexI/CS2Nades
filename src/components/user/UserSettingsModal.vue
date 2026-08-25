@@ -199,86 +199,96 @@ async function handleDeleteAccount() {
 <template>
   <div
     v-if="isOpen"
-    class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fade-in"
+    class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fade-in"
     @click.self="emit('close')"
   >
-    <div class="w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+    <div class="my-auto w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[92vh] sm:max-h-[85vh]">
       <!-- LEFT SIDEBAR TABS -->
       <div class="w-full md:w-64 bg-slate-950 p-4 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col justify-between shrink-0">
-        <div class="flex flex-col gap-1.5">
-          <!-- USER SUMMARY -->
-          <div class="flex items-center gap-3 p-3 bg-slate-900 rounded-2xl border border-slate-800 mb-3">
-            <img
-              :src="profileForm.avatar || authStore.currentUser?.avatar || ('https://api.dicebear.com/7.x/bottts/svg?seed=' + (authStore.currentUser?.username || 'user'))"
-              class="w-10 h-10 rounded-xl object-cover border border-amber-500/40"
-            />
-            <div class="flex flex-col leading-tight min-w-0">
-              <span class="font-black text-white text-sm truncate">{{ authStore.currentUser?.username }}</span>
-              <span class="text-[10px] text-amber-400 font-mono font-bold">{{ profileForm.inGameRole || 'Player' }}</span>
+        <div class="flex flex-col gap-2">
+          <!-- TOP HEADER WITH USER INFO & MOBILE CLOSE -->
+          <div class="flex items-center justify-between p-2.5 bg-slate-900 rounded-2xl border border-slate-800">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <img
+                :src="profileForm.avatar || authStore.currentUser?.avatar || ('https://api.dicebear.com/7.x/bottts/svg?seed=' + (authStore.currentUser?.username || 'user'))"
+                class="w-9 h-9 rounded-xl object-cover border border-amber-500/40 shrink-0"
+              />
+              <div class="flex flex-col leading-tight min-w-0">
+                <span class="font-black text-white text-xs truncate">{{ authStore.currentUser?.username }}</span>
+                <span class="text-[10px] text-amber-400 font-mono font-bold">{{ profileForm.inGameRole || 'Player' }}</span>
+              </div>
             </div>
+            <button
+              @click="emit('close')"
+              class="md:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+            >
+              <X class="w-4 h-4" />
+            </button>
           </div>
 
-          <!-- TABS -->
-          <button
-            @click="activeTab = 'profile'"
-            :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer', activeTab === 'profile' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
-          >
-            <User class="w-4 h-4" />
-            <span>Profile & Bio</span>
-          </button>
+          <!-- TABS LIST (Horizontal on mobile, vertical on desktop) -->
+          <div class="flex flex-row md:flex-col overflow-x-auto md:overflow-y-auto gap-1 py-1 md:py-0 scrollbar-thin">
+            <button
+              @click="activeTab = 'profile'"
+              :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'profile' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
+            >
+              <User class="w-4 h-4 shrink-0" />
+              <span>Profile & Bio</span>
+            </button>
 
-          <button
-            @click="activeTab = 'appearance'"
-            :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer', activeTab === 'appearance' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
-          >
-            <Palette class="w-4 h-4" />
-            <span>Theme Accent Color</span>
-          </button>
+            <button
+              @click="activeTab = 'appearance'"
+              :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'appearance' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
+            >
+              <Palette class="w-4 h-4 shrink-0" />
+              <span>Theme Accent Color</span>
+            </button>
 
-          <button
-            @click="activeTab = 'banners'"
-            :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer', activeTab === 'banners' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
-          >
-            <Image class="w-4 h-4" />
-            <span>Profile Banners</span>
-          </button>
+            <button
+              @click="activeTab = 'banners'"
+              :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'banners' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
+            >
+              <Image class="w-4 h-4 shrink-0" />
+              <span>Profile Banners</span>
+            </button>
 
-          <button
-            @click="activeTab = 'socials'"
-            :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer', activeTab === 'socials' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
-          >
-            <LinkIcon class="w-4 h-4" />
-            <span>Linked Accounts</span>
-          </button>
+            <button
+              @click="activeTab = 'socials'"
+              :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'socials' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
+            >
+              <LinkIcon class="w-4 h-4 shrink-0" />
+              <span>Linked Accounts</span>
+            </button>
 
-          <button
-            @click="activeTab = 'notifications'"
-            :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer', activeTab === 'notifications' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
-          >
-            <Bell class="w-4 h-4" />
-            <span>Notifications</span>
-          </button>
+            <button
+              @click="activeTab = 'notifications'"
+              :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'notifications' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
+            >
+              <Bell class="w-4 h-4 shrink-0" />
+              <span>Notifications</span>
+            </button>
 
-          <button
-            @click="activeTab = 'privacy'"
-            :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer', activeTab === 'privacy' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
-          >
-            <Shield class="w-4 h-4" />
-            <span>Privacy & Visibility</span>
-          </button>
+            <button
+              @click="activeTab = 'privacy'"
+              :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'privacy' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
+            >
+              <Shield class="w-4 h-4 shrink-0" />
+              <span>Privacy & Visibility</span>
+            </button>
 
-          <button
-            @click="activeTab = 'security'"
-            :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer', activeTab === 'security' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
-          >
-            <Lock class="w-4 h-4" />
-            <span>Security & Danger Zone</span>
-          </button>
+            <button
+              @click="activeTab = 'security'"
+              :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'security' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
+            >
+              <Lock class="w-4 h-4 shrink-0" />
+              <span>Security & Danger Zone</span>
+            </button>
+          </div>
         </div>
 
         <button
           @click="emit('close')"
-          class="hidden md:flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+          class="hidden md:flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-white text-xs font-bold transition-colors cursor-pointer mt-4"
         >
           <X class="w-4 h-4" />
           <span>Close Window</span>
@@ -286,8 +296,21 @@ async function handleDeleteAccount() {
       </div>
 
       <!-- RIGHT TAB CONTENT -->
-      <div class="flex-1 p-6 overflow-y-auto flex flex-col justify-between max-h-[80vh]">
-        <div class="flex flex-col gap-6">
+      <div class="flex-1 flex flex-col justify-between min-h-0 bg-slate-900 overflow-hidden">
+        <!-- TOP DESKTOP HEADER -->
+        <div class="hidden md:flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/40">
+          <span class="text-xs font-black uppercase tracking-wider text-amber-400">Settings & Customization</span>
+          <button
+            @click="emit('close')"
+            class="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Close Settings"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+
+        <!-- SCROLLABLE BODY -->
+        <div class="flex-1 p-5 sm:p-6 overflow-y-auto flex flex-col gap-6">
           <!-- TAB 1: PROFILE & BIO -->
           <div v-if="activeTab === 'profile'" class="flex flex-col gap-4 text-xs">
             <h3 class="text-sm font-black uppercase text-white tracking-wide">Profile Information</h3>

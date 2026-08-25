@@ -1071,10 +1071,10 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
     <!-- MODAL 1: CUSTOMIZE TOOLBAR & ENABLED ICONS -->
     <div
       v-if="isCustomizeToolbarOpen"
-      class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+      class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex justify-center items-start sm:items-center animate-fade-in"
       @click.self="isCustomizeToolbarOpen = false"
     >
-      <div class="w-full max-w-xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <div class="my-auto w-full max-w-xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh]">
         <!-- HEADER -->
         <div class="p-5 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
           <div class="flex items-center gap-2.5">
@@ -1185,9 +1185,10 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
     <!-- MODAL 2: TEXT CALLOUT INPUT MODAL -->
     <div
       v-if="isTextInputModalOpen"
-      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm overflow-y-auto p-4 flex justify-center items-start sm:items-center"
+      @click.self="isTextInputModalOpen = false"
     >
-      <div class="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl flex flex-col gap-4">
+      <div class="my-auto w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl flex flex-col gap-4">
         <h3 class="text-sm font-black uppercase text-white">Add Tactical Callout Note</h3>
         <input
           v-model="customTextInput"
@@ -1230,10 +1231,10 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
     <!-- MODAL 3: JOIN ROOM MODAL -->
     <div
       v-if="isJoinRoomModalOpen"
-      class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+      class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex justify-center items-start sm:items-center animate-fade-in"
       @click.self="isJoinRoomModalOpen = false"
     >
-      <div class="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+      <div class="my-auto w-full max-w-sm bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <Radio class="w-4 h-4 text-emerald-400" />
