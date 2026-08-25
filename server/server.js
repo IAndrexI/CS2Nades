@@ -647,6 +647,15 @@ app.delete('/api/strats/:id', requireAuth, (req, res) => {
   const index = db.strats.findIndex(s => s.id === id)
   if (index === -1) return res.status(404).json({ error: 'Strategy not found' })
 
+  if (db.strats[index].userId !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Permission denied to delete strategy' })
+  }
+
+  db.strats.splice(index, 1)
+  saveDB(db)
+  res.json({ success: true })
+})
+
 // ==========================================
 // CS2 GAME STATE INTEGRATION (GSI) & LIVE INGESTION
 // ==========================================
