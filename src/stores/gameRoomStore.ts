@@ -53,8 +53,13 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
   const squadGroups = ref<SquadGroup[]>([])
   const selectedGroupId = ref<string | null>(null)
 
+  const currentUsername = ref<string>('')
+
   const isHost = computed(() => {
-    return hostUsername.value !== null && members.value.some(m => m.isHost && m.username === hostUsername.value)
+    if (!hostUsername.value) return false
+    const username = currentUsername.value || (localStorage.getItem('cs2_stratbook_user') ? JSON.parse(localStorage.getItem('cs2_stratbook_user') || '{}')?.username : '')
+    if (!username) return false
+    return hostUsername.value.toLowerCase() === username.toLowerCase()
   })
 
   const allowGuestsToDraw = ref<boolean>(true)
@@ -83,6 +88,11 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
         liveDrawings.value = state.drawings || []
         activeBroadcastLineups.value = state.activeLineups || []
         if (state.allowGuestsToDraw !== undefined) allowGuestsToDraw.value = state.allowGuestsToDraw
+      })
+
+      socket.value.on('room:host_updated', (data: { host: string; members: RoomMember[] }) => {
+        hostUsername.value = data.host
+        members.value = data.members
       })
 
       socket.value.on('room:lock_updated', (data: { allowGuestsToDraw: boolean }) => {
@@ -138,6 +148,7 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     const s = getSocket()
     if (!s.connected) s.connect()
     selectedGroupId.value = groupId || null
+    currentUsername.value = user?.username || ''
     s.emit('room:join', { roomCode: roomCode.trim().toUpperCase(), user, groupId })
     currentRoomCode.value = roomCode.trim().toUpperCase()
   }
@@ -223,6 +234,12 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     }
   }
 
+  function transferHost(newHostUsername: string) {
+    if (socket.value && socket.value.connected) {
+      socket.value.emit('room:transfer_host', { newHostUsername })
+    }
+  }
+
   return {
     socket,
     isConnected,
@@ -246,6 +263,7 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     switchMap,
     sendChatMessage,
     setRoomLock,
+    transferHost,
     fetchGroups,
     createGroup
   }

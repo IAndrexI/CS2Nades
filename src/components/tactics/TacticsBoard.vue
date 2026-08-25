@@ -31,7 +31,9 @@ import {
   Settings2,
   Plus,
   X,
-  Bomb
+  Bomb,
+  Crown,
+  Users
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -82,8 +84,17 @@ const activeStrokeWidth = ref(4)
 
 // Separate Join Room Modal
 const isJoinRoomModalOpen = ref(false)
+const isMembersModalOpen = ref(false)
 const newRoomInput = ref('')
 const copySuccessToast = ref('')
+
+function handleTransferHost(newHostUsername: string) {
+  if (!newHostUsername) return
+  if (confirm(`Transfer Room Host permissions to ${newHostUsername}?`)) {
+    gameRoomStore.transferHost(newHostUsername)
+    isMembersModalOpen.value = false
+  }
+}
 
 const allToolsCatalogue = [
   { id: 'select', label: 'Select / Move', icon: Move, category: 'General' },
@@ -182,6 +193,20 @@ onMounted(async () => {
   // Socket element & map synchronization
   const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
   if (socket) {
+    socket.on('room:state', (state: any) => {
+      if (state.elementsByMap && Object.keys(state.elementsByMap).length > 0) {
+        stratStore.mapElements = { ...stratStore.mapElements, ...state.elementsByMap }
+      }
+      if (state.mapId && state.mapId !== mapStore.currentMapId) {
+        mapStore.setMap(state.mapId)
+      }
+      if (state.elements && Array.isArray(state.elements) && state.elements.length > 0) {
+        stratStore.setBoardElements(state.elements)
+      } else if (state.mapId && stratStore.mapElements[state.mapId]) {
+        stratStore.setBoardElements(stratStore.mapElements[state.mapId])
+      }
+    })
+
     socket.on('room:map_changed', (data: any) => {
       const newMapId = typeof data === 'string' ? data : data?.mapId
       if (newMapId && mapStore.currentMapId !== newMapId) {
@@ -303,6 +328,10 @@ function handleCopyRoomLink() {
 }
 
 function placeCustomPin(pin: CustomPinDefinition) {
+  if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
+    alert('Host has locked drawing permissions for guests.')
+    return
+  }
   stratStore.addBoardElement({
     id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
     type: 'text',
@@ -497,6 +526,10 @@ function handleConfirmText() {
 }
 
 function deleteSelectedElement() {
+  if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
+    alert('Host has locked tactical board modifications for guests.')
+    return
+  }
   if (selectedElementId.value) {
     const id = selectedElementId.value
     stratStore.removeBoardElement(id)
@@ -507,6 +540,10 @@ function deleteSelectedElement() {
 }
 
 function handleClearBoard() {
+  if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
+    alert('Host has locked tactical board modifications for guests.')
+    return
+  }
   if (confirm(`Clear all tactical drawings on ${mapStore.currentMap?.name || 'this map'}?`)) {
     stratStore.clearBoard()
     gameRoomStore.clearDrawings()
@@ -599,6 +636,17 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
           <span>Join Another Room</span>
         </button>
 
+        <!-- SQUAD ROSTER & HOST TRANSFER -->
+        <button
+          @click="isMembersModalOpen = true"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-slate-300 hover:text-white border border-slate-800 rounded-xl text-xs font-bold transition-colors cursor-pointer group"
+          title="View squad members and manage host permissions"
+        >
+          <Crown v-if="gameRoomStore.isHost" class="w-3.5 h-3.5 text-amber-400" />
+          <Users v-else class="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-400" />
+          <span>Members ({{ gameRoomStore.members.length }})</span>
+        </button>
+
         <!-- HOST LOCK / GUEST PERMISSION TOGGLE -->
         <div v-if="gameRoomStore.isHost" class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
           <span class="font-bold text-slate-400">Guests Can Draw:</span>
@@ -611,6 +659,10 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
           >
             {{ gameRoomStore.allowGuestsToDraw ? 'ON' : 'LOCKED' }}
           </button>
+        </div>
+        <div v-else class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px]">
+          <span :class="gameRoomStore.allowGuestsToDraw ? 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse' : 'w-2 h-2 rounded-full bg-rose-500'"></span>
+          <span class="text-slate-400 font-bold">{{ gameRoomStore.allowGuestsToDraw ? 'Guest (Drawing Active)' : 'Guest (Board Locked by Host)' }}</span>
         </div>
 
         <span v-if="copySuccessToast" class="text-xs font-bold text-emerald-400 animate-fade-in">
@@ -1342,5 +1394,79 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
         </div>
       </div>
     </div>
+
+    <!-- MODAL 4: SQUAD MEMBERS & TRANSFER HOST MODAL -->
+    <Teleport to="body">
+      <div
+        v-if="isMembersModalOpen"
+        class="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex justify-center items-start sm:items-center animate-fade-in"
+        @click.self="isMembersModalOpen = false"
+      >
+        <div class="my-auto w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <div class="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <Users class="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 class="text-sm font-black uppercase text-white tracking-wider">Tactical Squad Roster</h3>
+                <p class="text-[11px] text-slate-400">Room: <span class="font-mono text-amber-400 font-bold">{{ gameRoomStore.currentRoomCode || roomCodeInput }}</span> ({{ gameRoomStore.members.length }} Connected)</p>
+              </div>
+            </div>
+            <button @click="isMembersModalOpen = false" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <div class="divide-y divide-slate-800/80 max-h-72 overflow-y-auto pr-1">
+            <div
+              v-for="member in gameRoomStore.members"
+              :key="member.username"
+              class="flex items-center justify-between py-3 gap-3"
+            >
+              <div class="flex items-center gap-3">
+                <img :src="member.avatar" class="w-9 h-9 rounded-full border border-slate-700 bg-slate-950 object-cover" />
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-bold text-white">{{ member.username }}</span>
+                    <span v-if="member.isHost" class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-black uppercase flex items-center gap-0.5">
+                      <Crown class="w-2.5 h-2.5" /> Host
+                    </span>
+                    <span v-else class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold uppercase">
+                      Guest
+                    </span>
+                  </div>
+                  <span class="text-[10px] text-slate-400 font-mono">{{ member.inGameRole }}</span>
+                </div>
+              </div>
+
+              <!-- TRANSFER HOST BUTTON (ONLY HOST SEES AND CAN TRANSFER TO GUESTS) -->
+              <div v-if="gameRoomStore.isHost && !member.isHost">
+                <button
+                  @click="handleTransferHost(member.username)"
+                  class="flex items-center gap-1 px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm hover:scale-105"
+                  title="Transfer Room Host permissions"
+                >
+                  <Crown class="w-3.5 h-3.5 text-amber-400" />
+                  <span>Transfer Host</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-3 border-t border-slate-800 text-xs">
+            <span class="text-slate-400 text-[11px]">
+              {{ gameRoomStore.isHost ? '👑 You have Host privileges.' : '👤 You are connected as a Guest.' }}
+            </span>
+            <button
+              @click="isMembersModalOpen = false"
+              class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs cursor-pointer transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

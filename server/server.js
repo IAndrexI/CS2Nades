@@ -1016,6 +1016,32 @@ io.on('connection', (socket) => {
     io.to(currentRoomId).emit('room:lock_updated', { allowGuestsToDraw })
   })
 
+  // Transfer Host to Another Room Member
+  socket.on('room:transfer_host', ({ newHostUsername }) => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId) || !newHostUsername) return
+    const room = gameRooms.get(currentRoomId)
+    // Only current host can transfer host permissions
+    if (room.host !== currentUserInfo?.username) return
+
+    const prevHost = room.host
+    room.host = newHostUsername
+    room.members.forEach(m => {
+      m.isHost = m.username.toLowerCase() === newHostUsername.toLowerCase()
+    })
+
+    io.to(currentRoomId).emit('room:host_updated', {
+      host: newHostUsername,
+      members: room.members
+    })
+
+    io.to(currentRoomId).emit('room:members', room.members)
+
+    io.to(currentRoomId).emit('room:announcement', {
+      text: `👑 ${prevHost} transferred Room Host permissions to ${newHostUsername}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    })
+  })
+
   socket.on('room:clear_drawings', (payload) => {
     if (!currentRoomId || !gameRooms.has(currentRoomId)) return
     const room = gameRooms.get(currentRoomId)
