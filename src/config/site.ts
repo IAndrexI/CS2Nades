@@ -10,12 +10,13 @@
 
 // ── BRANDING ──────────────────────────────────────────────
 export const BRANDING = {
-  siteTitle:   'CS2 STRATBOOK',
-  teamName:    'PRO TACTICS',
-  tagline:     'Self-Hosted // Portainer Ready',
+  siteTitle:   'Protutech',
+  teamName:    'Tactical Hub',
+  tagline:     'CS2 Utility & Strategy Platform',
   version:     'v2.0',
-  footerLeft:  'CS2 Stratbook v2.0 // Self-Hosted Portainer Build',
-  footerItems: ['Proxmox LXC Ready', 'CS2 Subtick Calibrated', 'Offline & Cloud Capable'],
+  discordInvite: 'https://discord.gg/XEDqfYEW5h',
+  footerLeft:  'Protutech // CS2 Tactical Hub',
+  footerItems: [],
 }
 
 // ── NAVIGATION TAB LABELS ──────────────────────────────────
@@ -26,7 +27,7 @@ export const NAV_LABELS = {
   library:   'Lineup Library',
   myLineups: 'My Lineups',
   callouts:  'Callouts',
-  gameRoom:  'Game Room',
+  gameRoom:  'Live Room',
   admin:     'Admin',
 }
 
@@ -118,7 +119,7 @@ export const THROW_TYPE_LABELS: Record<string, string> = {
 }
 
 // ── IN-GAME PLAYER ROLES ───────────────────────────────────
-export const PLAYER_ROLES = ['IGL', 'Entry', 'Support', 'Lurker', 'AWP', 'Flex'] as const
+export const PLAYER_ROLES = ['IGL', 'Entry Fragger', 'Support', 'AWPer', 'Lurker', 'Anchor', 'Flex'] as const
 export type PlayerRole = typeof PLAYER_ROLES[number]
 
 // ── USER SYSTEM ROLES ──────────────────────────────────────

@@ -8,8 +8,9 @@ export interface UserProfile {
   username: string
   email?: string
   role: 'admin' | 'coach' | 'player' | 'guest'
-  inGameRole?: 'IGL' | 'Entry' | 'Support' | 'Lurker' | 'AWP' | 'Flex'
+  inGameRole?: 'IGL' | 'Entry Fragger' | 'Support' | 'AWPer' | 'Lurker' | 'Anchor' | 'Flex' | string
   avatar?: string
+  following?: string[]
   createdAt?: string
 }
 
@@ -193,6 +194,24 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function toggleFollow(targetUserId: string): Promise<void> {
+    if (!currentUser.value) return
+    if (!currentUser.value.following) currentUser.value.following = []
+    
+    if (currentUser.value.following.includes(targetUserId)) {
+      currentUser.value.following = currentUser.value.following.filter(id => id !== targetUserId)
+    } else {
+      currentUser.value.following.push(targetUserId)
+    }
+    localStorage.setItem(USER_KEY, JSON.stringify(currentUser.value))
+
+    try {
+      await axios.post(`/api/users/${targetUserId}/follow`)
+    } catch (err) {
+      // offline fallback is already persisted in localStorage
+    }
+  }
+
   async function updateProfile(data: Partial<UserProfile> & { password?: string }): Promise<boolean> {
     try {
       const res = await axios.put('/api/auth/profile', data)
@@ -200,9 +219,18 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem(USER_KEY, JSON.stringify(res.data.user))
       return true
     } catch (err: any) {
+      if (currentUser.value) {
+        currentUser.value = { ...currentUser.value, ...data }
+        localStorage.setItem(USER_KEY, JSON.stringify(currentUser.value))
+        return true
+      }
       authError.value = err.response?.data?.error || 'Update failed'
       return false
     }
+  }
+
+  function isFollowing(targetUserId: string): boolean {
+    return !!currentUser.value?.following?.includes(targetUserId)
   }
 
   return {
@@ -220,6 +248,8 @@ export const useAuthStore = defineStore('auth', () => {
     loginWithSteamOpenId,
     logout,
     checkAuth,
-    updateProfile
+    updateProfile,
+    toggleFollow,
+    isFollowing
   }
 })

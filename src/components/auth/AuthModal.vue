@@ -18,21 +18,21 @@ import {
 
 const authStore = useAuthStore()
 
-const activeTab = ref<'steam' | 'credentials'>('steam')
+const activeTab = ref<'credentials' | 'steam'>('credentials')
 
 const steamForm = reactive({
   steamInput: '',
-  inGameRole: 'Entry' as 'IGL' | 'Entry' | 'Support' | 'Lurker' | 'AWP'
+  inGameRole: 'Entry Fragger'
 })
 
 const credentialsForm = reactive({
   username: '',
   email: '',
   password: '',
-  inGameRole: 'Entry' as 'IGL' | 'Entry' | 'Support' | 'Lurker' | 'AWP'
+  inGameRole: 'Entry Fragger'
 })
 
-const roles = ['IGL', 'Entry', 'Support', 'Lurker', 'AWP']
+const roles = ['IGL', 'Entry Fragger', 'Support', 'AWPer', 'Lurker', 'Anchor', 'Flex']
 
 async function handleSteamSync() {
   if (!steamForm.steamInput.trim()) {
@@ -49,32 +49,36 @@ async function handleCredentialsSubmit() {
     await authStore.register(credentialsForm.username, credentialsForm.email, credentialsForm.password, credentialsForm.inGameRole)
   }
 }
+
+async function handleQuickGuest() {
+  const randNum = Math.floor(1000 + Math.random() * 9000)
+  await authStore.register(`TacticalPlayer_${randNum}`, `player${randNum}@protutech.local`, `protutech123`, credentialsForm.inGameRole)
+}
 </script>
 
 <template>
   <div 
     v-if="authStore.isAuthModalOpen"
-    class="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md flex min-h-full items-center justify-center p-4 sm:p-6 text-center animate-fade-in"
-    @click.self="authStore.isAuthModalOpen = false"
+    class="fixed inset-0 z-50 overflow-y-auto bg-black/90 backdrop-blur-md flex min-h-full items-center justify-center p-4 sm:p-6 text-center animate-fade-in"
+    @click.self="authStore.isAuthenticated ? (authStore.isAuthModalOpen = false) : null"
   >
     <div class="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden my-auto text-left flex flex-col">
       <!-- HEADER -->
-      <div class="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/70">
+      <div class="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/80">
         <div class="flex items-center gap-3">
-          <div class="p-2.5 bg-gradient-to-br from-amber-500 to-amber-600 rounded-2xl shadow-lg text-slate-950">
-            <Crosshair class="w-5 h-5 stroke-[2.5]" />
-          </div>
+          <img src="/logo.png" alt="Protutech" class="w-10 h-10 rounded-xl object-cover shadow-lg border border-amber-500/40" />
           <div>
             <h2 class="text-base font-black tracking-tight text-white uppercase">
-              CS2 Squad Sign In
+              Protutech Tactical Access
             </h2>
             <p class="text-xs text-slate-400">
-              Link your Steam persona or account to access your personal lineups
+              Sign up or log in to manage your lineups, friends, and tactical strats
             </p>
           </div>
         </div>
 
         <button 
+          v-if="authStore.isAuthenticated"
           @click="authStore.isAuthModalOpen = false"
           class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
         >

@@ -27,17 +27,19 @@ const JWT_SECRET = process.env.JWT_SECRET || 'cs2-stratbook-secret-key-2026'
 // Data storage directory (supports persistent volume mount e.g. /data in Docker)
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data')
 const DB_FILE = path.join(DATA_DIR, 'db.json')
+const PERSONAL_DIR = path.join(DATA_DIR, 'personal')
+const SERVER_DIR = path.join(DATA_DIR, 'server')
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-}
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
+if (!fs.existsSync(PERSONAL_DIR)) fs.mkdirSync(PERSONAL_DIR, { recursive: true })
+if (!fs.existsSync(SERVER_DIR)) fs.mkdirSync(SERVER_DIR, { recursive: true })
 
 // Initial Database Template
 const INITIAL_DB = {
   settings: {
-    siteTitle: 'CS2 STRATBOOK',
-    teamName: 'PRO TACTICS',
-    logoUrl: '',
+    siteTitle: 'Protutech',
+    teamName: 'Tactical Hub',
+    logoUrl: '/logo.png',
     primaryAccentColor: '#de9b35', // CS2 Gold default
     allowRegistration: true,
     defaultRadarMode: 'official',
@@ -60,6 +62,27 @@ const INITIAL_DB = {
   strats: []
 }
 
+function syncLineupFiles(lineups) {
+  try {
+    if (!Array.isArray(lineups)) return
+    const serverLineups = lineups.filter(l => l.isTeamShared || !l.userId)
+    fs.writeFileSync(path.join(SERVER_DIR, 'server_lineups.json'), JSON.stringify(serverLineups, null, 2), 'utf-8')
+
+    const byUser = {}
+    lineups.forEach(l => {
+      if (l.userId) {
+        if (!byUser[l.userId]) byUser[l.userId] = []
+        byUser[l.userId].push(l)
+      }
+    })
+    for (const [userId, uLineups] of Object.entries(byUser)) {
+      fs.writeFileSync(path.join(PERSONAL_DIR, `${userId}.json`), JSON.stringify(uLineups, null, 2), 'utf-8')
+    }
+  } catch (err) {
+    console.error('Error syncing separate lineup files:', err)
+  }
+}
+
 function loadDB() {
   try {
     if (fs.existsSync(DB_FILE)) {
@@ -78,6 +101,9 @@ function loadDB() {
 function saveDB(data) {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8')
+    if (data.lineups) {
+      syncLineupFiles(data.lineups)
+    }
   } catch (err) {
     console.error('Error saving db file:', err)
   }
@@ -621,13 +647,47 @@ app.delete('/api/strats/:id', requireAuth, (req, res) => {
   const index = db.strats.findIndex(s => s.id === id)
   if (index === -1) return res.status(404).json({ error: 'Strategy not found' })
 
-  if (db.strats[index].userId !== req.user.id && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Permission denied to delete strategy' })
-  }
+// ==========================================
+// CS2 GAME STATE INTEGRATION (GSI) & LIVE INGESTION
+// ==========================================
+app.post('/api/cs2/gsi', express.json(), (req, res) => {
+  const payload = req.body
+  if (payload && payload.player && payload.player.position) {
+    const posParts = payload.player.position.split(',').map(s => parseFloat(s.trim()))
+    const fwdParts = payload.player.forward ? payload.player.forward.split(',').map(s => parseFloat(s.trim())) : [0, 0, 0]
+    const mapName = payload.map?.name ? payload.map.name.replace('de_', '').replace('cs_', '') : 'mirage'
+    
+    const liveData = {
+      x: posParts[0] || 0,
+      y: posParts[1] || 0,
+      z: posParts[2] || 0,
+      pitch: fwdParts[0] || 0,
+      yaw: fwdParts[1] || 0,
+      mapName,
+      playerName: payload.player.name || 'Player',
+      team: payload.player.team || 'CT',
+      timestamp: Date.now()
+    }
 
-  db.strats.splice(index, 1)
+    io.emit('cs2:live-pos', liveData)
+  }
+  res.sendStatus(200)
+})
+
+app.post('/api/users/:id/follow', requireAuth, (req, res) => {
+  db = loadDB()
+  const targetId = req.params.id
+  const currentUser = db.users.find(u => u.id === req.user.id)
+  if (!currentUser) return res.status(404).json({ error: 'User not found' })
+  if (!currentUser.following) currentUser.following = []
+  
+  if (currentUser.following.includes(targetId)) {
+    currentUser.following = currentUser.following.filter(id => id !== targetId)
+  } else {
+    currentUser.following.push(targetId)
+  }
   saveDB(db)
-  res.json({ success: true })
+  res.json({ following: currentUser.following })
 })
 
 // ==========================================
