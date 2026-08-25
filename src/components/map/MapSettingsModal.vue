@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useMapStore } from '../../stores/mapStore'
 import type { MapInfo } from '../../types'
 import { 
@@ -122,17 +122,31 @@ function handleNewMapFileUpload(e: Event) {
   }
   reader.readAsDataURL(file)
 }
+
+function handleKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && props.isOpen) {
+    emit('close')
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
 </script>
 
 <template>
   <div 
     v-if="isOpen"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+    class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-fade-in"
     @click.self="emit('close')"
   >
-    <div class="relative w-full max-w-2xl max-h-[90vh] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+    <div class="relative w-full max-w-2xl max-h-[85vh] my-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
       <!-- HEADER -->
-      <div class="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/60">
+      <div class="sticky top-0 z-10 flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
         <div class="flex items-center gap-3">
           <div class="p-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl">
             <Layers class="w-5 h-5" />
@@ -146,6 +160,7 @@ function handleNewMapFileUpload(e: Event) {
         <button 
           @click="emit('close')"
           class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+          title="Close (Esc)"
         >
           <X class="w-5 h-5" />
         </button>
@@ -354,6 +369,16 @@ function handleNewMapFileUpload(e: Event) {
             </button>
           </div>
         </template>
+      </div>
+
+      <!-- STICKY FOOTER -->
+      <div class="sticky bottom-0 z-10 flex items-center justify-end gap-3 p-4 bg-slate-950/90 border-t border-slate-800 backdrop-blur-md">
+        <button
+          @click="emit('close')"
+          class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+        >
+          Close
+        </button>
       </div>
     </div>
   </div>

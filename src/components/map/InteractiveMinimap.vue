@@ -246,8 +246,20 @@ function handleContextMenu(e: MouseEvent) {
 function handleCreateLineupFromContextMenu() {
   if (!contextMenuCoords.value) return
   mapStore.tempPlacement.origin = { ...contextMenuCoords.value }
+  mapStore.tempPlacement.landing = undefined
   mapStore.isPlacementMode = true
   mapStore.placementStep = 'landing'
+  liveCursorCoords.value = { ...contextMenuCoords.value }
+  contextMenuVisible.value = false
+}
+
+function handleQuickAddFromContextMenu() {
+  if (!contextMenuCoords.value) return
+  mapStore.tempPlacement.origin = { ...contextMenuCoords.value }
+  mapStore.tempPlacement.landing = { ...contextMenuCoords.value }
+  mapStore.isPlacementMode = false
+  liveCursorCoords.value = null
+  lineupStore.isAddModalOpen = true
   contextMenuVisible.value = false
 }
 
@@ -589,12 +601,13 @@ onUnmounted(() => {
       <!-- RIGHT-CLICK CONTEXT MENU -->
       <div 
         v-if="contextMenuVisible"
-        class="absolute z-50 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl p-1.5 flex flex-col gap-1 min-w-[185px] animate-fade-in"
+        class="absolute z-50 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl p-1.5 flex flex-col gap-1 min-w-[210px] animate-fade-in"
         :style="{
           left: `${contextMenuPos.x}px`,
           top: `${contextMenuPos.y}px`
         }"
         @click.stop
+        @mousedown.stop
       >
         <div class="px-2 py-1 border-b border-slate-800 text-[10px] uppercase font-mono font-bold text-slate-400">
           Quick Actions ({{ contextMenuCoords?.x }}%, {{ contextMenuCoords?.y }}%)
@@ -604,14 +617,21 @@ onUnmounted(() => {
           class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer"
         >
           <PlusCircle class="w-4 h-4 text-amber-400" />
-          <span>New Lineup Here</span>
+          <span>New Lineup (Pick Target)</span>
+        </button>
+        <button
+          @click="handleQuickAddFromContextMenu"
+          class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer"
+        >
+          <Crosshair class="w-4 h-4 text-emerald-400" />
+          <span>Quick Add Lineup (Open Form)</span>
         </button>
         <button
           @click="handleOpenCalloutModalFromContextMenu"
           class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer"
         >
           <Tag class="w-4 h-4 text-sky-400" />
-          <span>Add Callout Spot</span>
+          <span>Add Callout Spot Here</span>
         </button>
       </div>
 
