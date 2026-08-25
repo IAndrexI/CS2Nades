@@ -77,7 +77,11 @@ const customFontSize = ref(13)
 // Active Player Pin Config
 const playerTeam = ref<'t' | 'ct'>('t')
 const playerLabel = ref('1')
-const playerRoleText = ref('Entry')
+
+// Element Drag / Move State
+const isDraggingElement = ref(false)
+const draggedElementId = ref<string | null>(null)
+const dragOffset = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 
 // Stroke Width
 const activeStrokeWidth = ref(4)
@@ -136,8 +140,6 @@ const colorPalette = [
   { hex: '#a855f7', name: 'Purple' },
   { hex: '#ffffff', name: 'Pure White' }
 ]
-
-const playerRolesList = ['Entry', 'IGL', 'Support', 'AWP', 'Lurker', 'Anchor', 'Rotator']
 
 function copyToClipboard(text: string): boolean {
   try {
@@ -343,11 +345,29 @@ function placeCustomPin(pin: CustomPinDefinition) {
 }
 
 function getMapCoords(e: MouseEvent): { x: number; y: number } {
-  if (!svgRef.value) return { x: 0, y: 0 }
+  if (!svgRef.value) return { x: 50, y: 50 }
   const rect = svgRef.value.getBoundingClientRect()
   const x = Math.round((((e.clientX - rect.left) / rect.width) * 100) * 10) / 10
   const y = Math.round((((e.clientY - rect.top) / rect.height) * 100) * 10) / 10
-  return { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) }
+  return { x: Math.max(3, Math.min(97, x)), y: Math.max(3, Math.min(97, y)) }
+}
+
+function handleElementMouseDown(e: MouseEvent, el: TacticsElement) {
+  if (stratStore.activeTool === 'select') {
+    e.stopPropagation()
+    if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
+      alert('Host has locked tactical board modifications for guests.')
+      return
+    }
+    const coords = getMapCoords(e)
+    isDraggingElement.value = true
+    draggedElementId.value = el.id
+    selectedElementId.value = el.id
+    dragOffset.value = {
+      x: coords.x - el.points[0].x,
+      y: coords.y - el.points[0].y
+    }
+  }
 }
 
 function handleMouseDown(e: MouseEvent) {
@@ -372,7 +392,7 @@ function handleMouseDown(e: MouseEvent) {
       type: 'smoke_cloud',
       color: '#94a3b8',
       points: [coords],
-      radius: 28
+      radius: 32
     })
     return
   }
@@ -383,7 +403,7 @@ function handleMouseDown(e: MouseEvent) {
       type: 'flash_burst',
       color: '#eab308',
       points: [coords],
-      radius: 18
+      radius: 16
     })
     return
   }
@@ -392,9 +412,9 @@ function handleMouseDown(e: MouseEvent) {
     addElement({
       id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       type: 'molotov_fire',
-      color: '#ef4444',
+      color: '#f97316',
       points: [coords],
-      radius: 24
+      radius: 25
     })
     return
   }
@@ -434,14 +454,23 @@ function handleMouseDown(e: MouseEvent) {
   }
 
   if (tool === 'player_t' || tool === 'player_ct') {
+    const isT = tool === 'player_t'
+    const existingSameSide = stratStore.boardElements.filter(e => e.type === tool)
+    if (existingSameSide.length >= 5) {
+      alert(`Maximum 5 ${isT ? 'T' : 'CT'} player pins allowed (5v5 format).`)
+      return
+    }
+
+    const usedNums = new Set(existingSameSide.map(e => e.playerNum || '1'))
+    const nextNum = ['1', '2', '3', '4', '5'].find(n => !usedNums.has(n)) || String(existingSameSide.length + 1)
+
     addElement({
       id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       type: tool as any,
-      color: tool === 'player_t' ? '#f97316' : '#0ea5e9',
+      color: isT ? '#f97316' : '#0ea5e9',
       points: [coords],
-      playerRole: playerRoleText.value,
-      playerNum: playerLabel.value,
-      radius: 16
+      playerNum: nextNum,
+      radius: 15
     })
     return
   }
@@ -452,6 +481,27 @@ function handleMouseDown(e: MouseEvent) {
 }
 
 function handleMouseMove(e: MouseEvent) {
+  if (isDraggingElement.value && draggedElementId.value) {
+    const el = stratStore.boardElements.find(item => item.id === draggedElementId.value)
+    if (el) {
+      const coords = getMapCoords(e)
+      const targetX = Math.round(Math.max(3, Math.min(97, coords.x - dragOffset.value.x)) * 10) / 10
+      const targetY = Math.round(Math.max(3, Math.min(97, coords.y - dragOffset.value.y)) * 10) / 10
+
+      if (el.points.length === 1) {
+        el.points[0] = { x: targetX, y: targetY }
+      } else if (el.points.length >= 2) {
+        const dx = targetX - el.points[0].x
+        const dy = targetY - el.points[0].y
+        el.points = el.points.map(pt => ({
+          x: Math.round(Math.max(3, Math.min(97, pt.x + dx)) * 10) / 10,
+          y: Math.round(Math.max(3, Math.min(97, pt.y + dy)) * 10) / 10
+        }))
+      }
+    }
+    return
+  }
+
   if (!isDrawing.value) return
   const coords = getMapCoords(e)
   const tool = stratStore.activeTool
@@ -468,6 +518,17 @@ function handleMouseMove(e: MouseEvent) {
 }
 
 function handleMouseUp() {
+  if (isDraggingElement.value) {
+    isDraggingElement.value = false
+    draggedElementId.value = null
+    stratStore.saveCurrentMapElements(mapStore.currentMapId)
+    const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+    if (socket && socket.connected) {
+      socket.emit('room:elements_sync', { elements: stratStore.boardElements, mapId: mapStore.currentMapId })
+    }
+    return
+  }
+
   if (!isDrawing.value) return
   isDrawing.value = false
 
@@ -587,9 +648,11 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
   const x1 = p1.x * 10, y1 = p1.y * 10
   const x2 = p2.x * 10, y2 = p2.y * 10
   const dx = x2 - x1, dy = y2 - y1
-  const angle = Math.atan2(dy, dx)
   const length = Math.sqrt(dx * dx + dy * dy)
-  const spread = Math.PI / 6
+  if (length < 2) return ''
+  const angle = Math.atan2(dy, dx)
+  // CS2 Field of View: 90 degrees total sightline cone (45 degrees to each side)
+  const spread = Math.PI / 4
 
   const leftX = x1 + Math.cos(angle - spread) * length
   const leftY = y1 + Math.sin(angle - spread) * length
@@ -824,40 +887,26 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
       </div>
     </div>
 
-    <!-- PLAYER PIN CONFIG DRAWER -->
+    <!-- 5v5 PLAYER PIN STATUS DRAWER -->
     <div 
       v-if="stratStore.activeTool === 'player_t' || stratStore.activeTool === 'player_ct'"
-      class="flex flex-wrap items-center gap-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-xs animate-fade-in"
+      class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-xs animate-fade-in"
     >
-      <span class="font-bold text-slate-300">Player Pin Label:</span>
-      <div class="flex items-center gap-1">
-        <button
-          v-for="n in ['1', '2', '3', '4', '5']"
-          :key="n"
-          @click="playerLabel = n"
-          :class="[
-            'w-6 h-6 rounded-lg text-xs font-black font-mono transition-colors cursor-pointer',
-            playerLabel === n ? 'bg-amber-500 text-slate-950' : 'bg-slate-950 text-slate-400 hover:text-white'
-          ]"
-        >
-          {{ n }}
-        </button>
+      <div class="flex items-center gap-3">
+        <span class="font-bold text-slate-200 flex items-center gap-1.5">
+          <User class="w-4 h-4 text-amber-400" />
+          {{ stratStore.activeTool === 'player_t' ? 'Terrorist (T) 5v5 Pin' : 'Counter-Terrorist (CT) 5v5 Pin' }}:
+        </span>
+        <span class="px-2.5 py-1 rounded-lg bg-slate-950 text-amber-400 text-xs font-mono font-black border border-slate-800">
+          T Pins: {{ stratStore.boardElements.filter(e => e.type === 'player_t').length }}/5
+        </span>
+        <span class="px-2.5 py-1 rounded-lg bg-slate-950 text-sky-400 text-xs font-mono font-black border border-slate-800">
+          CT Pins: {{ stratStore.boardElements.filter(e => e.type === 'player_ct').length }}/5
+        </span>
       </div>
-
-      <span class="font-bold text-slate-300 ml-2">Assigned Role:</span>
-      <div class="flex items-center gap-1 overflow-x-auto">
-        <button
-          v-for="r in playerRolesList"
-          :key="r"
-          @click="playerRoleText = r"
-          :class="[
-            'px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors cursor-pointer',
-            playerRoleText === r ? 'bg-slate-800 text-amber-400 border border-slate-700' : 'text-slate-400 hover:text-white'
-          ]"
-        >
-          {{ r }}
-        </button>
-      </div>
+      <p class="text-[11px] text-slate-400">
+        Click map to place pin (Auto 1..5). Switch to <strong>Select / Move</strong> tool to drag pins anywhere.
+      </p>
     </div>
 
     <!-- RADAR CANVAS AREA -->
@@ -925,8 +974,13 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
           <g
             v-for="el in stratStore.boardElements"
             :key="el.id"
+            @mousedown="(e) => handleElementMouseDown(e, el)"
             @click="(e) => handleElementClick(e, el)"
-            :class="{ 'opacity-80': selectedElementId === el.id, 'cursor-pointer': stratStore.activeTool === 'select' || stratStore.activeTool === 'eraser' }"
+            :class="{ 
+              'opacity-80': selectedElementId === el.id, 
+              'cursor-grab active:cursor-grabbing': stratStore.activeTool === 'select',
+              'cursor-pointer': stratStore.activeTool === 'eraser' 
+            }"
           >
             <!-- 1. FREEHAND PEN STROKE -->
             <path
@@ -976,41 +1030,55 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
               />
             </g>
 
-            <!-- 4. VISION FOV CONE -->
-            <path
-              v-else-if="el.type === 'vision_cone' && el.points.length >= 2"
-              :d="getVisionConePath(el.points[0], el.points[1])"
-              fill="url(#visionGradient)"
-              :stroke="el.color"
-              stroke-width="1.5"
-              stroke-dasharray="4 4"
-            />
+            <!-- 4. VISION FOV CONE (ACCURATE CS2 90° SIGHTLINE) -->
+            <g v-else-if="el.type === 'vision_cone' && el.points.length >= 2">
+              <path
+                :d="getVisionConePath(el.points[0], el.points[1])"
+                fill="url(#visionGradient)"
+                :stroke="el.color || '#0ea5e9'"
+                stroke-width="1.5"
+                stroke-dasharray="4 3"
+              />
+              <line
+                :x1="el.points[0].x * 10"
+                :y1="el.points[0].y * 10"
+                :x2="el.points[1].x * 10"
+                :y2="el.points[1].y * 10"
+                :stroke="el.color || '#0ea5e9'"
+                stroke-width="1"
+                stroke-dasharray="2 2"
+                stroke-opacity="0.6"
+              />
+              <circle
+                :cx="el.points[0].x * 10"
+                :cy="el.points[0].y * 10"
+                r="3.5"
+                :fill="el.color || '#0ea5e9'"
+                stroke="#0f172a"
+                stroke-width="1.5"
+              />
+            </g>
 
-            <!-- 5. SMOKE BLOOM -->
+            <!-- 5. SMOKE BLOOM (CS2 VOLUMETRIC SCALED RADIUS) -->
             <g v-else-if="el.type === 'smoke_cloud'">
               <circle
                 :cx="el.points[0].x * 10"
                 :cy="el.points[0].y * 10"
-                :r="(el.radius || 28) * 1.8"
+                r="32"
                 fill="url(#smokeGradient)"
                 stroke="#94a3b8"
-                stroke-width="2"
-                stroke-dasharray="6 4"
-                class="animate-pulse"
+                stroke-width="1.5"
+                stroke-dasharray="4 3"
               />
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="12" fill="#0f172a" stroke="#94a3b8" stroke-width="2" />
-              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 4" fill="#ffffff" font-size="10" font-weight="bold" text-anchor="middle">S</text>
+              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="10" fill="#0f172a" stroke="#94a3b8" stroke-width="1.5" />
+              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3.5" fill="#ffffff" font-size="9" font-weight="black" text-anchor="middle">S</text>
             </g>
 
             <!-- 6. FLASH BURST -->
             <g v-else-if="el.type === 'flash_burst'">
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" :r="(el.radius || 18) * 1.5" fill="#eab308" fill-opacity="0.3" stroke="#eab308" stroke-width="2" />
-              <polygon
-                :points="`${el.points[0].x * 10},${el.points[0].y * 10 - 12} ${el.points[0].x * 10 + 4},${el.points[0].y * 10 - 4} ${el.points[0].x * 10 + 12},${el.points[0].y * 10} ${el.points[0].x * 10 + 4},${el.points[0].y * 10 + 4} ${el.points[0].x * 10},${el.points[0].y * 10 + 12} ${el.points[0].x * 10 - 4},${el.points[0].y * 10 + 4} ${el.points[0].x * 10 - 12},${el.points[0].y * 10} ${el.points[0].x * 10 - 4},${el.points[0].y * 10 - 4}`"
-                fill="#fde047"
-                stroke="#0f172a"
-                stroke-width="1.5"
-              />
+              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="16" fill="#eab308" fill-opacity="0.25" stroke="#eab308" stroke-width="1.5" stroke-dasharray="3 2" />
+              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="9" fill="#0f172a" stroke="#eab308" stroke-width="1.5" />
+              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3" fill="#fde047" font-size="8" font-weight="black" text-anchor="middle">F</text>
             </g>
 
             <!-- 7. MOLOTOV FIRE -->
@@ -1018,40 +1086,41 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
               <circle
                 :cx="el.points[0].x * 10"
                 :cy="el.points[0].y * 10"
-                :r="(el.radius || 24) * 1.7"
+                r="25"
                 fill="url(#fireGradient)"
                 stroke="#f97316"
-                stroke-width="2"
+                stroke-width="1.5"
+                stroke-dasharray="4 3"
               />
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="12" fill="#0f172a" stroke="#f97316" stroke-width="2" />
-              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 4" fill="#fb923c" font-size="10" font-weight="black" text-anchor="middle">M</text>
+              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="10" fill="#0f172a" stroke="#f97316" stroke-width="1.5" />
+              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3.5" fill="#fb923c" font-size="9" font-weight="black" text-anchor="middle">M</text>
             </g>
 
             <!-- 8. HE GRENADE BLAST -->
             <g v-else-if="el.type === 'he_blast'">
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" :r="(el.radius || 20) * 1.5" fill="#22c55e" fill-opacity="0.25" stroke="#22c55e" stroke-width="2" stroke-dasharray="4 3" />
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="10" fill="#0f172a" stroke="#22c55e" stroke-width="2" />
-              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3.5" fill="#4ade80" font-size="9" font-weight="black" text-anchor="middle">HE</text>
+              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="20" fill="#22c55e" fill-opacity="0.2" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="3 2" />
+              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="9" fill="#0f172a" stroke="#22c55e" stroke-width="1.5" />
+              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3" fill="#4ade80" font-size="8" font-weight="black" text-anchor="middle">HE</text>
             </g>
 
             <!-- 9. C4 BOMB / PLANT SPOT -->
             <g v-else-if="el.type === 'c4_bomb' || el.type === 'plant_a' || el.type === 'plant_b'">
               <rect
-                :x="el.points[0].x * 10 - 14"
-                :y="el.points[0].y * 10 - 14"
-                width="28"
-                height="28"
-                rx="6"
+                :x="el.points[0].x * 10 - 12"
+                :y="el.points[0].y * 10 - 12"
+                width="24"
+                height="24"
+                rx="5"
                 :fill="el.type === 'c4_bomb' ? '#b91c1c' : el.color"
                 stroke="#ffffff"
-                stroke-width="2"
+                stroke-width="1.5"
                 class="shadow-lg"
               />
               <text
                 :x="el.points[0].x * 10"
-                :y="el.points[0].y * 10 + 5"
+                :y="el.points[0].y * 10 + 4"
                 fill="#ffffff"
-                font-size="12"
+                font-size="11"
                 font-weight="black"
                 font-family="monospace"
                 text-anchor="middle"
@@ -1060,12 +1129,12 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
               </text>
             </g>
 
-            <!-- 10. PLAYER PIN -->
+            <!-- 10. PLAYER PIN (5v5 ROSTER, MOVEABLE) -->
             <g v-else-if="el.type === 'player_t' || el.type === 'player_ct' || el.type === 'player_icon'">
               <circle
                 :cx="el.points[0].x * 10"
                 :cy="el.points[0].y * 10"
-                r="16"
+                r="15"
                 :fill="el.color"
                 stroke="#0f172a"
                 stroke-width="2.5"
@@ -1073,28 +1142,14 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
               />
               <text
                 :x="el.points[0].x * 10"
-                :y="el.points[0].y * 10 + 5"
+                :y="el.points[0].y * 10 + 4.5"
                 fill="#0f172a"
                 font-size="12"
-                font-weight="black"
+                font-weight="900"
                 font-family="sans-serif"
                 text-anchor="middle"
               >
                 {{ el.playerNum || '1' }}
-              </text>
-              <text
-                v-if="el.playerRole"
-                :x="el.points[0].x * 10"
-                :y="el.points[0].y * 10 + 26"
-                fill="#ffffff"
-                font-size="10"
-                font-weight="bold"
-                text-anchor="middle"
-                stroke="#0b0e14"
-                stroke-width="3"
-                paint-order="stroke fill"
-              >
-                {{ el.playerRole }}
               </text>
             </g>
 

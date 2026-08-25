@@ -194,8 +194,8 @@ function getSvgPoint(e: MouseEvent): { x: number; y: number } | null {
   const rawX = ((e.clientX - rect.left) / rect.width) * 100
   const rawY = ((e.clientY - rect.top) / rect.height) * 100
   return {
-    x: Math.round(Math.min(Math.max(rawX, 0), 100) * 10) / 10,
-    y: Math.round(Math.min(Math.max(rawY, 0), 100) * 10) / 10
+    x: Math.round(Math.min(Math.max(rawX, 3), 97) * 10) / 10,
+    y: Math.round(Math.min(Math.max(rawY, 3), 97) * 10) / 10
   }
 }
 
