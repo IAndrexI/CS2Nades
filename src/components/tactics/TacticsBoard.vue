@@ -7,6 +7,7 @@ import { useAuthStore } from '../../stores/authStore'
 import VectorMapBlueprint from '../map/VectorMapBlueprint.vue'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { TacticsElement, TacticsElementType } from '../../types'
+import { calculateVisionMesh } from '../../utils/mapColliders'
 import axios from 'axios'
 import { 
   Move, 
@@ -91,6 +92,7 @@ const isJoinRoomModalOpen = ref(false)
 const isMembersModalOpen = ref(false)
 const newRoomInput = ref('')
 const copySuccessToast = ref('')
+const isClearConfirmModalOpen = ref(false)
 
 function handleTransferHost(newHostUsername: string) {
   if (!newHostUsername) return
@@ -605,14 +607,17 @@ function handleClearBoard() {
     alert('Host has locked tactical board modifications for guests.')
     return
   }
-  if (confirm(`Clear all tactical drawings on ${mapStore.currentMap?.name || 'this map'}?`)) {
-    stratStore.clearBoard()
-    gameRoomStore.clearDrawings()
-    const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
-    if (socket && socket.connected) {
-      socket.emit('room:clear_drawings', { mapId: mapStore.currentMapId })
-    }
+  isClearConfirmModalOpen.value = true
+}
+
+function executeClearBoard() {
+  stratStore.clearBoard()
+  gameRoomStore.clearDrawings()
+  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  if (socket && socket.connected) {
+    socket.emit('room:clear_drawings', { mapId: mapStore.currentMapId })
   }
+  isClearConfirmModalOpen.value = false
 }
 
 function handleMapSelect(mapId: string) {
@@ -644,22 +649,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
   return `${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`
 }
 
-function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: number }): string {
-  const x1 = p1.x * 10, y1 = p1.y * 10
-  const x2 = p2.x * 10, y2 = p2.y * 10
-  const dx = x2 - x1, dy = y2 - y1
-  const length = Math.sqrt(dx * dx + dy * dy)
-  if (length < 2) return ''
-  const angle = Math.atan2(dy, dx)
-  // CS2 Field of View: 90 degrees total sightline cone (45 degrees to each side)
-  const spread = Math.PI / 4
-
-  const leftX = x1 + Math.cos(angle - spread) * length
-  const leftY = y1 + Math.sin(angle - spread) * length
-  const rightX = x1 + Math.cos(angle + spread) * length
-  const rightY = y1 + Math.sin(angle + spread) * length
-
-  return `M ${x1} ${y1} L ${leftX} ${leftY} A ${length} ${length} 0 0 1 ${rightX} ${rightY} Z`
+function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number }) {
+  return calculateVisionMesh(p1, p2, mapStore.currentMapId)
 }
 </script>
 
@@ -1030,25 +1021,41 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
               />
             </g>
 
-            <!-- 4. VISION FOV CONE (ACCURATE CS2 90° SIGHTLINE) -->
+            <!-- 4. VISION FOV CONE (REAL-TIME RAYCAST WALL OBSTRUCTION) -->
             <g v-else-if="el.type === 'vision_cone' && el.points.length >= 2">
+              <!-- Field of View Cone Polygon stopping at walls -->
               <path
-                :d="getVisionConePath(el.points[0], el.points[1])"
+                :d="getVisionMesh(el.points[0], el.points[1]).path"
                 fill="url(#visionGradient)"
                 :stroke="el.color || '#0ea5e9'"
                 stroke-width="1.5"
                 stroke-dasharray="4 3"
               />
+              <!-- Center Sightline Ray (clamped to wall collision hit) -->
               <line
                 :x1="el.points[0].x * 10"
                 :y1="el.points[0].y * 10"
-                :x2="el.points[1].x * 10"
-                :y2="el.points[1].y * 10"
+                :x2="getVisionMesh(el.points[0], el.points[1]).centerRayHit.x"
+                :y2="getVisionMesh(el.points[0], el.points[1]).centerRayHit.y"
                 :stroke="el.color || '#0ea5e9'"
-                stroke-width="1"
-                stroke-dasharray="2 2"
-                stroke-opacity="0.6"
+                stroke-width="1.2"
+                stroke-dasharray="3 2"
+                stroke-opacity="0.75"
               />
+              <!-- Blocked Sight Impact Barrier Lines on Walls -->
+              <line
+                v-for="(edge, eIdx) in getVisionMesh(el.points[0], el.points[1]).blockedEdges"
+                :key="`b-edge-${eIdx}`"
+                :x1="edge.x1"
+                :y1="edge.y1"
+                :x2="edge.x2"
+                :y2="edge.y2"
+                stroke="#ef4444"
+                stroke-width="3.5"
+                stroke-linecap="round"
+                class="filter drop-shadow-[0_0_4px_rgba(239,68,68,0.9)]"
+              />
+              <!-- Player Eye Origin Dot -->
               <circle
                 :cx="el.points[0].x * 10"
                 :cy="el.points[0].y * 10"
@@ -1230,14 +1237,46 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
             stroke-linecap="round"
           />
 
-          <path
-            v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'vision_cone'"
-            :d="getVisionConePath(currentStroke[0], currentStroke[1])"
-            fill="url(#visionGradient)"
-            :stroke="stratStore.activeColor"
-            stroke-width="1.5"
-            stroke-dasharray="4 4"
-          />
+          <!-- VISION CONE PREVIEW (REAL-TIME RAYCAST WALL OBSTRUCTION) -->
+          <g v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'vision_cone'">
+            <path
+              :d="getVisionMesh(currentStroke[0], currentStroke[1]).path"
+              fill="url(#visionGradient)"
+              :stroke="stratStore.activeColor || '#0ea5e9'"
+              stroke-width="1.5"
+              stroke-dasharray="4 3"
+            />
+            <line
+              :x1="currentStroke[0].x * 10"
+              :y1="currentStroke[0].y * 10"
+              :x2="getVisionMesh(currentStroke[0], currentStroke[1]).centerRayHit.x"
+              :y2="getVisionMesh(currentStroke[0], currentStroke[1]).centerRayHit.y"
+              :stroke="stratStore.activeColor || '#0ea5e9'"
+              stroke-width="1.2"
+              stroke-dasharray="3 2"
+              stroke-opacity="0.75"
+            />
+            <line
+              v-for="(edge, eIdx) in getVisionMesh(currentStroke[0], currentStroke[1]).blockedEdges"
+              :key="`b-prev-${eIdx}`"
+              :x1="edge.x1"
+              :y1="edge.y1"
+              :x2="edge.x2"
+              :y2="edge.y2"
+              stroke="#ef4444"
+              stroke-width="3.5"
+              stroke-linecap="round"
+              class="filter drop-shadow-[0_0_4px_rgba(239,68,68,0.9)]"
+            />
+            <circle
+              :cx="currentStroke[0].x * 10"
+              :cy="currentStroke[0].y * 10"
+              r="3.5"
+              :fill="stratStore.activeColor || '#0ea5e9'"
+              stroke="#0f172a"
+              stroke-width="1.5"
+            />
+          </g>
         </g>
       </svg>
     </div>
@@ -1518,6 +1557,44 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
               class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs cursor-pointer transition-colors"
             >
               Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- MODAL 4: CENTERED CLEAR BOARD CONFIRMATION DIALOG -->
+    <Teleport to="body">
+      <div
+        v-if="isClearConfirmModalOpen"
+        class="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center animate-fade-in"
+        @click.self="isClearConfirmModalOpen = false"
+      >
+        <div class="w-full max-w-sm bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-center items-center">
+          <div class="p-3.5 bg-rose-500/15 border border-rose-500/30 text-rose-400 rounded-2xl shadow-inner">
+            <Trash2 class="w-7 h-7 stroke-[2.5]" />
+          </div>
+
+          <div>
+            <h3 class="text-base font-black uppercase text-white tracking-wide">Clear Tactical Board?</h3>
+            <p class="text-xs text-slate-300 mt-2 leading-relaxed">
+              This will erase all drawn lines, arrows, utility marks, and player pins on
+              <strong class="text-amber-400 font-mono">{{ mapStore.currentMap?.name || 'this map' }}</strong>.
+            </p>
+          </div>
+
+          <div class="flex items-center gap-3 w-full pt-2">
+            <button
+              @click="isClearConfirmModalOpen = false"
+              class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              @click="executeClearBoard"
+              class="flex-1 py-2.5 bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white font-black rounded-xl text-xs transition-all shadow-lg cursor-pointer hover:scale-[1.02]"
+            >
+              Clear Board
             </button>
           </div>
         </div>
