@@ -1,8 +1,7 @@
 ﻿import type { MapInfo } from '../types'
 
-const SR = (file: string) => `/radars/simpleradar/${file}`
-const MM = (file: string) => `/minimaps/${file}`
-const MI = (file: string) => `/map-icons/${file}`
+const MAP = (file: string) => `/maps/${file}`
+const ICON = (file: string) => `/map-icons/${file}`
 
 export const MAPS_DATA: MapInfo[] = [
   // ─────────────────────────────────────────────────────────────
@@ -13,10 +12,10 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Mirage',
     code: 'de_mirage',
     activePool: true,
-    radarImage: SR('de_mirage_radar.png'),
-    icon: MI('mirage.webp'),
-    minimap: MM('mirage.webp'),
-    thumbnail: MM('mirage.webp'),
+    radarImage: MAP('mirage.webp'),
+    icon: ICON('mirage.webp'),
+    minimap: MAP('mirage.webp'),
+    thumbnail: MAP('mirage.webp'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 74, y: 38 },
@@ -30,10 +29,10 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Dust II',
     code: 'de_dust2',
     activePool: true,
-    radarImage: SR('de_dust2_radar.png'),
-    icon: MI('dust_2.webp'),
-    minimap: MM('dust_2.webp'),
-    thumbnail: MM('dust_2.webp'),
+    radarImage: MAP('dust_2.webp'),
+    icon: ICON('dust_2.webp'),
+    minimap: MAP('dust_2.webp'),
+    thumbnail: MAP('dust_2.webp'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 78, y: 28 },
@@ -47,10 +46,10 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Inferno',
     code: 'de_inferno',
     activePool: true,
-    radarImage: SR('de_inferno_radar.png'),
-    icon: MI('inferno.webp'),
-    minimap: MM('inferno.webp'),
-    thumbnail: MM('inferno.webp'),
+    radarImage: MAP('inferno.webp'),
+    icon: ICON('inferno.webp'),
+    minimap: MAP('inferno.webp'),
+    thumbnail: MAP('inferno.webp'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 68, y: 32 },
@@ -64,10 +63,10 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Cache',
     code: 'de_cache',
     activePool: true,
-    radarImage: SR('de_cache_radar.png'),
-    icon: MI('cache.webp'),
-    minimap: MM('cache.webp'),
-    thumbnail: MM('cache.webp'),
+    radarImage: MAP('cache.webp'),
+    icon: ICON('cache.webp'),
+    minimap: MAP('cache.webp'),
+    thumbnail: MAP('cache.webp'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 72, y: 32 },
@@ -81,10 +80,10 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Ancient',
     code: 'de_ancient',
     activePool: true,
-    radarImage: SR('de_ancient_radar.png'),
-    icon: MI('ancient.webp'),
-    minimap: MM('ancient.webp'),
-    thumbnail: MM('ancient.webp'),
+    radarImage: MAP('ancient.webp'),
+    icon: ICON('ancient.webp'),
+    minimap: MAP('ancient.webp'),
+    thumbnail: MAP('ancient.webp'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 74, y: 35 },
@@ -98,18 +97,14 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Nuke',
     code: 'de_nuke',
     activePool: true,
-    radarImage: SR('de_nuke_radar.png'),
-    radarFloors: [
-      { id: 'upper', label: 'Upper', image: SR('de_nuke_radar.png') },
-      { id: 'lower', label: 'Lower', image: SR('de_nuke_lower_radar.png') }
-    ],
-    icon: MI('nuke.webp'),
-    minimap: MM('nuke.webp'),
-    thumbnail: MM('nuke.webp'),
-    viewBox: '0 0 2000 1000',
+    radarImage: MAP('nuke.webp'),
+    icon: ICON('nuke.webp'),
+    minimap: MAP('nuke.webp'),
+    thumbnail: MAP('nuke.webp'),
+    viewBox: '0 0 1000 1000',
     sites: {
-      a: { x: 24.2, y: 47.5 },
-      b: { x: 74.2, y: 51.0 }
+      a: { x: 48, y: 48 },
+      b: { x: 52, y: 52 }
     },
     callouts: [],
     description: 'Multi-level nuclear facility with vertical soundscapes, strategic Outside smoke walls, and fast Ramp splits.'
@@ -119,10 +114,10 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Anubis',
     code: 'de_anubis',
     activePool: true,
-    radarImage: MM('anubis.webp'),
-    icon: MI('anubis.webp'),
-    minimap: MM('anubis.webp'),
-    thumbnail: MM('anubis.webp'),
+    radarImage: MAP('anubis.webp'),
+    icon: ICON('anubis.webp'),
+    minimap: MAP('anubis.webp'),
+    thumbnail: MAP('anubis.webp'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 74, y: 32 },
@@ -140,10 +135,10 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Overpass',
     code: 'de_overpass',
     activePool: false,
-    radarImage: SR('de_overpass_radar.png'),
-    icon: MI('overpass.webp'),
-    minimap: MM('overpass.webp'),
-    thumbnail: MM('overpass.webp'),
+    radarImage: MAP('overpass.webp'),
+    icon: ICON('overpass.webp'),
+    minimap: MAP('overpass.webp'),
+    thumbnail: MAP('overpass.webp'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 65, y: 35 },
@@ -157,15 +152,11 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Vertigo',
     code: 'de_vertigo',
     activePool: false,
-    radarImage: SR('de_vertigo_radar.png'),
-    radarFloors: [
-      { id: 'upper', label: 'Upper', image: SR('de_vertigo_radar.png') },
-      { id: 'lower', label: 'Lower', image: SR('de_vertigo_lower_radar.png') }
-    ],
-    icon: MI('vertigo.webp'),
-    minimap: MM('vertigo.webp'),
-    thumbnail: MM('vertigo.webp'),
-    viewBox: '0 0 2000 1000',
+    radarImage: MAP('vertigo.webp'),
+    icon: ICON('vertigo.webp'),
+    minimap: MAP('vertigo.webp'),
+    thumbnail: MAP('vertigo.webp'),
+    viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 36, y: 38 },
       b: { x: 65, y: 42 }
@@ -178,10 +169,10 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Train',
     code: 'de_train',
     activePool: false,
-    radarImage: SR('de_train_radar.png'),
-    icon: MI('train.webp'),
-    minimap: MM('train.webp'),
-    thumbnail: MM('train.webp'),
+    radarImage: MAP('train.webp'),
+    icon: ICON('train.webp'),
+    minimap: MAP('train.webp'),
+    thumbnail: MAP('train.webp'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 48, y: 38 },
