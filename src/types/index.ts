@@ -133,7 +133,23 @@ export interface Strategy {
   updatedAt?: string
 }
 
-export type TacticsElementType = 'line' | 'arrow' | 'circle' | 'text' | 'player_icon' | 'smoke_cloud' | 'flash_burst' | 'molotov_fire'
+export type TacticsElementType = 
+  | 'line' 
+  | 'arrow' 
+  | 'pen'
+  | 'circle' 
+  | 'text' 
+  | 'player_t' 
+  | 'player_ct' 
+  | 'player_icon' 
+  | 'smoke_cloud' 
+  | 'flash_burst' 
+  | 'molotov_fire'
+  | 'he_blast'
+  | 'c4_bomb'
+  | 'plant_a'
+  | 'plant_b'
+  | 'vision_cone'
 
 export interface TacticsElement {
   id: string
@@ -142,7 +158,9 @@ export interface TacticsElement {
   points: Coordinates[]
   text?: string
   playerRole?: string
+  playerNum?: number | string
   radius?: number
+  strokeWidth?: number
 }
 
 export interface NadeExecute {

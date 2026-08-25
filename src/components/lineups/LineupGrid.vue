@@ -79,14 +79,6 @@ const lineups = computed(() => {
           <span>Friends</span>
         </button>
       </div>
-
-      <button 
-        @click="lineupStore.isAddModalOpen = true"
-        class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md"
-      >
-        <Plus class="w-3.5 h-3.5 stroke-[3]" />
-        <span>New Nade</span>
-      </button>
     </div>
 
     <!-- CARDS GRID -->

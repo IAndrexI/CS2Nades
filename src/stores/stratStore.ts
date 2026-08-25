@@ -16,7 +16,25 @@ export const useStratStore = defineStore('strat', () => {
   const isCreateStratModalOpen = ref<boolean>(false)
   
   // Tactics Board Drawing State
-  const activeTool = ref<'select' | 'arrow' | 'line' | 'player' | 'smoke' | 'flash' | 'molotov' | 'text' | 'eraser'>('arrow')
+  const activeTool = ref<
+    | 'select'
+    | 'pen'
+    | 'arrow'
+    | 'line'
+    | 'vision_cone'
+    | 'text'
+    | 'smoke'
+    | 'flash'
+    | 'molotov'
+    | 'he_blast'
+    | 'c4_bomb'
+    | 'plant_a'
+    | 'plant_b'
+    | 'player_t'
+    | 'player_ct'
+    | 'player'
+    | 'eraser'
+  >('arrow')
   const activeColor = ref<string>('#de9b35') // CS2 Gold accent default
   const activeRole = ref<'IGL' | 'Entry' | 'Support' | 'Lurker' | 'AWP'>('Entry')
   const boardElements = ref<TacticsElement[]>([])

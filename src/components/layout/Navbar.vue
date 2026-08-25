@@ -31,7 +31,9 @@ import {
   Smartphone,
   Monitor,
   Menu,
-  X
+  X,
+  PenTool,
+  Check
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -47,10 +49,11 @@ const isUserDropdownOpen = ref(false)
 const isDataModalOpen = ref(false)
 const isMobileMenuOpen = ref(false)
 
-const isRoleSelectorOpen = ref(false)
+const customRoleInput = ref('')
 
 const navLinks = [
   { name: NAV_LABELS.radar, path: '/', icon: MapIcon },
+  { name: 'Live Tactics', path: '/tactics', icon: PenTool },
   { name: NAV_LABELS.callouts, path: '/callouts', icon: Layers },
   { name: NAV_LABELS.strats, path: '/strats', icon: BookOpen },
   { name: NAV_LABELS.library, path: '/library', icon: Grid },
@@ -60,10 +63,16 @@ const navLinks = [
 const inGameRoles = ['IGL', 'Entry Fragger', 'Support', 'AWPer', 'Lurker', 'Anchor', 'Flex']
 
 async function changeRole(role: string) {
-  if (authStore.currentUser) {
-    await authStore.updateProfile({ inGameRole: role as any })
+  if (authStore.currentUser && role.trim()) {
+    await authStore.updateProfile({ inGameRole: role.trim() })
   }
-  isRoleSelectorOpen.value = false
+}
+
+async function handleSaveCustomRole() {
+  if (customRoleInput.value.trim()) {
+    await changeRole(customRoleInput.value.trim())
+    customRoleInput.value = ''
+  }
 }
 
 function selectMap(mapId: string) {
@@ -260,9 +269,9 @@ async function handleSyncLineups() {
                 </div>
               </div>
 
-              <!-- ROLE SELECTOR LIST -->
-              <div class="p-2 border-b border-slate-800">
-                <span class="text-[10px] text-slate-400 font-bold uppercase block px-1 pb-1">Change Active Role</span>
+              <!-- ROLE SELECTOR LIST & CUSTOM ROLE INPUT -->
+              <div class="p-2 border-b border-slate-800 flex flex-col gap-2">
+                <span class="text-[10px] text-slate-400 font-bold uppercase block px-1">Active Tactical Role</span>
                 <div class="grid grid-cols-2 gap-1">
                   <button
                     v-for="r in inGameRoles"
@@ -276,6 +285,23 @@ async function handleSyncLineups() {
                     ]"
                   >
                     {{ r }}
+                  </button>
+                </div>
+
+                <!-- WRITE-IN CUSTOM ROLE -->
+                <div class="flex items-center gap-1 mt-1 pt-1.5 border-t border-slate-800/80">
+                  <input
+                    v-model="customRoleInput"
+                    @keyup.enter="handleSaveCustomRole"
+                    type="text"
+                    placeholder="Custom role..."
+                    class="flex-grow bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-amber-500"
+                  />
+                  <button
+                    @click="handleSaveCustomRole"
+                    class="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[10px] cursor-pointer"
+                  >
+                    Set
                   </button>
                 </div>
               </div>

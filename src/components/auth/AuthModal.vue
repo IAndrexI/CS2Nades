@@ -242,6 +242,33 @@ async function handleQuickGuest() {
             </div>
           </div>
 
+          <!-- ROLE SELECTOR & CUSTOM ROLE (WHEN REGISTERING) -->
+          <div v-if="authStore.authMode === 'register'" class="flex flex-col gap-1.5">
+            <label class="font-bold text-slate-300">Tactical Role</label>
+            <div class="grid grid-cols-3 gap-1">
+              <button
+                v-for="r in roles.slice(0, 6)"
+                :key="r"
+                type="button"
+                @click="credentialsForm.inGameRole = r"
+                :class="[
+                  'px-2 py-1.5 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer text-center',
+                  credentialsForm.inGameRole === r
+                    ? 'bg-amber-500 text-slate-950 font-black border-amber-500'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                ]"
+              >
+                {{ r }}
+              </button>
+            </div>
+            <input
+              v-model="credentialsForm.inGameRole"
+              type="text"
+              placeholder="Or type custom role (e.g. Captain, Re-fragger)..."
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-[11px] text-white focus:outline-none focus:border-amber-500 mt-1"
+            />
+          </div>
+
           <button 
             type="submit"
             :disabled="authStore.isLoading"
