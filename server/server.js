@@ -285,9 +285,19 @@ app.post('/api/auth/steam-sync', async (req, res) => {
   res.json({ token, user: userSafe })
 })
 
+app.get('/api/server/info', (req, res) => {
+  const host = req.headers['x-forwarded-host'] || req.get('host') || 'nade.protutech.vip'
+  const protocol = req.headers['x-forwarded-proto'] || (req.protocol === 'https' ? 'https' : (req.secure ? 'https' : 'http'))
+  res.json({
+    publicUrl: `${protocol}://${host}`,
+    domain: host,
+    version: '2.0.0'
+  })
+})
+
 app.get('/api/auth/steam/login', (req, res) => {
-  const host = req.get('host')
-  const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'
+  const host = req.headers['x-forwarded-host'] || req.get('host') || 'nade.protutech.vip'
+  const protocol = req.headers['x-forwarded-proto'] || (req.protocol === 'https' ? 'https' : (req.secure ? 'https' : 'http'))
   const returnTo = `${protocol}://${host}/api/auth/steam/callback`
   const realm = `${protocol}://${host}/`
 
@@ -902,11 +912,14 @@ io.on('connection', (socket) => {
         mapId: 'mirage',
         members: [],
         drawings: [],
+        elements: [],
+        elementsByMap: {},
         activeLineups: []
       })
     }
 
     const room = gameRooms.get(cleanCode)
+    if (!room.elementsByMap) room.elementsByMap = {}
     
     // Add member if not already present
     const existingMemberIdx = room.members.findIndex(m => m.username === currentUserInfo.username)
@@ -928,11 +941,15 @@ io.on('connection', (socket) => {
     socket.join(cleanCode)
 
     // Send initial room state to joining member
+    const activeMapElements = (room.elementsByMap && room.elementsByMap[room.mapId]) || room.elements || []
     socket.emit('room:state', {
       roomCode: room.code,
       host: room.host,
       mapId: room.mapId,
       members: room.members,
+      elements: activeMapElements,
+      elementsByMap: room.elementsByMap || {},
+      allowGuestsToDraw: room.allowGuestsToDraw !== false,
       drawings: room.drawings,
       activeLineups: room.activeLineups
     })
@@ -954,28 +971,41 @@ io.on('connection', (socket) => {
     socket.to(currentRoomId).emit('room:stroke', strokeData)
   })
 
-  // Full Tactical Elements Real-time Sync
-  socket.on('room:element_add', (element) => {
+  // Full Tactical Elements Real-time Sync (Per-Map)
+  socket.on('room:element_add', (payload) => {
     if (!currentRoomId || !gameRooms.has(currentRoomId)) return
     const room = gameRooms.get(currentRoomId)
-    if (!room.elements) room.elements = []
-    room.elements.push(element)
-    socket.to(currentRoomId).emit('room:element_added', element)
+    const element = payload?.element || payload
+    const targetMap = payload?.mapId || room.mapId || 'mirage'
+    if (!room.elementsByMap) room.elementsByMap = {}
+    if (!room.elementsByMap[targetMap]) room.elementsByMap[targetMap] = []
+    room.elementsByMap[targetMap].push(element)
+    room.elements = room.elementsByMap[targetMap]
+    socket.to(currentRoomId).emit('room:element_added', { element, mapId: targetMap })
   })
 
-  socket.on('room:element_remove', (elementId) => {
+  socket.on('room:element_remove', (payload) => {
     if (!currentRoomId || !gameRooms.has(currentRoomId)) return
     const room = gameRooms.get(currentRoomId)
-    if (!room.elements) room.elements = []
-    room.elements = room.elements.filter(e => e.id !== elementId)
-    socket.to(currentRoomId).emit('room:element_removed', elementId)
+    const elementId = typeof payload === 'string' ? payload : payload?.elementId
+    const targetMap = payload?.mapId || room.mapId || 'mirage'
+    if (!room.elementsByMap) room.elementsByMap = {}
+    if (room.elementsByMap[targetMap]) {
+      room.elementsByMap[targetMap] = room.elementsByMap[targetMap].filter(e => e.id !== elementId)
+    }
+    room.elements = room.elementsByMap[targetMap] || []
+    socket.to(currentRoomId).emit('room:element_removed', { elementId, mapId: targetMap })
   })
 
-  socket.on('room:elements_sync', (elements) => {
+  socket.on('room:elements_sync', (payload) => {
     if (!currentRoomId || !gameRooms.has(currentRoomId)) return
     const room = gameRooms.get(currentRoomId)
+    const elements = Array.isArray(payload) ? payload : payload?.elements || []
+    const targetMap = payload?.mapId || room.mapId || 'mirage'
+    if (!room.elementsByMap) room.elementsByMap = {}
+    room.elementsByMap[targetMap] = elements
     room.elements = elements
-    socket.to(currentRoomId).emit('room:elements_synced', elements)
+    socket.to(currentRoomId).emit('room:elements_synced', { elements, mapId: targetMap })
   })
 
   // Host Permission Controls (Allow Guests to Modify or Lock Board)
@@ -986,12 +1016,15 @@ io.on('connection', (socket) => {
     io.to(currentRoomId).emit('room:lock_updated', { allowGuestsToDraw })
   })
 
-  socket.on('room:clear_drawings', () => {
+  socket.on('room:clear_drawings', (payload) => {
     if (!currentRoomId || !gameRooms.has(currentRoomId)) return
     const room = gameRooms.get(currentRoomId)
-    room.drawings = []
+    const targetMap = payload?.mapId || room.mapId || 'mirage'
+    if (!room.elementsByMap) room.elementsByMap = {}
+    room.elementsByMap[targetMap] = []
     room.elements = []
-    io.to(currentRoomId).emit('room:drawings_cleared')
+    room.drawings = []
+    io.to(currentRoomId).emit('room:drawings_cleared', { mapId: targetMap })
   })
 
   // Live Lineup Push Relay (instant tactical execute)
@@ -1008,13 +1041,25 @@ io.on('connection', (socket) => {
     })
   })
 
-  // Map Change by Host
-  socket.on('room:switch_map', (mapId) => {
+  // Map Change by Host / Room Member (Real-Time Map & Drawing Sync)
+  socket.on('room:switch_map', (payload) => {
     if (!currentRoomId || !gameRooms.has(currentRoomId)) return
     const room = gameRooms.get(currentRoomId)
+    const mapId = typeof payload === 'string' ? payload : payload?.mapId
+    const incomingElements = payload?.elements
+    if (!mapId) return
+    
     room.mapId = mapId
-    room.drawings = [] // reset drawings on new map
-    io.to(currentRoomId).emit('room:map_changed', mapId)
+    if (!room.elementsByMap) room.elementsByMap = {}
+    if (incomingElements && Array.isArray(incomingElements)) {
+      room.elementsByMap[mapId] = incomingElements
+    }
+    const mapElements = room.elementsByMap[mapId] || []
+    room.elements = mapElements
+    room.drawings = []
+    
+    // Broadcast map and its specific drawings to all room participants
+    io.to(currentRoomId).emit('room:map_changed', { mapId, elements: mapElements })
   })
 
   // Squad Chat Message

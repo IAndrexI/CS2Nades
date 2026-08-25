@@ -113,11 +113,12 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
         })
       })
 
-      socket.value.on('room:map_changed', (mapId: string) => {
+      socket.value.on('room:map_changed', (data: any) => {
+        const mapId = typeof data === 'string' ? data : data.mapId
         currentMapId.value = mapId
         liveDrawings.value = []
         announcements.value.push({
-          text: `Map changed to ${mapId.toUpperCase()}`,
+          text: `Tactical map changed to ${mapId.toUpperCase()}`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         })
       })
@@ -173,11 +174,11 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     }
   }
 
-  function switchMap(mapId: string) {
+  function switchMap(mapId: string, elements?: any[]) {
     currentMapId.value = mapId
     liveDrawings.value = []
     if (socket.value && socket.value.connected) {
-      socket.value.emit('room:switch_map', mapId)
+      socket.value.emit('room:switch_map', { mapId, elements })
     }
   }
 

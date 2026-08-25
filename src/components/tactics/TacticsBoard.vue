@@ -179,19 +179,67 @@ onMounted(async () => {
     }
   }
 
-  // Socket element synchronization
-  const socket = (gameRoomStore as any).socket?.value || (gameRoomStore as any).socket
+  // Socket element & map synchronization
+  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
   if (socket) {
-    socket.on('room:element_added', (el: TacticsElement) => {
-      if (!stratStore.boardElements.some(e => e.id === el.id)) {
-        stratStore.boardElements.push(el)
+    socket.on('room:map_changed', (data: any) => {
+      const newMapId = typeof data === 'string' ? data : data?.mapId
+      if (newMapId && mapStore.currentMapId !== newMapId) {
+        stratStore.saveCurrentMapElements(mapStore.currentMapId)
+        mapStore.setMap(newMapId)
+      }
+      if (data && data.elements) {
+        stratStore.setBoardElements(data.elements)
+      } else if (newMapId) {
+        stratStore.loadMapElements(newMapId)
       }
     })
-    socket.on('room:element_removed', (elId: string) => {
-      stratStore.boardElements = stratStore.boardElements.filter(e => e.id !== elId)
+
+    socket.on('room:element_added', (data: any) => {
+      const el = data?.element || data
+      const mapId = data?.mapId
+      if (!mapId || mapId === mapStore.currentMapId) {
+        if (!stratStore.boardElements.some(e => e.id === el.id)) {
+          stratStore.boardElements.push(el)
+        }
+      }
+      if (mapId) {
+        const existing = stratStore.mapElements[mapId] || []
+        if (!existing.some(e => e.id === el.id)) {
+          stratStore.mapElements[mapId] = [...existing, el]
+        }
+      }
     })
-    socket.on('room:elements_synced', (els: TacticsElement[]) => {
-      stratStore.setBoardElements(els)
+
+    socket.on('room:element_removed', (data: any) => {
+      const elId = typeof data === 'string' ? data : data?.elementId
+      const mapId = data?.mapId
+      if (!mapId || mapId === mapStore.currentMapId) {
+        stratStore.boardElements = stratStore.boardElements.filter(e => e.id !== elId)
+      }
+      if (mapId && stratStore.mapElements[mapId]) {
+        stratStore.mapElements[mapId] = stratStore.mapElements[mapId].filter(e => e.id !== elId)
+      }
+    })
+
+    socket.on('room:elements_synced', (data: any) => {
+      const els = Array.isArray(data) ? data : data?.elements || []
+      const mapId = data?.mapId
+      if (!mapId || mapId === mapStore.currentMapId) {
+        stratStore.setBoardElements(els)
+      } else if (mapId) {
+        stratStore.mapElements[mapId] = [...els]
+      }
+    })
+
+    socket.on('room:drawings_cleared', (data: any) => {
+      const mapId = data?.mapId
+      if (!mapId || mapId === mapStore.currentMapId) {
+        stratStore.boardElements = []
+      }
+      if (mapId) {
+        stratStore.mapElements[mapId] = []
+      }
     })
   }
 })
@@ -416,9 +464,9 @@ function handleMouseUp() {
 
 function addElement(element: TacticsElement) {
   stratStore.addBoardElement(element)
-  const socket = (gameRoomStore as any).socket?.value || (gameRoomStore as any).socket
+  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
   if (socket && socket.connected) {
-    socket.emit('room:element_add', element)
+    socket.emit('room:element_add', { element, mapId: mapStore.currentMapId })
   }
 }
 
@@ -426,8 +474,8 @@ function handleElementClick(e: MouseEvent, el: TacticsElement) {
   e.stopPropagation()
   if (stratStore.activeTool === 'eraser') {
     stratStore.removeBoardElement(el.id)
-    const socket = (gameRoomStore as any).socket?.value || (gameRoomStore as any).socket
-    if (socket && socket.connected) socket.emit('room:element_remove', el.id)
+    const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+    if (socket && socket.connected) socket.emit('room:element_remove', { elementId: el.id, mapId: mapStore.currentMapId })
   } else if (stratStore.activeTool === 'select') {
     selectedElementId.value = selectedElementId.value === el.id ? null : el.id
   }
@@ -452,10 +500,29 @@ function deleteSelectedElement() {
   if (selectedElementId.value) {
     const id = selectedElementId.value
     stratStore.removeBoardElement(id)
-    const socket = (gameRoomStore as any).socket?.value || (gameRoomStore as any).socket
-    if (socket && socket.connected) socket.emit('room:element_remove', id)
+    const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+    if (socket && socket.connected) socket.emit('room:element_remove', { elementId: id, mapId: mapStore.currentMapId })
     selectedElementId.value = null
   }
+}
+
+function handleClearBoard() {
+  if (confirm(`Clear all tactical drawings on ${mapStore.currentMap?.name || 'this map'}?`)) {
+    stratStore.clearBoard()
+    gameRoomStore.clearDrawings()
+    const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+    if (socket && socket.connected) {
+      socket.emit('room:clear_drawings', { mapId: mapStore.currentMapId })
+    }
+  }
+}
+
+function handleMapSelect(mapId: string) {
+  if (!mapId) return
+  stratStore.saveCurrentMapElements(mapStore.currentMapId)
+  mapStore.setMap(mapId)
+  stratStore.loadMapElements(mapId)
+  gameRoomStore.switchMap(mapId, stratStore.getElementsForMap(mapId))
 }
 
 function getSvgPath(points: { x: number; y: number }[]): string {
@@ -565,7 +632,7 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
         <span class="text-xs text-slate-400 font-bold hidden sm:inline">Map:</span>
         <select
           :value="mapStore.currentMapId"
-          @change="mapStore.setMap(($event.target as HTMLSelectElement).value)"
+          @change="handleMapSelect(($event.target as HTMLSelectElement).value)"
           class="bg-slate-950 border border-slate-800 text-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold uppercase font-mono focus:outline-none focus:border-amber-500 cursor-pointer"
         >
           <option v-for="map in mapStore.availableMaps" :key="map.id" :value="map.id">
@@ -695,7 +762,7 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
           <Trash2 class="w-4 h-4" />
         </button>
         <button
-          @click="stratStore.clearBoard()"
+          @click="handleClearBoard"
           title="Clear Board"
           class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-rose-500/20 hover:text-rose-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
         >

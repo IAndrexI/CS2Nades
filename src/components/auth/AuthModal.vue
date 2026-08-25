@@ -39,20 +39,30 @@ async function handleSteamSync() {
     authStore.authError = 'Please enter your Steam Profile URL or SteamID'
     return
   }
-  await authStore.loginWithSteamProfile(steamForm.steamInput.trim(), steamForm.inGameRole)
+  const ok = await authStore.loginWithSteamProfile(steamForm.steamInput.trim(), steamForm.inGameRole)
+  if (ok) {
+    authStore.isAuthModalOpen = false
+  }
 }
 
 async function handleCredentialsSubmit() {
+  let ok = false
   if (authStore.authMode === 'login') {
-    await authStore.login(credentialsForm.username, credentialsForm.password)
+    ok = await authStore.login(credentialsForm.username, credentialsForm.password)
   } else {
-    await authStore.register(credentialsForm.username, credentialsForm.email, credentialsForm.password, credentialsForm.inGameRole)
+    ok = await authStore.register(credentialsForm.username, credentialsForm.email, credentialsForm.password, credentialsForm.inGameRole)
+  }
+  if (ok) {
+    authStore.isAuthModalOpen = false
   }
 }
 
 async function handleQuickGuest() {
   const randNum = Math.floor(1000 + Math.random() * 9000)
-  await authStore.register(`TacticalPlayer_${randNum}`, `player${randNum}@protutech.local`, `protutech123`, credentialsForm.inGameRole)
+  const ok = await authStore.register(`TacticalPlayer_${randNum}`, `player${randNum}@protutech.local`, `protutech123`, credentialsForm.inGameRole)
+  if (ok) {
+    authStore.isAuthModalOpen = false
+  }
 }
 </script>
 

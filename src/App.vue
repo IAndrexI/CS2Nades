@@ -30,10 +30,12 @@ onMounted(() => {
 
 // Watch auth status
 watch(() => authStore.isAuthenticated, (isAuth) => {
-  if (!isAuth) {
+  if (isAuth) {
+    authStore.isAuthModalOpen = false
+  } else {
     authStore.isAuthModalOpen = true
   }
-})
+}, { immediate: true })
 </script>
 
 <template>

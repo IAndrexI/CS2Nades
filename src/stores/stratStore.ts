@@ -38,8 +38,11 @@ export const useStratStore = defineStore('strat', () => {
   const activeColor = ref<string>('#de9b35') // CS2 Gold accent default
   const activeRole = ref<'IGL' | 'Entry' | 'Support' | 'Lurker' | 'AWP'>('Entry')
   const boardElements = ref<TacticsElement[]>([])
+  const mapElements = ref<Record<string, TacticsElement[]>>({})
   const history = ref<TacticsElement[][]>([])
   const historyIndex = ref<number>(-1)
+
+  const MAP_ELEMENTS_STORAGE_KEY = 'cs2_stratbook_tactics_elements_by_map'
 
   // Storage
   function loadFromStorage() {
@@ -47,6 +50,10 @@ export const useStratStore = defineStore('strat', () => {
       const stored = localStorage.getItem(STRATS_STORAGE_KEY)
       if (stored) {
         customStrats.value = JSON.parse(stored)
+      }
+      const storedMapElements = localStorage.getItem(MAP_ELEMENTS_STORAGE_KEY)
+      if (storedMapElements) {
+        mapElements.value = JSON.parse(storedMapElements)
       }
     } catch (e) {
       console.error('Failed to load custom strats from storage', e)
@@ -56,6 +63,7 @@ export const useStratStore = defineStore('strat', () => {
   function saveToStorage() {
     try {
       localStorage.setItem(STRATS_STORAGE_KEY, JSON.stringify(customStrats.value))
+      localStorage.setItem(MAP_ELEMENTS_STORAGE_KEY, JSON.stringify(mapElements.value))
     } catch (e) {
       console.error('Failed to save custom strats to storage', e)
     }
@@ -63,9 +71,44 @@ export const useStratStore = defineStore('strat', () => {
 
   loadFromStorage()
 
+  // Initialize elements for current map
+  if (mapElements.value[mapStore.currentMapId]) {
+    boardElements.value = [...mapElements.value[mapStore.currentMapId]]
+  }
+
   watch(customStrats, () => {
     saveToStorage()
   }, { deep: true })
+
+  watch(mapElements, () => {
+    saveToStorage()
+  }, { deep: true })
+
+  // Synchronize when active map changes in mapStore
+  watch(() => mapStore.currentMapId, (newMapId, oldMapId) => {
+    if (oldMapId) {
+      mapElements.value[oldMapId] = [...boardElements.value]
+    }
+    boardElements.value = mapElements.value[newMapId] ? [...mapElements.value[newMapId]] : []
+    history.value = [[...boardElements.value]]
+    historyIndex.value = 0
+    saveToStorage()
+  })
+
+  function loadMapElements(mapId: string) {
+    boardElements.value = mapElements.value[mapId] ? [...mapElements.value[mapId]] : []
+    history.value = [[...boardElements.value]]
+    historyIndex.value = 0
+  }
+
+  function saveCurrentMapElements(mapId: string) {
+    mapElements.value[mapId] = [...boardElements.value]
+    saveToStorage()
+  }
+
+  function getElementsForMap(mapId: string): TacticsElement[] {
+    return mapElements.value[mapId] || []
+  }
 
   // All combined strats
   const allStrats = computed<Strategy[]>(() => {
@@ -129,44 +172,56 @@ export const useStratStore = defineStore('strat', () => {
       history.value = history.value.slice(0, historyIndex.value + 1)
     }
     boardElements.value.push(element)
+    mapElements.value[mapStore.currentMapId] = [...boardElements.value]
     history.value.push([...boardElements.value])
     historyIndex.value = history.value.length - 1
+    saveToStorage()
   }
 
   function removeBoardElement(id: string) {
     boardElements.value = boardElements.value.filter(el => el.id !== id)
+    mapElements.value[mapStore.currentMapId] = [...boardElements.value]
     history.value.push([...boardElements.value])
     historyIndex.value = history.value.length - 1
+    saveToStorage()
   }
 
   function clearBoard() {
-    if (boardElements.value.length > 0) {
-      boardElements.value = []
-      history.value.push([])
-      historyIndex.value = history.value.length - 1
-    }
+    boardElements.value = []
+    mapElements.value[mapStore.currentMapId] = []
+    history.value.push([])
+    historyIndex.value = history.value.length - 1
+    saveToStorage()
   }
 
   function undo() {
     if (historyIndex.value > 0) {
       historyIndex.value--
       boardElements.value = [...history.value[historyIndex.value]]
+      mapElements.value[mapStore.currentMapId] = [...boardElements.value]
+      saveToStorage()
     } else if (historyIndex.value === 0) {
       historyIndex.value = -1
       boardElements.value = []
+      mapElements.value[mapStore.currentMapId] = []
+      saveToStorage()
     }
   }
 
   function setBoardElements(elements: TacticsElement[]) {
     boardElements.value = [...elements]
+    mapElements.value[mapStore.currentMapId] = [...elements]
     history.value.push([...boardElements.value])
     historyIndex.value = history.value.length - 1
+    saveToStorage()
   }
 
   function redo() {
     if (historyIndex.value < history.value.length - 1) {
       historyIndex.value++
       boardElements.value = [...history.value[historyIndex.value]]
+      mapElements.value[mapStore.currentMapId] = [...boardElements.value]
+      saveToStorage()
     }
   }
 
@@ -181,12 +236,16 @@ export const useStratStore = defineStore('strat', () => {
     activeColor,
     activeRole,
     boardElements,
+    mapElements,
     historyIndex,
     openStrat,
     closeStrat,
     addStrat,
     updateStrat,
     deleteStrat,
+    loadMapElements,
+    saveCurrentMapElements,
+    getElementsForMap,
     addBoardElement,
     removeBoardElement,
     setBoardElements,
