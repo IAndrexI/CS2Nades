@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useMapStore, type CalloutItem } from '../stores/mapStore'
 import VectorMapBlueprint from '../components/map/VectorMapBlueprint.vue'
+import { clientToPct, pctToSvg } from '../utils/radarCoords'
 import { 
   Layers, 
   Plus, 
@@ -28,6 +29,13 @@ const newCalloutSite = ref('Mid')
 const svgElement = ref<SVGSVGElement | null>(null)
 const mapContainer = ref<HTMLDivElement | null>(null)
 
+const currentViewBox = computed(() => mapStore.currentMap.viewBox || '0 0 1000 1000')
+
+function getCalloutTransform(coords: { x: number; y: number }) {
+  const pt = pctToSvg(coords, currentViewBox.value)
+  return `translate(${pt.x}, ${pt.y})`
+}
+
 const filteredCallouts = computed(() => {
   const all = mapStore.currentMapCallouts
   if (!searchQuery.value.trim()) return all
@@ -35,9 +43,15 @@ const filteredCallouts = computed(() => {
   return all.filter(c => c.name.toLowerCase().includes(q) || (c.site && c.site.toLowerCase().includes(q)))
 })
 
-// Coordinate calculation using direct SVG bounding box (100% precision)
+// Coordinate calculation using SVG Matrix Inversion
 function handleMapClick(e: MouseEvent) {
   if (!isAddingCallout.value || !svgElement.value) return
+  const pt = clientToPct(svgElement.value, e.clientX, e.clientY)
+  if (pt) {
+    newCalloutCoords.value = pt
+    return
+  }
+
   const rect = svgElement.value.getBoundingClientRect()
   if (rect.width === 0 || rect.height === 0) return
 
@@ -155,7 +169,7 @@ function handleClearAll() {
         >
           <svg 
             ref="svgElement"
-            viewBox="0 0 1000 1000" 
+            :viewBox="currentViewBox" 
             class="w-full h-full max-w-[960px] max-h-[960px] drop-shadow-[0_0_24px_rgba(0,0,0,0.8)]"
           >
             <!-- BASE MAP (Radar Texture) -->
@@ -169,7 +183,7 @@ function handleClearAll() {
               <g 
                 v-for="callout in filteredCallouts" 
                 :key="callout.id" 
-                :transform="`translate(${callout.coords.x * 10}, ${callout.coords.y * 10})`"
+                :transform="getCalloutTransform(callout.coords)"
                 class="transition-transform duration-150 hover:scale-125"
               >
                 <!-- Marker Dot -->
@@ -204,7 +218,7 @@ function handleClearAll() {
             </g>
 
             <!-- TEMPORARY NEW CALLOUT PIN (IF CLICKED) -->
-            <g v-if="newCalloutCoords" :transform="`translate(${newCalloutCoords.x * 10}, ${newCalloutCoords.y * 10})`">
+            <g v-if="newCalloutCoords" :transform="getCalloutTransform(newCalloutCoords)">
               <circle cx="0" cy="0" r="16" fill="#38bdf8" fill-opacity="0.3" stroke="#38bdf8" stroke-width="2" class="animate-pulse" />
               <circle cx="0" cy="0" r="6" fill="#38bdf8" stroke="#ffffff" stroke-width="2" />
             </g>

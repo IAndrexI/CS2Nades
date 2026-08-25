@@ -13,7 +13,8 @@ import {
   Play, 
   Terminal, 
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Globe
 } from 'lucide-vue-next'
 
 const lineupStore = useLineupStore()
@@ -88,6 +89,22 @@ onUnmounted(() => {
         </div>
 
         <div class="flex items-center gap-2">
+          <!-- SHARE TO LIBRARY BUTTON -->
+          <button
+            v-if="lineup.isCustom"
+            @click="lineupStore.toggleShareToLibrary(lineup.id)"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border',
+              lineup.inLibrary || lineup.isTeamShared
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750 hover:text-white'
+            ]"
+            :title="lineup.inLibrary || lineup.isTeamShared ? 'Lineup is in Shared Library' : 'Add Lineup to Library'"
+          >
+            <Globe class="w-3.5 h-3.5" />
+            <span>{{ lineup.inLibrary || lineup.isTeamShared ? 'In Library' : 'Add to Library' }}</span>
+          </button>
+
           <!-- FAVORITE BUTTON -->
           <button 
             @click="lineupStore.toggleFavorite(lineup.id)"

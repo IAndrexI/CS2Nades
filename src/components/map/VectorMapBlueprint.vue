@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useMapStore } from '../../stores/mapStore'
 import type { MapInfo } from '../../types'
+import { parseViewBox, pctToSvg } from '../../utils/radarCoords'
 
 const props = defineProps<{
   mapInfo: MapInfo
@@ -11,35 +12,91 @@ const props = defineProps<{
 const mapStore = useMapStore()
 const mapId = computed(() => props.mapInfo.id)
 const hasRadarImage = computed(() => !!props.mapInfo.radarImage && mapStore.radarMode !== 'blueprint')
+const vb = computed(() => parseViewBox(props.mapInfo.viewBox))
+const floors = computed(() => {
+  if (props.mapInfo.customRadarImage) return []
+  return props.mapInfo.radarFloors || []
+})
+const useSplit = computed(() => floors.value.length === 2)
+const callouts = computed(() => {
+  const custom = mapStore.customCallouts[props.mapInfo.id] || []
+  return [...(props.mapInfo.callouts || []), ...custom]
+})
+
+function siteSvg(site: { x: number; y: number }) {
+  return pctToSvg(site, props.mapInfo.viewBox)
+}
 </script>
 
 <template>
   <g class="vector-map-layer select-none pointer-events-none">
-    <!-- BASE BACKGROUND -->
-    <rect x="0" y="0" width="1000" height="1000" fill="#090d13" />
-    
-    <!-- CONCENTRIC RADAR RINGS & CROSSHAIR LINES -->
-    <circle cx="500" cy="500" r="480" fill="none" stroke="#182332" stroke-width="1.5" stroke-dasharray="8 8" />
-    <circle cx="500" cy="500" r="320" fill="none" stroke="#182332" stroke-width="1" stroke-dasharray="6 6" />
-    <circle cx="500" cy="500" r="160" fill="none" stroke="#182332" stroke-width="1" stroke-dasharray="4 4" />
-    <line x1="500" y1="20" x2="500" y2="980" stroke="#131b26" stroke-width="1" stroke-dasharray="4 4" />
-    <line x1="20" y1="500" x2="980" y2="500" stroke="#131b26" stroke-width="1" stroke-dasharray="4 4" />
+    <rect :x="vb.minX" :y="vb.minY" :width="vb.width" :height="vb.height" fill="#090d13" />
 
-    <!-- LAYER 1: REAL OFFICIAL / CUSTOM HIGH-RES CS2 RADAR IMAGE OVERVIEW -->
-    <g v-if="hasRadarImage" class="radar-image-layer">
-      <image 
-        :href="props.mapInfo.radarImage" 
-        x="0" 
-        y="0" 
-        width="1000" 
-        height="1000" 
-        preserveAspectRatio="xMidYMid slice" 
+    <g v-if="!useSplit">
+      <circle :cx="vb.width / 2" :cy="vb.height / 2" :r="vb.height * 0.48" fill="none" stroke="#182332" stroke-width="1.5" stroke-dasharray="8 8" />
+      <circle :cx="vb.width / 2" :cy="vb.height / 2" :r="vb.height * 0.32" fill="none" stroke="#182332" stroke-width="1" stroke-dasharray="6 6" />
+      <line :x1="vb.width / 2" :y1="20" :x2="vb.width / 2" :y2="vb.height - 20" stroke="#131b26" stroke-width="1" stroke-dasharray="4 4" />
+      <line :x1="20" :y1="vb.height / 2" :x2="vb.width - 20" :y2="vb.height / 2" stroke="#131b26" stroke-width="1" stroke-dasharray="4 4" />
+    </g>
+
+    <!-- Split upper | lower radars (Nuke, Vertigo) -->
+    <g v-if="hasRadarImage && useSplit" class="radar-split-layer">
+      <image
+        v-for="(floor, idx) in floors"
+        :key="floor.id"
+        :href="floor.image"
+        :x="idx * (vb.width / 2)"
+        :y="0"
+        :width="vb.width / 2"
+        :height="vb.height"
+        preserveAspectRatio="xMidYMid meet"
+        :opacity="mapStore.radarOpacity"
+      />
+      <line
+        :x1="vb.width / 2"
+        y1="0"
+        :x2="vb.width / 2"
+        :y2="vb.height"
+        stroke="#334155"
+        stroke-width="3"
+      />
+      <g v-for="(floor, idx) in floors" :key="`label-${floor.id}`">
+        <rect
+          :x="idx * (vb.width / 2) + 16"
+          y="16"
+          width="110"
+          height="32"
+          rx="8"
+          fill="#0b0e14"
+          fill-opacity="0.82"
+          stroke="#de9b35"
+          stroke-opacity="0.45"
+        />
+        <text
+          :x="idx * (vb.width / 2) + 71"
+          y="38"
+          font-size="14"
+          font-weight="800"
+          text-anchor="middle"
+          fill="#fbbf24"
+          font-family="monospace"
+        >{{ floor.label.toUpperCase() }}</text>
+      </g>
+    </g>
+
+    <g v-else-if="hasRadarImage" class="radar-image-layer">
+      <image
+        :href="props.mapInfo.radarImage"
+        :x="0"
+        :y="0"
+        :width="vb.width"
+        :height="vb.height"
+        preserveAspectRatio="xMidYMid meet"
         :opacity="mapStore.radarOpacity"
         class="transition-opacity duration-200"
       />
     </g>
 
-    <!-- LAYER 2: FALLBACK BLUEPRINT SCHEMATIC (IF NO IMAGE OR BLUEPRINT MODE SELECTED) -->
     <g v-else-if="mapStore.radarMode === 'blueprint'" class="blueprint-fallback-layer opacity-60">
       <g v-if="mapId === 'mirage'">
         <polygon points="260,940 520,940 500,780 320,780" fill="#141c28" stroke="#253549" stroke-width="2" />
@@ -55,28 +112,22 @@ const hasRadarImage = computed(() => !!props.mapInfo.radarImage && mapStore.rada
         <polygon points="540,260 760,260 740,160 560,160" fill="#141c28" stroke="#253549" stroke-width="2" />
       </g>
       <g v-else>
-        <rect x="200" y="200" width="600" height="600" rx="30" fill="#141c28" stroke="#253549" stroke-width="2" />
+        <rect :x="vb.width * 0.2" :y="vb.height * 0.2" :width="vb.width * 0.6" :height="vb.height * 0.6" rx="30" fill="#141c28" stroke="#253549" stroke-width="2" />
       </g>
     </g>
 
-    <!-- LAYER 3 & 4: BOMB SITES (Only rendered if showSiteMarkers enabled or in blueprint mode) -->
     <g v-if="mapStore.showSiteMarkers || mapStore.radarMode === 'blueprint'">
-      <!-- Bomb Site A -->
-      <g 
+      <g
         v-if="mapInfo.sites?.a"
-        :transform="`translate(${mapInfo.sites.a.x * 10}, ${mapInfo.sites.a.y * 10})`"
-        class="site-marker-a"
+        :transform="`translate(${siteSvg(mapInfo.sites.a).x}, ${siteSvg(mapInfo.sites.a).y})`"
       >
         <circle cx="0" cy="0" r="28" fill="#ef4444" fill-opacity="0.15" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 4" />
         <circle cx="0" cy="0" r="14" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" />
         <text x="0" y="5" font-size="14" font-weight="900" text-anchor="middle" fill="#fee2e2" font-family="monospace">A</text>
       </g>
-
-      <!-- Bomb Site B -->
-      <g 
+      <g
         v-if="mapInfo.sites?.b"
-        :transform="`translate(${mapInfo.sites.b.x * 10}, ${mapInfo.sites.b.y * 10})`"
-        class="site-marker-b"
+        :transform="`translate(${siteSvg(mapInfo.sites.b).x}, ${siteSvg(mapInfo.sites.b).y})`"
       >
         <circle cx="0" cy="0" r="28" fill="#ef4444" fill-opacity="0.15" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 4" />
         <circle cx="0" cy="0" r="14" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" />
@@ -84,29 +135,28 @@ const hasRadarImage = computed(() => !!props.mapInfo.radarImage && mapStore.rada
       </g>
     </g>
 
-    <!-- LAYER 5: CALLOUT LABELS (IF ENABLED) -->
     <g v-if="showCallouts" class="callouts-layer opacity-85 transition-opacity duration-200">
-      <g 
-        v-for="callout in mapInfo.callouts" 
-        :key="callout.id" 
-        :transform="`translate(${callout.coords.x * 10}, ${callout.coords.y * 10})`"
+      <g
+        v-for="callout in callouts"
+        :key="callout.id"
+        :transform="`translate(${siteSvg(callout.coords).x}, ${siteSvg(callout.coords).y})`"
       >
         <circle cx="0" cy="0" r="2.5" fill="#64748b" />
-        <rect 
-          :x="-(callout.name.length * 3.5)" 
-          y="-18" 
-          :width="callout.name.length * 7" 
-          height="14" 
-          rx="3" 
-          fill="#0a0f18" 
-          fill-opacity="0.75" 
+        <rect
+          :x="-(callout.name.length * 3.5)"
+          y="-18"
+          :width="callout.name.length * 7"
+          height="14"
+          rx="3"
+          fill="#0a0f18"
+          fill-opacity="0.75"
         />
-        <text 
-          x="0" 
-          y="-8" 
-          font-size="10" 
-          font-weight="700" 
-          text-anchor="middle" 
+        <text
+          x="0"
+          y="-8"
+          font-size="10"
+          font-weight="700"
+          text-anchor="middle"
           fill="#cbd5e1"
           class="tracking-wider uppercase font-mono drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]"
         >

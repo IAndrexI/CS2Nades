@@ -2,7 +2,7 @@
 import { useLineupStore } from '../../stores/lineupStore'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup } from '../../types'
-import { Heart, Play, ArrowRight, Trash2 } from 'lucide-vue-next'
+import { Heart, Play, ArrowRight, Trash2, Globe, BookmarkCheck } from 'lucide-vue-next'
 
 const props = defineProps<{
   lineup: Lineup
@@ -15,6 +15,11 @@ function handleDelete(e: MouseEvent) {
   if (confirm(`Delete lineup "${props.lineup.title}"?`)) {
     lineupStore.deleteLineup(props.lineup.id)
   }
+}
+
+function handleToggleLibrary(e: MouseEvent) {
+  e.stopPropagation()
+  lineupStore.toggleShareToLibrary(props.lineup.id)
 }
 </script>
 
@@ -32,11 +37,11 @@ function handleDelete(e: MouseEvent) {
       />
       
       <!-- NADE TYPE BADGE (TOP LEFT) -->
-      <div class="absolute top-2.5 left-2.5 p-1.5 bg-slate-950/80 backdrop-blur-md rounded-lg border border-slate-800 shadow-md">
+      <div class="absolute top-2.5 left-2.5 p-1.5 bg-slate-950/80 backdrop-blur-md rounded-lg border border-slate-800 shadow-md flex items-center gap-1.5">
         <NadeIcon :type="lineup.grenadeType" :size="16" :filled="true" />
       </div>
 
-      <!-- TEAM SIDE BADGE & DELETE (TOP RIGHT) -->
+      <!-- TEAM SIDE BADGE & ACTIONS (TOP RIGHT) -->
       <div class="absolute top-2.5 right-2.5 flex items-center gap-1.5">
         <span 
           :class="[
@@ -46,6 +51,20 @@ function handleDelete(e: MouseEvent) {
         >
           {{ lineup.side }}
         </span>
+
+        <!-- SHARE TO LIBRARY BUTTON -->
+        <button
+          @click="handleToggleLibrary"
+          :class="[
+            'p-1 backdrop-blur-md rounded text-[10px] transition-colors cursor-pointer flex items-center gap-1',
+            lineup.inLibrary || lineup.isTeamShared
+              ? 'bg-amber-500/90 text-slate-950 hover:bg-amber-400 font-bold'
+              : 'bg-black/70 hover:bg-slate-700 text-slate-400 hover:text-white'
+          ]"
+          :title="lineup.inLibrary || lineup.isTeamShared ? 'Shared in Lineup Library (Click to make private)' : 'Share to Lineup Library'"
+        >
+          <Globe class="w-3 h-3" />
+        </button>
 
         <!-- DELETE BUTTON -->
         <button

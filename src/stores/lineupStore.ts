@@ -259,6 +259,36 @@ export const useLineupStore = defineStore('lineup', () => {
     }
   }
 
+  function toggleShareToLibrary(id: string) {
+    const idx = customLineups.value.findIndex(l => l.id === id)
+    if (idx >= 0) {
+      const current = customLineups.value[idx]
+      const newStatus = !(current.inLibrary || current.isTeamShared)
+      customLineups.value[idx] = {
+        ...current,
+        inLibrary: newStatus,
+        isTeamShared: newStatus,
+        updatedAt: new Date().toISOString()
+      }
+      saveToStorage()
+      pushToServer(customLineups.value[idx]).catch(() => {})
+    }
+  }
+
+  function addToLibrary(id: string) {
+    const idx = customLineups.value.findIndex(l => l.id === id)
+    if (idx >= 0) {
+      customLineups.value[idx] = {
+        ...customLineups.value[idx],
+        inLibrary: true,
+        isTeamShared: true,
+        updatedAt: new Date().toISOString()
+      }
+      saveToStorage()
+      pushToServer(customLineups.value[idx]).catch(() => {})
+    }
+  }
+
   function setActiveExecute(execId: string | null) {
     activeExecuteId.value = execId
   }
@@ -396,6 +426,8 @@ export const useLineupStore = defineStore('lineup', () => {
     deleteExecute,
     toggleLineupInExecute,
     setActiveExecute,
+    toggleShareToLibrary,
+    addToLibrary,
     exportJSON,
     importJSON,
     syncWithServer,

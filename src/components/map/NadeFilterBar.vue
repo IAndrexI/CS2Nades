@@ -14,7 +14,6 @@ import {
   Plus,
   Users,
   Shield,
-  Layers2,
   Play
 } from 'lucide-vue-next'
 
@@ -26,12 +25,6 @@ const nadeTypes: { type: GrenadeType; label: string }[] = [
   { type: 'flash', label: 'Flashes' },
   { type: 'molotov', label: 'Molotovs' },
   { type: 'he', label: 'HE Nades' }
-]
-
-const surfaceLevels = [
-  { id: 'all', label: 'All Levels' },
-  { id: 'upper', label: 'Upper' },
-  { id: 'lower', label: 'Lower' }
 ]
 
 const teams = [
@@ -102,27 +95,6 @@ const activeCount = computed(() => lineupStore.filteredLineups.length)
               class="w-2 h-2 rounded-full bg-sky-400"
             ></span>
             <span>{{ team.label }}</span>
-          </button>
-        </div>
-
-        <!-- SURFACE LEVEL FILTER (FOR NUKE, VERTIGO, MULTI-LEVEL MAPS) -->
-        <div class="flex items-center gap-1 p-1 bg-slate-950/90 rounded-xl border border-slate-800">
-          <span class="text-[10px] uppercase font-mono font-bold text-slate-500 px-1.5 flex items-center gap-1">
-            <Layers2 class="w-3 h-3" />
-            <span class="hidden sm:inline">Level:</span>
-          </span>
-          <button
-            v-for="lvl in surfaceLevels"
-            :key="lvl.id"
-            @click="mapStore.setSurfaceLevel(lvl.id as any)"
-            :class="[
-              'px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap',
-              mapStore.surfaceLevel === lvl.id
-                ? 'bg-slate-800 text-amber-400 border border-slate-700'
-                : 'text-slate-500 hover:text-slate-300'
-            ]"
-          >
-            {{ lvl.label }}
           </button>
         </div>
       </div>

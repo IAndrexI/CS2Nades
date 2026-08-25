@@ -26,6 +26,13 @@ export interface MapCallout {
   name: string
   site?: 'A' | 'B' | 'Mid' | 'Spawn' | 'Other'
   coords: Coordinates
+  floor?: 'upper' | 'lower'
+}
+
+export interface RadarFloor {
+  id: 'upper' | 'lower'
+  label: string
+  image: string
 }
 
 export interface MapInfo {
@@ -35,6 +42,7 @@ export interface MapInfo {
   activePool: boolean
   radarImage?: string // Official / Default radar image URL or local path
   customRadarImage?: string // User uploaded custom radar image
+  radarFloors?: RadarFloor[]
   viewBox: string
   sites: {
     a: Coordinates
@@ -81,7 +89,11 @@ export interface Lineup {
   // Metadata
   difficulty: 'easy' | 'medium' | 'hard'
   author?: string
+  authorName?: string
+  userId?: string
   isCustom?: boolean
+  inLibrary?: boolean
+  isTeamShared?: boolean
   createdAt: string
   updatedAt?: string
 }

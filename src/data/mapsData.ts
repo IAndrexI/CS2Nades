@@ -1,12 +1,14 @@
 import type { MapInfo } from '../types'
 
+const SR = (file: string) => `/radars/simpleradar/${file}`
+
 export const MAPS_DATA: MapInfo[] = [
   {
     id: 'mirage',
     name: 'Mirage',
     code: 'de_mirage',
     activePool: true,
-    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_mirage_radar_psd.png',
+    radarImage: SR('de_mirage_radar.png'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 74, y: 38 },
@@ -21,7 +23,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Inferno',
     code: 'de_inferno',
     activePool: true,
-    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_inferno_radar_psd.png',
+    radarImage: SR('de_inferno_radar.png'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 68, y: 32 },
@@ -36,7 +38,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Dust II',
     code: 'de_dust2',
     activePool: true,
-    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_dust2_radar_psd.png',
+    radarImage: SR('de_dust2_radar.png'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 78, y: 28 },
@@ -51,11 +53,15 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Nuke',
     code: 'de_nuke',
     activePool: true,
-    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_nuke_radar_psd.png',
-    viewBox: '0 0 1000 1000',
+    radarImage: SR('de_nuke_radar.png'),
+    radarFloors: [
+      { id: 'upper', label: 'Upper', image: SR('de_nuke_radar.png') },
+      { id: 'lower', label: 'Lower', image: SR('de_nuke_lower_radar.png') }
+    ],
+    viewBox: '0 0 2000 1000',
     sites: {
-      a: { x: 50, y: 45 },
-      b: { x: 50, y: 62 }
+      a: { x: 24.2, y: 47.5 },
+      b: { x: 74.2, y: 51.0 }
     },
     callouts: [],
     description: 'Multi-level nuclear facility with vertical soundscapes, strategic Outside smoke walls, and fast Ramp splits.',
@@ -66,7 +72,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Ancient',
     code: 'de_ancient',
     activePool: true,
-    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_ancient_radar_psd.png',
+    radarImage: SR('de_ancient_radar.png'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 74, y: 35 },
@@ -96,11 +102,15 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Vertigo',
     code: 'de_vertigo',
     activePool: true,
-    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_vertigo_radar_psd.png',
-    viewBox: '0 0 1000 1000',
+    radarImage: SR('de_vertigo_radar.png'),
+    radarFloors: [
+      { id: 'upper', label: 'Upper', image: SR('de_vertigo_radar.png') },
+      { id: 'lower', label: 'Lower', image: SR('de_vertigo_lower_radar.png') }
+    ],
+    viewBox: '0 0 2000 1000',
     sites: {
-      a: { x: 72, y: 38 },
-      b: { x: 30, y: 42 }
+      a: { x: 36, y: 38 },
+      b: { x: 65, y: 42 }
     },
     callouts: [],
     description: 'High-altitude skyscraper construction site with intense ramp duels and close-quarters combat.',
@@ -111,7 +121,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Overpass',
     code: 'de_overpass',
     activePool: false,
-    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_overpass_radar_psd.png',
+    radarImage: SR('de_overpass_radar.png'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 65, y: 35 },
@@ -126,7 +136,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Train',
     code: 'de_train',
     activePool: true,
-    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_train_radar_psd.png',
+    radarImage: SR('de_train_radar.png'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 48, y: 38 },
@@ -141,7 +151,7 @@ export const MAPS_DATA: MapInfo[] = [
     name: 'Cache',
     code: 'de_cache',
     activePool: false,
-    radarImage: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/radars/de_cache_radar_psd.png',
+    radarImage: SR('de_cache_radar.png'),
     viewBox: '0 0 1000 1000',
     sites: {
       a: { x: 72, y: 32 },

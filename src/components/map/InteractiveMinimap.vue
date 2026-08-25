@@ -5,6 +5,7 @@ import { useLineupStore } from '../../stores/lineupStore'
 import VectorMapBlueprint from './VectorMapBlueprint.vue'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup, GrenadeType } from '../../types'
+import { clientToPct, pctToSvg, trajectoryPath } from '../../utils/radarCoords'
 import { 
   ZoomIn, 
   ZoomOut, 
@@ -20,7 +21,10 @@ import {
   Sparkles,
   Play,
   Layers,
-  Users
+  Users,
+  PlusCircle,
+  Tag,
+  CheckCircle2
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -42,6 +46,16 @@ let hoverLeaveTimeout: any = null
 // Live cursor placement preview
 const liveCursorCoords = ref<{ x: number; y: number } | null>(null)
 
+// Right-click context menu state
+const contextMenuVisible = ref(false)
+const contextMenuPos = ref({ x: 0, y: 0 })
+const contextMenuCoords = ref<{ x: number; y: number } | null>(null)
+
+// Add callout dialog state
+const isCalloutModalOpen = ref(false)
+const newCalloutName = ref('')
+const newCalloutSite = ref<'A' | 'B' | 'Mid' | 'Spawn' | 'Other'>('A')
+
 // Helper for Grenade Colors (CSNADES.GG EXACT PALETTE)
 function getNadeColor(type: GrenadeType): string {
   switch (type) {
@@ -54,13 +68,40 @@ function getNadeColor(type: GrenadeType): string {
   }
 }
 
+// Current viewBox string
+const currentViewBox = computed(() => mapStore.currentMap.viewBox || '0 0 1000 1000')
+
+// Map pin transform calculation using SVG viewBox
+function getPinTransform(coords: { x: number; y: number }) {
+  const pt = pctToSvg(coords, currentViewBox.value)
+  return `translate(${pt.x}, ${pt.y})`
+}
+
+// Map trajectory curve calculation using SVG viewBox
+function getLineupTrajectoryPath(lineup: Lineup) {
+  return trajectoryPath(
+    lineup.originCoords,
+    lineup.landingCoords,
+    currentViewBox.value,
+    lineup.curveOffset || 0
+  )
+}
+
+function getLivePlacementTrajectoryPath() {
+  if (!mapStore.tempPlacement.origin || !liveCursorCoords.value) return ''
+  return trajectoryPath(
+    mapStore.tempPlacement.origin,
+    liveCursorCoords.value,
+    currentViewBox.value,
+    0
+  )
+}
+
 // Lineups that should display active trajectories
 const visibleTrajectories = computed<Lineup[]>(() => {
-  // If an Execute group is selected, ALWAYS show all trajectories in that execute together!
   if (lineupStore.activeExecute) {
     return lineupStore.activeExecuteLineups
   }
-
   if (selectedLineupId.value) {
     return lineupStore.filteredLineups.filter(l => l.id === selectedLineupId.value)
   }
@@ -78,31 +119,6 @@ const activeLineup = computed<Lineup | null>(() => {
   if (!selectedLineupId.value) return null
   return lineupStore.filteredLineups.find(l => l.id === selectedLineupId.value) || null
 })
-
-// Calculate SVG Bezier curve path between Origin and Landing
-function getTrajectoryPath(origin: { x: number; y: number }, landing: { x: number; y: number }, curveOffset = 0): string {
-  const ox = origin.x * 10
-  const oy = origin.y * 10
-  const lx = landing.x * 10
-  const ly = landing.y * 10
-
-  const mx = (ox + lx) / 2
-  const my = (oy + ly) / 2
-
-  const dx = lx - ox
-  const dy = ly - oy
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  
-  const archHeight = Math.min(Math.max(dist * 0.25, 20), 80) + (curveOffset * 2)
-  
-  const perpX = -dy / (dist || 1)
-  const perpY = dx / (dist || 1)
-
-  const cx = mx + perpX * archHeight
-  const cy = my + perpY * archHeight
-
-  return `M ${ox} ${oy} Q ${cx} ${cy} ${lx} ${ly}`
-}
 
 // Zoom handlers
 function handleWheel(e: WheelEvent) {
@@ -126,6 +142,10 @@ function resetZoom() {
 
 // Pan drag handlers
 function handleMouseDown(e: MouseEvent) {
+  if (contextMenuVisible.value) {
+    contextMenuVisible.value = false
+  }
+
   if (e.button !== 0) return
   
   if (mapStore.isPlacementMode) {
@@ -162,19 +182,21 @@ function handleMouseUp() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// BULLETPROOF COORDINATE SYSTEM: Direct SVG Rendered Bounding Box
+// BULLETPROOF COORDINATE SYSTEM: SVG Matrix Inversion
 // ─────────────────────────────────────────────────────────────
 function getSvgPoint(e: MouseEvent): { x: number; y: number } | null {
   if (!svgElement.value) return null
+  const pt = clientToPct(svgElement.value, e.clientX, e.clientY)
+  if (pt) return pt
+
   const rect = svgElement.value.getBoundingClientRect()
   if (rect.width === 0 || rect.height === 0) return null
-  
   const rawX = ((e.clientX - rect.left) / rect.width) * 100
   const rawY = ((e.clientY - rect.top) / rect.height) * 100
-  
-  const pctX = Math.round(Math.min(Math.max(rawX, 0), 100) * 10) / 10
-  const pctY = Math.round(Math.min(Math.max(rawY, 0), 100) * 10) / 10
-  return { x: pctX, y: pctY }
+  return {
+    x: Math.round(Math.min(Math.max(rawX, 0), 100) * 10) / 10,
+    y: Math.round(Math.min(Math.max(rawY, 0), 100) * 10) / 10
+  }
 }
 
 function handleMapClick(e: MouseEvent) {
@@ -190,6 +212,62 @@ function handleMapClick(e: MouseEvent) {
     liveCursorCoords.value = null
     lineupStore.isAddModalOpen = true
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// RIGHT-CLICK CONTEXT MENU HANDLERS
+// ─────────────────────────────────────────────────────────────
+function handleContextMenu(e: MouseEvent) {
+  if (mapStore.isPlacementMode) {
+    mapStore.cancelPlacement()
+    liveCursorCoords.value = null
+    return
+  }
+
+  const coords = getSvgPoint(e)
+  if (!coords || !mapContainer.value) return
+
+  const rect = mapContainer.value.getBoundingClientRect()
+  let x = e.clientX - rect.left
+  let y = e.clientY - rect.top
+
+  const menuWidth = 200
+  const menuHeight = 110
+  if (x + menuWidth > rect.width) x = rect.width - menuWidth - 10
+  if (y + menuHeight > rect.height) y = rect.height - menuHeight - 10
+  if (x < 10) x = 10
+  if (y < 10) y = 10
+
+  contextMenuPos.value = { x, y }
+  contextMenuCoords.value = coords
+  contextMenuVisible.value = true
+}
+
+function handleCreateLineupFromContextMenu() {
+  if (!contextMenuCoords.value) return
+  mapStore.tempPlacement.origin = { ...contextMenuCoords.value }
+  mapStore.isPlacementMode = true
+  mapStore.placementStep = 'landing'
+  contextMenuVisible.value = false
+}
+
+function handleOpenCalloutModalFromContextMenu() {
+  if (!contextMenuCoords.value) return
+  newCalloutName.value = ''
+  newCalloutSite.value = 'A'
+  isCalloutModalOpen.value = true
+  contextMenuVisible.value = false
+}
+
+function saveNewCallout() {
+  if (!newCalloutName.value.trim() || !contextMenuCoords.value) return
+  mapStore.addCustomCallout(mapStore.currentMapId, {
+    name: newCalloutName.value.trim(),
+    site: newCalloutSite.value,
+    coords: { ...contextMenuCoords.value }
+  })
+  mapStore.showCallouts = true
+  isCalloutModalOpen.value = false
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -277,6 +355,7 @@ function handleCopyCommand(command: string, e: MouseEvent) {
 function handleBackgroundMapClick() {
   closeTooltip()
   selectedLineupId.value = null
+  contextMenuVisible.value = false
 }
 
 onMounted(() => {
@@ -299,6 +378,7 @@ onUnmounted(() => {
       @mousedown="handleMouseDown"
       @mousemove="handleMouseMove"
       @click="handleBackgroundMapClick"
+      @contextmenu.prevent="handleContextMenu"
       :class="[
         mapStore.isPlacementMode ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-grab'
       ]"
@@ -312,7 +392,7 @@ onUnmounted(() => {
       >
         <svg 
           ref="svgElement"
-          viewBox="0 0 1000 1000" 
+          :viewBox="currentViewBox" 
           class="w-full h-full max-w-[960px] max-h-[960px] drop-shadow-[0_0_24px_rgba(0,0,0,0.8)]"
         >
           <!-- LAYER 1: CLEAN SIMPLERADAR VECTOR / PSD RADAR OVERVIEW -->
@@ -336,7 +416,7 @@ onUnmounted(() => {
             >
               <!-- WIDE TRANSPARENT HIT-AREA -->
               <path 
-                :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
+                :d="getLineupTrajectoryPath(lineup)"
                 fill="none" 
                 stroke="transparent" 
                 stroke-width="28"
@@ -345,7 +425,7 @@ onUnmounted(() => {
 
               <!-- Outer Trajectory Glow Line -->
               <path 
-                :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
+                :d="getLineupTrajectoryPath(lineup)"
                 fill="none" 
                 :stroke="getNadeColor(lineup.grenadeType)" 
                 :stroke-width="hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? '5' : '3.5'"
@@ -355,7 +435,7 @@ onUnmounted(() => {
 
               <!-- Inner Animated Dashed Line -->
               <path 
-                :d="getTrajectoryPath(lineup.originCoords, lineup.landingCoords, lineup.curveOffset)"
+                :d="getLineupTrajectoryPath(lineup)"
                 fill="none" 
                 :stroke="getNadeColor(lineup.grenadeType)" 
                 :stroke-width="hoveredLineup?.id === lineup.id || selectedLineupId === lineup.id ? '3' : '2'"
@@ -370,7 +450,7 @@ onUnmounted(() => {
             <g 
               v-for="lineup in (selectedLineupId ? visibleTrajectories : lineupStore.filteredLineups)" 
               :key="`origin-${lineup.id}`"
-              :transform="`translate(${lineup.originCoords.x * 10}, ${lineup.originCoords.y * 10})`"
+              :transform="getPinTransform(lineup.originCoords)"
               class="cursor-pointer"
               @mouseenter="handleLineupEnter(lineup, $event)"
               @mouseleave="handleLineupLeave"
@@ -415,7 +495,7 @@ onUnmounted(() => {
             <g 
               v-for="lineup in lineupStore.filteredLineups" 
               :key="`landing-${lineup.id}`"
-              :transform="`translate(${lineup.landingCoords.x * 10}, ${lineup.landingCoords.y * 10})`"
+              :transform="getPinTransform(lineup.landingCoords)"
               class="cursor-pointer"
               @mouseenter="handleLineupEnter(lineup, $event)"
               @mouseleave="handleLineupLeave"
@@ -480,7 +560,7 @@ onUnmounted(() => {
           <g v-if="mapStore.isPlacementMode" class="placement-pins-layer">
             <g 
               v-if="mapStore.tempPlacement.origin" 
-              :transform="`translate(${mapStore.tempPlacement.origin.x * 10}, ${mapStore.tempPlacement.origin.y * 10})`"
+              :transform="getPinTransform(mapStore.tempPlacement.origin)"
             >
               <circle cx="0" cy="0" r="18" fill="#22c55e" fill-opacity="0.3" stroke="#22c55e" stroke-width="2" class="animate-pulse" />
               <circle cx="0" cy="0" r="8" fill="#22c55e" stroke="#ffffff" stroke-width="2" />
@@ -489,14 +569,14 @@ onUnmounted(() => {
 
             <g v-if="mapStore.placementStep === 'landing' && mapStore.tempPlacement.origin && liveCursorCoords">
               <path 
-                :d="getTrajectoryPath(mapStore.tempPlacement.origin, liveCursorCoords)"
+                :d="getLivePlacementTrajectoryPath()"
                 fill="none" 
                 stroke="#de9b35" 
                 stroke-width="2.5" 
                 stroke-dasharray="6 6"
                 class="animate-trajectory"
               />
-              <g :transform="`translate(${liveCursorCoords.x * 10}, ${liveCursorCoords.y * 10})`">
+              <g :transform="getPinTransform(liveCursorCoords)">
                 <circle cx="0" cy="0" r="20" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" class="animate-pulse" />
                 <circle cx="0" cy="0" r="8" fill="#ef4444" stroke="#ffffff" stroke-width="2" />
                 <text x="0" y="-14" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">LANDING SPOT</text>
@@ -504,6 +584,105 @@ onUnmounted(() => {
             </g>
           </g>
         </svg>
+      </div>
+
+      <!-- RIGHT-CLICK CONTEXT MENU -->
+      <div 
+        v-if="contextMenuVisible"
+        class="absolute z-50 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl p-1.5 flex flex-col gap-1 min-w-[185px] animate-fade-in"
+        :style="{
+          left: `${contextMenuPos.x}px`,
+          top: `${contextMenuPos.y}px`
+        }"
+        @click.stop
+      >
+        <div class="px-2 py-1 border-b border-slate-800 text-[10px] uppercase font-mono font-bold text-slate-400">
+          Quick Actions ({{ contextMenuCoords?.x }}%, {{ contextMenuCoords?.y }}%)
+        </div>
+        <button
+          @click="handleCreateLineupFromContextMenu"
+          class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer"
+        >
+          <PlusCircle class="w-4 h-4 text-amber-400" />
+          <span>New Lineup Here</span>
+        </button>
+        <button
+          @click="handleOpenCalloutModalFromContextMenu"
+          class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-200 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer"
+        >
+          <Tag class="w-4 h-4 text-sky-400" />
+          <span>Add Callout Spot</span>
+        </button>
+      </div>
+
+      <!-- ADD CALLOUT DIALOG OVERLAY -->
+      <div
+        v-if="isCalloutModalOpen"
+        class="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+        @click.self="isCalloutModalOpen = false"
+      >
+        <div class="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl flex flex-col gap-4" @click.stop>
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+            <div class="flex items-center gap-2">
+              <Tag class="w-5 h-5 text-amber-400" />
+              <h3 class="font-bold text-sm text-white">Add Callout Spot</h3>
+            </div>
+            <button 
+              @click="isCalloutModalOpen = false"
+              class="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+            >
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <div class="flex flex-col gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1">Callout Name</label>
+              <input
+                v-model="newCalloutName"
+                type="text"
+                placeholder="e.g. Squeaky, Radio, Banana, Palace"
+                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                autofocus
+                @keyup.enter="saveNewCallout"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1">Site / Area</label>
+              <select
+                v-model="newCalloutSite"
+                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              >
+                <option value="A">A Site</option>
+                <option value="B">B Site</option>
+                <option value="Mid">Mid</option>
+                <option value="Spawn">Spawn</option>
+                <option value="Other">Other / General</option>
+              </select>
+            </div>
+
+            <div class="text-[11px] font-mono text-slate-400 bg-slate-950/80 p-2 rounded-lg border border-slate-800">
+              Coordinates: X: {{ contextMenuCoords?.x }}%, Y: {{ contextMenuCoords?.y }}%
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+            <button
+              @click="isCalloutModalOpen = false"
+              class="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              @click="saveNewCallout"
+              class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer"
+            >
+              <CheckCircle2 class="w-3.5 h-3.5" />
+              <span>Save Callout</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- PLACEMENT MODE BANNER HUD -->
@@ -516,7 +695,7 @@ onUnmounted(() => {
           {{ mapStore.placementStep === 'origin' ? 'Step 1: Click where you STAND (Origin)' : 'Step 2: Click where the grenade LANDS (Target)' }}
         </span>
         <button 
-          @click="mapStore.cancelPlacement()"
+          @click="mapStore.cancelPlacement(); liveCursorCoords = null"
           class="ml-2 px-2 py-0.5 bg-slate-950 text-white rounded text-[11px] hover:bg-slate-900 cursor-pointer"
         >
           Cancel
