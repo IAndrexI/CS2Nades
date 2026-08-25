@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useMapStore } from '../../stores/mapStore'
 import { useStratStore } from '../../stores/stratStore'
@@ -7,6 +7,7 @@ import { useAuthStore } from '../../stores/authStore'
 import VectorMapBlueprint from '../map/VectorMapBlueprint.vue'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { TacticsElement, TacticsElementType } from '../../types'
+import axios from 'axios'
 import { 
   Move, 
   ArrowUpRight, 
@@ -26,7 +27,11 @@ import {
   Share2,
   Check,
   Radio,
-  Sparkles
+  Sparkles,
+  Settings2,
+  Plus,
+  X,
+  Bomb
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -39,9 +44,27 @@ const isDrawing = ref(false)
 const currentStroke = ref<{ x: number; y: number }[]>([])
 const selectedElementId = ref<string | null>(null)
 
-// Room Link Sharing
+// Room Link Sharing & Cloudflare Tunnel Domain Discovery
 const roomCodeInput = ref('')
 const isCopied = ref(false)
+const serverPublicUrl = ref('')
+
+// Arrow Direction Control: Tail controls direction vs Head
+const arrowControlMode = ref<'tail_controls' | 'head_controls'>('tail_controls')
+
+// Custom Toolbar & Icon Manager
+const isCustomizeToolbarOpen = ref(false)
+
+export interface CustomPinDefinition {
+  id: string
+  label: string
+  color: string
+  symbol: string
+}
+const customPins = ref<CustomPinDefinition[]>([])
+const newPinLabel = ref('')
+const newPinSymbol = ref('⭐')
+const newPinColor = ref('#de9b35')
 
 // Custom Text placement
 const isTextInputModalOpen = ref(false)
@@ -57,24 +80,34 @@ const playerRoleText = ref('Entry')
 // Stroke Width
 const activeStrokeWidth = ref(4)
 
-const tools = [
-  { id: 'select', label: 'Select', icon: Move },
-  { id: 'pen', label: 'Freehand Pen', icon: PenTool },
-  { id: 'arrow', label: 'Arrow Path', icon: ArrowUpRight },
-  { id: 'line', label: 'Sightline / Line', icon: Minus },
-  { id: 'vision_cone', label: 'Vision FOV', icon: Eye },
-  { id: 'text', label: 'Text Note', icon: Type },
-  { id: 'smoke', label: 'Smoke Bloom', icon: Cloud },
-  { id: 'flash', label: 'Flash Burst', icon: Zap },
-  { id: 'molotov', label: 'Molotov Fire', icon: Flame },
-  { id: 'he_blast', label: 'HE Grenade', icon: Crosshair },
-  { id: 'c4_bomb', label: 'C4 Bomb', icon: Crosshair },
-  { id: 'plant_a', label: 'Plant A', icon: Crosshair },
-  { id: 'plant_b', label: 'Plant B', icon: Crosshair },
-  { id: 'player_t', label: 'T Player', icon: User },
-  { id: 'player_ct', label: 'CT Player', icon: User },
-  { id: 'eraser', label: 'Eraser', icon: Eraser }
+const allToolsCatalogue = [
+  { id: 'select', label: 'Select / Move', icon: Move, category: 'General' },
+  { id: 'pen', label: 'Freehand Pen', icon: PenTool, category: 'Drawing' },
+  { id: 'arrow', label: 'Arrow (Tail-Guided)', icon: ArrowUpRight, category: 'Drawing' },
+  { id: 'line', label: 'Sightline / Line', icon: Minus, category: 'Drawing' },
+  { id: 'vision_cone', label: 'Vision FOV', icon: Eye, category: 'Drawing' },
+  { id: 'text', label: 'Text Callout', icon: Type, category: 'General' },
+  { id: 'smoke', label: 'Smoke Bloom', icon: Cloud, category: 'Utility' },
+  { id: 'flash', label: 'Flash Burst', icon: Zap, category: 'Utility' },
+  { id: 'molotov', label: 'Molotov Fire', icon: Flame, category: 'Utility' },
+  { id: 'he_blast', label: 'HE Grenade', icon: Crosshair, category: 'Utility' },
+  { id: 'c4_bomb', label: 'C4 Bomb', icon: Bomb, category: 'Objectives' },
+  { id: 'plant_a', label: 'Plant A', icon: Crosshair, category: 'Objectives' },
+  { id: 'plant_b', label: 'Plant B', icon: Crosshair, category: 'Objectives' },
+  { id: 'player_t', label: 'T Player Pin', icon: User, category: 'Players' },
+  { id: 'player_ct', label: 'CT Player Pin', icon: User, category: 'Players' },
+  { id: 'eraser', label: 'Eraser', icon: Eraser, category: 'General' }
 ]
+
+const enabledToolIds = ref<string[]>([
+  'select', 'pen', 'arrow', 'line', 'vision_cone', 'text',
+  'smoke', 'flash', 'molotov', 'he_blast', 'c4_bomb',
+  'plant_a', 'plant_b', 'player_t', 'player_ct', 'eraser'
+])
+
+const visibleTools = computed(() => {
+  return allToolsCatalogue.filter(t => enabledToolIds.value.includes(t.id))
+})
 
 const colorPalette = [
   { hex: '#de9b35', name: 'CS2 Gold' },
@@ -90,7 +123,19 @@ const colorPalette = [
 
 const playerRolesList = ['Entry', 'IGL', 'Support', 'AWP', 'Lurker', 'Anchor', 'Rotator']
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    const saved = localStorage.getItem('protutech_tactics_toolbar_v2')
+    if (saved) enabledToolIds.value = JSON.parse(saved)
+    const savedPins = localStorage.getItem('protutech_tactics_custom_pins')
+    if (savedPins) customPins.value = JSON.parse(savedPins)
+  } catch (err) {}
+
+  try {
+    const infoRes = await axios.get('/api/server/info')
+    if (infoRes.data?.publicUrl) serverPublicUrl.value = infoRes.data.publicUrl
+  } catch (err) {}
+
   if (typeof window !== 'undefined') {
     const urlParams = new URLSearchParams(window.location.search)
     const roomParam = urlParams.get('room')
@@ -105,6 +150,34 @@ onMounted(() => {
   }
 })
 
+function toggleToolEnabled(toolId: string) {
+  if (enabledToolIds.value.includes(toolId)) {
+    if (enabledToolIds.value.length > 2) {
+      enabledToolIds.value = enabledToolIds.value.filter(id => id !== toolId)
+    }
+  } else {
+    enabledToolIds.value.push(toolId)
+  }
+  localStorage.setItem('protutech_tactics_toolbar_v2', JSON.stringify(enabledToolIds.value))
+}
+
+function handleAddCustomPin() {
+  if (!newPinLabel.value.trim()) return
+  customPins.value.push({
+    id: `cpin-${Date.now()}`,
+    label: newPinLabel.value.trim(),
+    symbol: newPinSymbol.value.trim() || '★',
+    color: newPinColor.value
+  })
+  localStorage.setItem('protutech_tactics_custom_pins', JSON.stringify(customPins.value))
+  newPinLabel.value = ''
+}
+
+function handleDeleteCustomPin(pinId: string) {
+  customPins.value = customPins.value.filter(p => p.id !== pinId)
+  localStorage.setItem('protutech_tactics_custom_pins', JSON.stringify(customPins.value))
+}
+
 function joinTacticalRoom(codeToJoin?: string) {
   const code = (codeToJoin || roomCodeInput.value || 'TACTIC-SQUAD').trim().toUpperCase()
   const user = authStore.currentUser || {
@@ -118,10 +191,22 @@ function joinTacticalRoom(codeToJoin?: string) {
 
 function handleCopyRoomLink() {
   const room = gameRoomStore.currentRoomCode || roomCodeInput.value || 'TACTIC-SQUAD'
-  const url = `${window.location.origin}/tactics?room=${room}`
+  const baseDomain = serverPublicUrl.value || window.location.origin
+  const url = `${baseDomain}/tactics?room=${room}`
   navigator.clipboard.writeText(url)
   isCopied.value = true
   setTimeout(() => { isCopied.value = false }, 2500)
+}
+
+function placeCustomPin(pin: CustomPinDefinition) {
+  stratStore.addBoardElement({
+    id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    type: 'text',
+    color: pin.color,
+    points: [{ x: 50, y: 50 }],
+    text: `${pin.symbol} ${pin.label}`,
+    radius: 13
+  })
 }
 
 function getMapCoords(e: MouseEvent): { x: number; y: number } {
@@ -252,12 +337,19 @@ function handleMouseUp() {
 
   const tool = stratStore.activeTool
   if (currentStroke.value.length >= 2) {
+    let finalPoints = [...currentStroke.value]
+    // Tail-controlled mode: First click was the Head (target), dragging pulled the Tail.
+    // We reverse so points[0] = Tail (origin), points[1] = Head (destination + arrowhead)
+    if (tool === 'arrow' && arrowControlMode.value === 'tail_controls') {
+      finalPoints = [currentStroke.value[1], currentStroke.value[0]]
+    }
+
     addElement({
       id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       type: (tool === 'pen' ? 'pen' : tool === 'arrow' ? 'arrow' : tool === 'vision_cone' ? 'vision_cone' : 'line') as TacticsElementType,
       color: stratStore.activeColor,
       strokeWidth: activeStrokeWidth.value,
-      points: [...currentStroke.value]
+      points: finalPoints
     })
   }
   currentStroke.value = []
@@ -357,7 +449,7 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
         <!-- 1-CLICK COPY LINK -->
         <button
           @click="handleCopyRoomLink"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-755 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
           title="Share room link with teammates"
         >
           <Check v-if="isCopied" class="w-3.5 h-3.5 text-emerald-400" />
@@ -366,9 +458,18 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
         </button>
       </div>
 
-      <!-- MAP SELECTOR -->
-      <div class="flex items-center gap-2">
-        <span class="text-xs text-slate-400 font-bold">Map:</span>
+      <!-- MAP SELECTOR & CUSTOMIZE TOOLBAR BUTTON -->
+      <div class="flex items-center gap-2.5">
+        <button
+          @click="isCustomizeToolbarOpen = true"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-amber-400 border border-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          title="Customize toolbar icons and add custom pins"
+        >
+          <Settings2 class="w-3.5 h-3.5" />
+          <span>Customize Icons</span>
+        </button>
+
+        <span class="text-xs text-slate-400 font-bold hidden sm:inline">Map:</span>
         <select
           :value="mapStore.currentMapId"
           @change="mapStore.setMap(($event.target as HTMLSelectElement).value)"
@@ -381,12 +482,12 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
       </div>
     </div>
 
-    <!-- MAIN TACTICAL TOOLBAR -->
+    <!-- MAIN TACTICAL TOOLBAR (CUSTOMIZED BY USER) -->
     <div class="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl">
-      <!-- DRAWING & STAMP TOOLS -->
-      <div class="flex flex-wrap items-center gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
+      <!-- ENABLED DRAWING & STAMP TOOLS -->
+      <div class="flex flex-wrap items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
         <button
-          v-for="tool in tools"
+          v-for="tool in visibleTools"
           :key="tool.id"
           @click="stratStore.activeTool = tool.id as any"
           :title="tool.label"
@@ -399,6 +500,40 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
         >
           <component :is="tool.icon" class="w-3.5 h-3.5" />
           <span class="hidden sm:inline">{{ tool.label }}</span>
+        </button>
+
+        <!-- CUSTOM PINS QUICK ACCESS -->
+        <button
+          v-for="pin in customPins"
+          :key="pin.id"
+          @click="placeCustomPin(pin)"
+          :title="`Place custom pin: ${pin.label}`"
+          class="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-slate-900 border border-slate-800 hover:border-amber-500/50 transition-all cursor-pointer text-slate-300 hover:text-white"
+        >
+          <span>{{ pin.symbol }}</span>
+          <span class="hidden md:inline">{{ pin.label }}</span>
+        </button>
+      </div>
+
+      <!-- ARROW TAIL PIVOT TOGGLE (IF ARROW ACTIVE) -->
+      <div 
+        v-if="stratStore.activeTool === 'arrow'"
+        class="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs"
+      >
+        <span class="text-[10px] text-slate-400 font-bold uppercase px-1">Arrow Pivot:</span>
+        <button
+          @click="arrowControlMode = 'tail_controls'"
+          :class="['px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer', arrowControlMode === 'tail_controls' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white']"
+          title="Drag tail to steer arrow direction (Target fixed at first click)"
+        >
+          Tail Controls
+        </button>
+        <button
+          @click="arrowControlMode = 'head_controls'"
+          :class="['px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer', arrowControlMode === 'head_controls' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white']"
+          title="Standard drag towards head"
+        >
+          Head Controls
         </button>
       </div>
 
@@ -777,8 +912,31 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
             stroke-linejoin="round"
           />
 
+          <!-- ARROW PREVIEW (TAIL-GUIDED) -->
+          <g v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'arrow'">
+            <line
+              :x1="arrowControlMode === 'tail_controls' ? currentStroke[1].x * 10 : currentStroke[0].x * 10"
+              :y1="arrowControlMode === 'tail_controls' ? currentStroke[1].y * 10 : currentStroke[0].y * 10"
+              :x2="arrowControlMode === 'tail_controls' ? currentStroke[0].x * 10 : currentStroke[1].x * 10"
+              :y2="arrowControlMode === 'tail_controls' ? currentStroke[0].y * 10 : currentStroke[1].y * 10"
+              :stroke="stratStore.activeColor"
+              :stroke-width="activeStrokeWidth"
+              stroke-linecap="round"
+              marker-end="url(#arrowhead-active)"
+            />
+            <!-- Visual Tail Pivot Circle -->
+            <circle
+              :cx="arrowControlMode === 'tail_controls' ? currentStroke[1].x * 10 : currentStroke[0].x * 10"
+              :cy="arrowControlMode === 'tail_controls' ? currentStroke[1].y * 10 : currentStroke[0].y * 10"
+              r="4.5"
+              :fill="stratStore.activeColor"
+              stroke="#0f172a"
+              stroke-width="1.5"
+            />
+          </g>
+
           <line
-            v-else-if="isDrawing && currentStroke.length === 2 && (stratStore.activeTool === 'arrow' || stratStore.activeTool === 'line')"
+            v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'line'"
             :x1="currentStroke[0].x * 10"
             :y1="currentStroke[0].y * 10"
             :x2="currentStroke[1].x * 10"
@@ -786,7 +944,6 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
             :stroke="stratStore.activeColor"
             :stroke-width="activeStrokeWidth"
             stroke-linecap="round"
-            :marker-end="stratStore.activeTool === 'arrow' ? 'url(#arrowhead-active)' : undefined"
           />
 
           <path
@@ -801,7 +958,121 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
       </svg>
     </div>
 
-    <!-- TEXT CALLOUT INPUT MODAL -->
+    <!-- MODAL 1: CUSTOMIZE TOOLBAR & ENABLED ICONS -->
+    <div
+      v-if="isCustomizeToolbarOpen"
+      class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+      @click.self="isCustomizeToolbarOpen = false"
+    >
+      <div class="w-full max-w-xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <!-- HEADER -->
+        <div class="p-5 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <Settings2 class="w-5 h-5 text-amber-400" />
+            <div>
+              <h3 class="text-sm font-black uppercase text-white">Customize Tactics Room Toolbar</h3>
+              <p class="text-xs text-slate-400">Enable or disable quick-access icons and create custom tactical pins</p>
+            </div>
+          </div>
+          <button
+            @click="isCustomizeToolbarOpen = false"
+            class="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 cursor-pointer"
+          >
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <!-- BODY: TOOL TOGGLES -->
+        <div class="p-6 overflow-y-auto flex flex-col gap-6 text-xs">
+          <!-- TOOL CATEGORIES -->
+          <div class="flex flex-col gap-3">
+            <h4 class="font-bold text-amber-400 uppercase tracking-wider text-[11px]">Enabled Toolbar Icons</h4>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <button
+                v-for="tool in allToolsCatalogue"
+                :key="tool.id"
+                @click="toggleToolEnabled(tool.id)"
+                :class="[
+                  'flex items-center justify-between p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer text-left',
+                  enabledToolIds.includes(tool.id)
+                    ? 'bg-amber-500/15 border-amber-500/50 text-white'
+                    : 'bg-slate-950 border-slate-800 text-slate-500 opacity-60 hover:opacity-100'
+                ]"
+              >
+                <div class="flex items-center gap-2">
+                  <component :is="tool.icon" class="w-4 h-4 text-amber-400" />
+                  <span>{{ tool.label }}</span>
+                </div>
+                <div
+                  :class="[
+                    'w-4 h-4 rounded-md border flex items-center justify-center text-[10px]',
+                    enabledToolIds.includes(tool.id) ? 'bg-amber-500 border-amber-500 text-slate-950 font-black' : 'border-slate-700'
+                  ]"
+                >
+                  <Check v-if="enabledToolIds.includes(tool.id)" class="w-3 h-3 stroke-[3]" />
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- CREATE CUSTOM STAMPED PIN -->
+          <div class="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl flex flex-col gap-3">
+            <h4 class="font-bold text-amber-400 uppercase tracking-wider text-[11px]">Create Custom Tactical Pin</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input
+                v-model="newPinLabel"
+                type="text"
+                placeholder="Pin Label (e.g. Danger, Sniper)"
+                class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+              <input
+                v-model="newPinSymbol"
+                type="text"
+                placeholder="Symbol (e.g. ⚠️, 🎯, 💀)"
+                class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+              <button
+                @click="handleAddCustomPin"
+                class="px-3 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl cursor-pointer flex items-center justify-center gap-1.5 shadow"
+              >
+                <Plus class="w-4 h-4" />
+                <span>Add Pin</span>
+              </button>
+            </div>
+
+            <!-- EXISTING CUSTOM PINS -->
+            <div v-if="customPins.length > 0" class="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
+              <div
+                v-for="pin in customPins"
+                :key="pin.id"
+                class="flex items-center gap-2 px-3 py-1 bg-slate-900 border border-slate-800 rounded-xl"
+              >
+                <span>{{ pin.symbol }}</span>
+                <span class="font-bold text-white">{{ pin.label }}</span>
+                <button
+                  @click="handleDeleteCustomPin(pin.id)"
+                  class="text-slate-500 hover:text-rose-400 cursor-pointer"
+                >
+                  <X class="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-end">
+          <button
+            @click="isCustomizeToolbarOpen = false"
+            class="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow"
+          >
+            Save & Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 2: TEXT CALLOUT INPUT MODAL -->
     <div
       v-if="isTextInputModalOpen"
       class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"

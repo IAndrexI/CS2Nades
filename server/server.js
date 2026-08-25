@@ -13,16 +13,30 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
+
+// Cloudflare Tunnel, Reverse Proxy & Custom Domain Support
+app.set('trust proxy', true)
+
 const server = http.createServer(app)
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
+    origin: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 })
+
+// Enable Cross-Origin Resource Sharing with credentials for any custom domain / Cloudflare tunnel
+app.use(cors({
+  origin: true,
+  credentials: true
+}))
 
 const PORT = process.env.PORT || 5000
 const JWT_SECRET = process.env.JWT_SECRET || 'cs2-stratbook-secret-key-2026'
+const PUBLIC_DOMAIN = process.env.PUBLIC_DOMAIN || process.env.DOMAIN || ''
 
 // Data storage directory (supports persistent volume mount e.g. /data in Docker)
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data')
@@ -511,6 +525,26 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
   db.users = db.users.filter(u => u.id !== id)
   saveDB(db)
   res.json({ success: true })
+})
+
+// ==========================================
+// SERVER HEALTH & DOMAIN DISCOVERY (CLOUDFLARE TUNNEL / REVERSE PROXY)
+// ==========================================
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: Date.now() })
+})
+
+app.get('/api/server/info', (req, res) => {
+  const forwardedProto = req.headers['x-forwarded-proto'] || req.protocol
+  const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host
+  const detectedUrl = `${forwardedProto}://${forwardedHost}`
+  
+  res.json({
+    siteTitle: 'Protutech',
+    publicUrl: PUBLIC_DOMAIN ? (PUBLIC_DOMAIN.startsWith('http') ? PUBLIC_DOMAIN : `https://${PUBLIC_DOMAIN}`) : detectedUrl,
+    domain: forwardedHost,
+    isHttps: forwardedProto === 'https'
+  })
 })
 
 // ==========================================
