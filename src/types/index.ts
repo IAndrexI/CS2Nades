@@ -51,6 +51,8 @@ export interface MapInfo {
   callouts: MapCallout[]
   description: string
   thumbnail: string
+  icon?: string // Map logo icon from /map-icons/
+  minimap?: string // Map overview texture from /minimaps/
   isCustom?: boolean
 }
 

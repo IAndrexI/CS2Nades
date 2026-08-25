@@ -94,9 +94,15 @@ async function handleSyncLineups() {
         <div class="relative">
           <button
             @click="isMapDropdownOpen = !isMapDropdownOpen"
-            class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
+            class="flex items-center gap-2 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
           >
-            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <img 
+              v-if="mapStore.currentMap.icon" 
+              :src="mapStore.currentMap.icon" 
+              :alt="mapStore.currentMap.name" 
+              class="w-4 h-4 object-contain"
+            />
+            <span v-else class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
             <span class="uppercase tracking-wide font-mono">{{ mapStore.currentMap.name }}</span>
             <ChevronDown class="w-3.5 h-3.5 text-slate-400" />
           </button>
@@ -104,7 +110,7 @@ async function handleSyncLineups() {
           <!-- DROPDOWN MENU -->
           <div 
             v-if="isMapDropdownOpen"
-            class="absolute top-full left-0 mt-2 w-60 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in"
+            class="absolute top-full left-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in"
           >
             <div class="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
               <span>Select Map</span>
@@ -117,7 +123,7 @@ async function handleSyncLineups() {
               </button>
             </div>
 
-            <div class="max-h-60 overflow-y-auto">
+            <div class="max-h-72 overflow-y-auto">
               <button
                 v-for="map in mapStore.availableMaps"
                 :key="map.id"
@@ -129,12 +135,24 @@ async function handleSyncLineups() {
                     : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                 ]"
               >
-                <span>{{ map.name }}</span>
+                <div class="flex items-center gap-2">
+                  <img 
+                    v-if="map.icon" 
+                    :src="map.icon" 
+                    :alt="map.name" 
+                    class="w-4 h-4 object-contain flex-shrink-0"
+                  />
+                  <span>{{ map.name }}</span>
+                </div>
+
                 <span v-if="map.isCustom" class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
                   CUSTOM
                 </span>
-                <span v-else-if="map.activePool" class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
-                  ACTIVE
+                <span v-else-if="map.activePool" class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 font-black">
+                  PREMIER
+                </span>
+                <span v-else class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-500">
+                  RESERVE
                 </span>
               </button>
             </div>

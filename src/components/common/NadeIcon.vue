@@ -4,17 +4,38 @@ import type { GrenadeType } from '../../types'
 
 const props = withDefaults(
   defineProps<{
-    type: GrenadeType
+    type: GrenadeType | 'c4' | 'defuse'
     size?: number | string
     className?: string
     filled?: boolean
+    useImage?: boolean
   }>(),
   {
     size: 20,
     filled: false,
+    useImage: true,
     className: ''
   }
 )
+
+const iconSrc = computed(() => {
+  switch (props.type) {
+    case 'smoke':
+      return '/icons/smoke.png'
+    case 'flash':
+      return '/icons/flash.png'
+    case 'molotov':
+      return '/icons/molotov.png'
+    case 'he':
+      return '/icons/grenade.png'
+    case 'c4':
+      return '/icons/c4.png'
+    case 'defuse':
+      return '/icons/defusekit.png'
+    default:
+      return null
+  }
+})
 
 const colorClass = computed(() => {
   switch (props.type) {
@@ -36,9 +57,19 @@ const colorClass = computed(() => {
 
 <template>
   <div :class="['inline-flex items-center justify-center flex-shrink-0', colorClass, className]">
-    <!-- SMOKE ICON -->
+    <!-- AUTHENTIC CS2 ICON IMAGE (IF AVAILABLE) -->
+    <img 
+      v-if="useImage && iconSrc" 
+      :src="iconSrc" 
+      :alt="type" 
+      :style="{ width: typeof size === 'number' ? `${size}px` : size, height: typeof size === 'number' ? `${size}px` : size }"
+      class="object-contain filter drop-shadow-[0_1px_4px_rgba(0,0,0,0.6)]"
+      loading="lazy"
+    />
+
+    <!-- SMOKE FALLBACK SVG -->
     <svg 
-      v-if="type === 'smoke'" 
+      v-else-if="type === 'smoke'" 
       :width="size" 
       :height="size" 
       viewBox="0 0 24 24" 
