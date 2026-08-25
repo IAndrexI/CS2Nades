@@ -174,3 +174,58 @@ export interface NadeExecute {
   author?: string
   createdAt?: string
 }
+
+export interface UserSocials {
+  steamUrl?: string
+  steamId?: string
+  discordTag?: string
+  reddit?: string
+  youtube?: string
+  twitter?: string
+  twitch?: string
+}
+
+export interface UserPrivacy {
+  hideSteam?: boolean
+  hideSocials?: boolean
+  hideDetails?: boolean
+  hideLineups?: boolean
+}
+
+export interface UserNotifications {
+  emailLineups?: boolean
+  emailStrats?: boolean
+  discordAlerts?: boolean
+  highlightColor?: string
+}
+
+export interface UserProfile {
+  id: string
+  steamId?: string
+  username: string
+  email?: string
+  role: 'admin' | 'coach' | 'player' | 'guest'
+  inGameRole?: string
+  avatar?: string
+  banner?: string
+  bio?: string
+  gender?: string
+  birthday?: string
+  socials?: UserSocials
+  privacy?: UserPrivacy
+  notifications?: UserNotifications
+  themeColor?: string
+  following?: string[]
+  createdAt?: string
+}
+
+export interface DirectMessage {
+  id: string
+  senderId: string
+  senderUsername: string
+  senderAvatar?: string
+  recipientId: string
+  text: string
+  createdAt: string
+  read?: boolean
+}

@@ -429,9 +429,31 @@ app.put('/api/auth/profile', requireAuth, (req, res) => {
   const userIndex = db.users.findIndex(u => u.id === req.user.id)
   if (userIndex === -1) return res.status(404).json({ error: 'User not found' })
 
-  const { inGameRole, avatar, email, password } = req.body
-  if (inGameRole) db.users[userIndex].inGameRole = inGameRole
-  if (avatar) db.users[userIndex].avatar = avatar
+  const { 
+    inGameRole, 
+    avatar, 
+    banner,
+    bio,
+    gender,
+    birthday,
+    socials,
+    privacy,
+    notifications,
+    themeColor,
+    email, 
+    password 
+  } = req.body
+
+  if (inGameRole !== undefined) db.users[userIndex].inGameRole = inGameRole
+  if (avatar !== undefined) db.users[userIndex].avatar = avatar
+  if (banner !== undefined) db.users[userIndex].banner = banner
+  if (bio !== undefined) db.users[userIndex].bio = bio
+  if (gender !== undefined) db.users[userIndex].gender = gender
+  if (birthday !== undefined) db.users[userIndex].birthday = birthday
+  if (socials !== undefined) db.users[userIndex].socials = { ...(db.users[userIndex].socials || {}), ...socials }
+  if (privacy !== undefined) db.users[userIndex].privacy = { ...(db.users[userIndex].privacy || {}), ...privacy }
+  if (notifications !== undefined) db.users[userIndex].notifications = { ...(db.users[userIndex].notifications || {}), ...notifications }
+  if (themeColor !== undefined) db.users[userIndex].themeColor = themeColor
   if (email !== undefined) db.users[userIndex].email = email
   if (password && password.trim().length >= 4) {
     const salt = bcrypt.genSaltSync(10)
@@ -441,6 +463,122 @@ app.put('/api/auth/profile', requireAuth, (req, res) => {
   saveDB(db)
   const { passwordHash, ...userSafe } = db.users[userIndex]
   res.json({ user: userSafe })
+})
+
+// DELETE ACCOUNT (COMPLETE DATA WIPE)
+app.delete('/api/auth/account', requireAuth, (req, res) => {
+  db = loadDB()
+  const userId = req.user.id
+  
+  // Wipe personal lineups
+  db.lineups = db.lineups.filter(l => l.userId !== userId)
+  
+  // Wipe personal strategies
+  db.strats = (db.strats || []).filter(s => s.userId !== userId)
+  
+  // Delete personal JSON file if exists
+  try {
+    const userPersonalFile = path.join(PERSONAL_DIR, `${userId}.json`)
+    if (fs.existsSync(userPersonalFile)) {
+      fs.unlinkSync(userPersonalFile)
+    }
+  } catch (err) {}
+
+  // Remove user
+  db.users = db.users.filter(u => u.id !== userId)
+  saveDB(db)
+  res.json({ success: true, message: 'Account and associated data completely wiped' })
+})
+
+// PUBLIC / TEAMMATE PROFILE
+app.get('/api/users/:id', (req, res) => {
+  db = loadDB()
+  const user = db.users.find(u => u.id === req.params.id)
+  if (!user) return res.status(404).json({ error: 'User not found' })
+
+  const privacy = user.privacy || {}
+  const safeProfile = {
+    id: user.id,
+    username: user.username,
+    avatar: user.avatar,
+    banner: user.banner,
+    role: user.role,
+    inGameRole: user.inGameRole,
+    bio: user.bio,
+    themeColor: user.themeColor,
+    createdAt: user.createdAt,
+    gender: privacy.hideDetails ? undefined : user.gender,
+    birthday: privacy.hideDetails ? undefined : user.birthday,
+    socials: privacy.hideSocials ? {} : (user.socials || {}),
+    steamId: privacy.hideSteam ? undefined : user.steamId
+  }
+  res.json(safeProfile)
+})
+
+// DIRECT MESSAGES (PMs)
+app.get('/api/dm/conversations', requireAuth, (req, res) => {
+  db = loadDB()
+  if (!db.dms) db.dms = []
+  const userId = req.user.id
+  
+  const userDms = db.dms.filter(m => m.senderId === userId || m.recipientId === userId)
+  const contactIds = Array.from(new Set(userDms.map(m => m.senderId === userId ? m.recipientId : m.senderId)))
+  
+  const contacts = contactIds.map(cid => {
+    const u = db.users.find(x => x.id === cid)
+    const lastMsg = userDms.filter(m => (m.senderId === cid && m.recipientId === userId) || (m.senderId === userId && m.recipientId === cid)).pop()
+    return {
+      id: cid,
+      username: u?.username || 'Unknown',
+      avatar: u?.avatar,
+      inGameRole: u?.inGameRole,
+      lastMessage: lastMsg?.text || '',
+      lastMessageTime: lastMsg?.createdAt || ''
+    }
+  })
+  res.json(contacts)
+})
+
+app.get('/api/dm/messages/:targetId', requireAuth, (req, res) => {
+  db = loadDB()
+  if (!db.dms) db.dms = []
+  const userId = req.user.id
+  const targetId = req.params.targetId
+  
+  const thread = db.dms.filter(m => 
+    (m.senderId === userId && m.recipientId === targetId) ||
+    (m.senderId === targetId && m.recipientId === userId)
+  )
+  res.json(thread)
+})
+
+app.post('/api/dm/messages/:targetId', requireAuth, (req, res) => {
+  db = loadDB()
+  if (!db.dms) db.dms = []
+  const userId = req.user.id
+  const targetId = req.params.targetId
+  const { text } = req.body
+  
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Message cannot be empty' })
+
+  const sender = db.users.find(u => u.id === userId)
+  const newMsg = {
+    id: `dm-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    senderId: userId,
+    senderUsername: sender?.username || req.user.username,
+    senderAvatar: sender?.avatar,
+    recipientId: targetId,
+    text: text.trim(),
+    createdAt: new Date().toISOString(),
+    read: false
+  }
+
+  db.dms.push(newMsg)
+  saveDB(db)
+
+  // Emit real-time DM to recipient if connected
+  io.emit(`dm:${targetId}`, newMsg)
+  res.json(newMsg)
 })
 
 // ==========================================
@@ -816,10 +954,43 @@ io.on('connection', (socket) => {
     socket.to(currentRoomId).emit('room:stroke', strokeData)
   })
 
+  // Full Tactical Elements Real-time Sync
+  socket.on('room:element_add', (element) => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId)) return
+    const room = gameRooms.get(currentRoomId)
+    if (!room.elements) room.elements = []
+    room.elements.push(element)
+    socket.to(currentRoomId).emit('room:element_added', element)
+  })
+
+  socket.on('room:element_remove', (elementId) => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId)) return
+    const room = gameRooms.get(currentRoomId)
+    if (!room.elements) room.elements = []
+    room.elements = room.elements.filter(e => e.id !== elementId)
+    socket.to(currentRoomId).emit('room:element_removed', elementId)
+  })
+
+  socket.on('room:elements_sync', (elements) => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId)) return
+    const room = gameRooms.get(currentRoomId)
+    room.elements = elements
+    socket.to(currentRoomId).emit('room:elements_synced', elements)
+  })
+
+  // Host Permission Controls (Allow Guests to Modify or Lock Board)
+  socket.on('room:set_lock', ({ allowGuestsToDraw }) => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId)) return
+    const room = gameRooms.get(currentRoomId)
+    room.allowGuestsToDraw = allowGuestsToDraw
+    io.to(currentRoomId).emit('room:lock_updated', { allowGuestsToDraw })
+  })
+
   socket.on('room:clear_drawings', () => {
     if (!currentRoomId || !gameRooms.has(currentRoomId)) return
     const room = gameRooms.get(currentRoomId)
     room.drawings = []
+    room.elements = []
     io.to(currentRoomId).emit('room:drawings_cleared')
   })
 

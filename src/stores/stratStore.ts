@@ -157,6 +157,12 @@ export const useStratStore = defineStore('strat', () => {
     }
   }
 
+  function setBoardElements(elements: TacticsElement[]) {
+    boardElements.value = [...elements]
+    history.value.push([...boardElements.value])
+    historyIndex.value = history.value.length - 1
+  }
+
   function redo() {
     if (historyIndex.value < history.value.length - 1) {
       historyIndex.value++
@@ -183,6 +189,7 @@ export const useStratStore = defineStore('strat', () => {
     deleteStrat,
     addBoardElement,
     removeBoardElement,
+    setBoardElements,
     clearBoard,
     undo,
     redo

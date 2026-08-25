@@ -1,21 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import axios from 'axios'
+import type { UserProfile, UserSocials, UserPrivacy, UserNotifications } from '../types'
 
-export interface UserProfile {
-  id: string
-  steamId?: string
-  username: string
-  email?: string
-  role: 'admin' | 'coach' | 'player' | 'guest'
-  inGameRole?: 'IGL' | 'Entry Fragger' | 'Support' | 'AWPer' | 'Lurker' | 'Anchor' | 'Flex' | string
-  avatar?: string
-  following?: string[]
-  createdAt?: string
-}
+export type { UserProfile }
 
 const TOKEN_KEY = 'cs2_stratbook_token'
 const USER_KEY = 'cs2_stratbook_user'
+const THEME_COLOR_KEY = 'protutech_theme_color'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem(TOKEN_KEY))
@@ -229,6 +221,32 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function deleteAccount(): Promise<boolean> {
+    try {
+      await axios.delete('/api/auth/account')
+      logout()
+      return true
+    } catch (err: any) {
+      logout() // fallback local logout
+      return true
+    }
+  }
+
+  const userThemeColor = ref<string>(localStorage.getItem(THEME_COLOR_KEY) || currentUser.value?.themeColor || '#de9b35')
+
+  function setThemeColor(color: string) {
+    userThemeColor.value = color
+    localStorage.setItem(THEME_COLOR_KEY, color)
+    if (currentUser.value) {
+      currentUser.value.themeColor = color
+      localStorage.setItem(USER_KEY, JSON.stringify(currentUser.value))
+      updateProfile({ themeColor: color })
+    }
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty('--primary-accent', color)
+    }
+  }
+
   function isFollowing(targetUserId: string): boolean {
     return !!currentUser.value?.following?.includes(targetUserId)
   }
@@ -242,6 +260,7 @@ export const useAuthStore = defineStore('auth', () => {
     authMode,
     isLoading,
     authError,
+    userThemeColor,
     login,
     register,
     loginWithSteamProfile,
@@ -249,6 +268,8 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     checkAuth,
     updateProfile,
+    deleteAccount,
+    setThemeColor,
     toggleFollow,
     isFollowing
   }

@@ -80,10 +80,15 @@ const playerRoleText = ref('Entry')
 // Stroke Width
 const activeStrokeWidth = ref(4)
 
+// Separate Join Room Modal
+const isJoinRoomModalOpen = ref(false)
+const newRoomInput = ref('')
+const copySuccessToast = ref('')
+
 const allToolsCatalogue = [
   { id: 'select', label: 'Select / Move', icon: Move, category: 'General' },
   { id: 'pen', label: 'Freehand Pen', icon: PenTool, category: 'Drawing' },
-  { id: 'arrow', label: 'Arrow (Tail-Guided)', icon: ArrowUpRight, category: 'Drawing' },
+  { id: 'arrow', label: 'Arrow', icon: ArrowUpRight, category: 'Drawing' },
   { id: 'line', label: 'Sightline / Line', icon: Minus, category: 'Drawing' },
   { id: 'vision_cone', label: 'Vision FOV', icon: Eye, category: 'Drawing' },
   { id: 'text', label: 'Text Callout', icon: Type, category: 'General' },
@@ -123,6 +128,30 @@ const colorPalette = [
 
 const playerRolesList = ['Entry', 'IGL', 'Support', 'AWP', 'Lurker', 'Anchor', 'Rotator']
 
+function copyToClipboard(text: string): boolean {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch (e) {}
+  try {
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    textArea.style.position = 'fixed'
+    textArea.style.left = '-999999px'
+    textArea.style.top = '-999999px'
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+    const successful = document.execCommand('copy')
+    document.body.removeChild(textArea)
+    return successful
+  } catch (err) {
+    return false
+  }
+}
+
 onMounted(async () => {
   try {
     const saved = localStorage.getItem('protutech_tactics_toolbar_v2')
@@ -144,9 +173,26 @@ onMounted(async () => {
       joinTacticalRoom(roomParam.toUpperCase())
     } else if (!gameRoomStore.currentRoomCode) {
       roomCodeInput.value = `TACTIC-${Math.floor(1000 + Math.random() * 9000)}`
+      joinTacticalRoom(roomCodeInput.value)
     } else {
       roomCodeInput.value = gameRoomStore.currentRoomCode
     }
+  }
+
+  // Socket element synchronization
+  const socket = (gameRoomStore as any).socket?.value || (gameRoomStore as any).socket
+  if (socket) {
+    socket.on('room:element_added', (el: TacticsElement) => {
+      if (!stratStore.boardElements.some(e => e.id === el.id)) {
+        stratStore.boardElements.push(el)
+      }
+    })
+    socket.on('room:element_removed', (elId: string) => {
+      stratStore.boardElements = stratStore.boardElements.filter(e => e.id !== elId)
+    })
+    socket.on('room:elements_synced', (els: TacticsElement[]) => {
+      stratStore.setBoardElements(els)
+    })
   }
 })
 
@@ -180,6 +226,7 @@ function handleDeleteCustomPin(pinId: string) {
 
 function joinTacticalRoom(codeToJoin?: string) {
   const code = (codeToJoin || roomCodeInput.value || 'TACTIC-SQUAD').trim().toUpperCase()
+  roomCodeInput.value = code
   const user = authStore.currentUser || {
     id: `guest-${Date.now()}`,
     username: `Player_${Math.floor(1000 + Math.random() * 9000)}`,
@@ -187,15 +234,24 @@ function joinTacticalRoom(codeToJoin?: string) {
     avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${Date.now()}`
   }
   gameRoomStore.joinRoom(code, user as any)
+  isJoinRoomModalOpen.value = false
+}
+
+function handleCopyRoomCode() {
+  const room = gameRoomStore.currentRoomCode || roomCodeInput.value || 'TACTIC-SQUAD'
+  copyToClipboard(room)
+  copySuccessToast.value = 'Room ID Copied!'
+  setTimeout(() => { copySuccessToast.value = '' }, 2500)
 }
 
 function handleCopyRoomLink() {
   const room = gameRoomStore.currentRoomCode || roomCodeInput.value || 'TACTIC-SQUAD'
   const baseDomain = serverPublicUrl.value || window.location.origin
   const url = `${baseDomain}/tactics?room=${room}`
-  navigator.clipboard.writeText(url)
+  copyToClipboard(url)
   isCopied.value = true
-  setTimeout(() => { isCopied.value = false }, 2500)
+  copySuccessToast.value = 'Room Link Copied to Clipboard!'
+  setTimeout(() => { isCopied.value = false; copySuccessToast.value = '' }, 2500)
 }
 
 function placeCustomPin(pin: CustomPinDefinition) {
@@ -218,6 +274,9 @@ function getMapCoords(e: MouseEvent): { x: number; y: number } {
 }
 
 function handleMouseDown(e: MouseEvent) {
+  if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
+    return
+  }
   const tool = stratStore.activeTool
   if (tool === 'select' || tool === 'eraser') return
 
@@ -357,14 +416,9 @@ function handleMouseUp() {
 
 function addElement(element: TacticsElement) {
   stratStore.addBoardElement(element)
-  if (gameRoomStore.currentRoomCode) {
-    gameRoomStore.sendStroke({
-      id: element.id,
-      tool: 'pen',
-      color: element.color,
-      width: element.strokeWidth || 4,
-      points: element.points.map(p => ({ x: p.x * 10, y: p.y * 10 }))
-    })
+  const socket = (gameRoomStore as any).socket?.value || (gameRoomStore as any).socket
+  if (socket && socket.connected) {
+    socket.emit('room:element_add', element)
   }
 }
 
@@ -372,6 +426,8 @@ function handleElementClick(e: MouseEvent, el: TacticsElement) {
   e.stopPropagation()
   if (stratStore.activeTool === 'eraser') {
     stratStore.removeBoardElement(el.id)
+    const socket = (gameRoomStore as any).socket?.value || (gameRoomStore as any).socket
+    if (socket && socket.connected) socket.emit('room:element_remove', el.id)
   } else if (stratStore.activeTool === 'select') {
     selectedElementId.value = selectedElementId.value === el.id ? null : el.id
   }
@@ -394,7 +450,10 @@ function handleConfirmText() {
 
 function deleteSelectedElement() {
   if (selectedElementId.value) {
-    stratStore.removeBoardElement(selectedElementId.value)
+    const id = selectedElementId.value
+    stratStore.removeBoardElement(id)
+    const socket = (gameRoomStore as any).socket?.value || (gameRoomStore as any).socket
+    if (socket && socket.connected) socket.emit('room:element_remove', id)
     selectedElementId.value = null
   }
 }
@@ -404,6 +463,20 @@ function getSvgPath(points: { x: number; y: number }[]): string {
   return points.reduce((acc, pt, idx) => {
     return idx === 0 ? `M ${pt.x * 10} ${pt.y * 10}` : `${acc} L ${pt.x * 10} ${pt.y * 10}`
   }, '')
+}
+
+function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: number }): string {
+  const x1 = p1.x * 10, y1 = p1.y * 10
+  const x2 = p2.x * 10, y2 = p2.y * 10
+  const angle = Math.atan2(y2 - y1, x2 - x1)
+  const len = 14
+  const width = 8
+  const tipX = x2, tipY = y2
+  const leftX = tipX - len * Math.cos(angle) + width * Math.sin(angle)
+  const leftY = tipY - len * Math.sin(angle) - width * Math.cos(angle)
+  const rightX = tipX - len * Math.cos(angle) - width * Math.sin(angle)
+  const rightY = tipY - len * Math.sin(angle) + width * Math.cos(angle)
+  return `${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`
 }
 
 function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: number }): string {
@@ -425,37 +498,57 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
 
 <template>
   <div class="tactics-board-container flex flex-col gap-4">
-    <!-- TOP BAR: ROOM STATUS & LINK SHARING -->
+    <!-- TOP BAR: ROOM STATUS, 1-CLICK COPY ID, SHARE LINK & HOST PERMISSIONS -->
     <div class="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl">
-      <!-- ROOM BADGE & CODE -->
-      <div class="flex items-center gap-3">
-        <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800">
+      <!-- ROOM BADGE & 1-CLICK COPY CODE -->
+      <div class="flex flex-wrap items-center gap-2.5">
+        <button
+          @click="handleCopyRoomCode"
+          class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded-xl transition-all cursor-pointer group shadow-sm"
+          title="Click to copy Room Code"
+        >
           <Radio class="w-4 h-4 text-emerald-400 animate-pulse" />
           <span class="text-xs text-slate-400 font-bold uppercase">Room:</span>
-          <input
-            v-model="roomCodeInput"
-            @keyup.enter="joinTacticalRoom()"
-            placeholder="e.g. SQUAD-ALPHA"
-            class="bg-transparent border-none text-white font-mono font-black text-xs uppercase tracking-wider focus:outline-none w-32"
-          />
-          <button
-            @click="joinTacticalRoom()"
-            class="px-2 py-0.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black rounded cursor-pointer"
-          >
-            Connect
-          </button>
-        </div>
+          <span class="text-xs font-mono font-black text-amber-400 group-hover:text-amber-300">{{ gameRoomStore.currentRoomCode || roomCodeInput }}</span>
+          <span class="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 font-bold">Copy ID</span>
+        </button>
 
-        <!-- 1-CLICK COPY LINK -->
+        <!-- 1-CLICK SHARE LINK -->
         <button
           @click="handleCopyRoomLink"
           class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-          title="Share room link with teammates"
+          title="Share direct room invite link"
         >
           <Check v-if="isCopied" class="w-3.5 h-3.5 text-emerald-400" />
           <Share2 v-else class="w-3.5 h-3.5 text-amber-400" />
-          <span>{{ isCopied ? 'Link Copied!' : 'Share Room Link' }}</span>
+          <span>{{ isCopied ? 'Link Copied!' : 'Share Invite Link' }}</span>
         </button>
+
+        <!-- SEPARATE JOIN ROOM BUTTON -->
+        <button
+          @click="isJoinRoomModalOpen = true"
+          class="flex items-center gap-1 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-slate-300 hover:text-white border border-slate-800 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+        >
+          <span>Join Another Room</span>
+        </button>
+
+        <!-- HOST LOCK / GUEST PERMISSION TOGGLE -->
+        <div v-if="gameRoomStore.isHost" class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+          <span class="font-bold text-slate-400">Guests Can Draw:</span>
+          <button
+            @click="gameRoomStore.setRoomLock(!gameRoomStore.allowGuestsToDraw)"
+            :class="[
+              'px-2 py-0.5 rounded text-[10px] font-black uppercase transition-colors cursor-pointer',
+              gameRoomStore.allowGuestsToDraw ? 'bg-emerald-500 text-slate-950' : 'bg-rose-600 text-white'
+            ]"
+          >
+            {{ gameRoomStore.allowGuestsToDraw ? 'ON' : 'LOCKED' }}
+          </button>
+        </div>
+
+        <span v-if="copySuccessToast" class="text-xs font-bold text-emerald-400 animate-fade-in">
+          {{ copySuccessToast }}
+        </span>
       </div>
 
       <!-- MAP SELECTOR & CUSTOMIZE TOOLBAR BUTTON -->
@@ -739,7 +832,7 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
               stroke-linecap="round"
             />
 
-            <!-- 3. DIRECTIONAL ARROW -->
+            <!-- 3. DIRECTIONAL ARROW (IMMUTABLE COLOR) -->
             <g v-else-if="el.type === 'arrow' && el.points.length >= 2">
               <line
                 :x1="el.points[0].x * 10"
@@ -749,7 +842,18 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
                 :stroke="el.color"
                 :stroke-width="el.strokeWidth || 4"
                 stroke-linecap="round"
-                marker-end="url(#arrowhead-active)"
+              />
+              <circle
+                :cx="el.points[0].x * 10"
+                :cy="el.points[0].y * 10"
+                r="3.5"
+                :fill="el.color"
+                stroke="#0f172a"
+                stroke-width="1.5"
+              />
+              <polygon
+                :points="getArrowheadPolygon(el.points[0], el.points[1])"
+                :fill="el.color"
               />
             </g>
 
@@ -922,7 +1026,6 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
               :stroke="stratStore.activeColor"
               :stroke-width="activeStrokeWidth"
               stroke-linecap="round"
-              marker-end="url(#arrowhead-active)"
             />
             <!-- Visual Tail Pivot Circle -->
             <circle
@@ -932,6 +1035,13 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
               :fill="stratStore.activeColor"
               stroke="#0f172a"
               stroke-width="1.5"
+            />
+            <polygon
+              :points="getArrowheadPolygon(
+                arrowControlMode === 'tail_controls' ? currentStroke[1] : currentStroke[0],
+                arrowControlMode === 'tail_controls' ? currentStroke[0] : currentStroke[1]
+              )"
+              :fill="stratStore.activeColor"
             />
           </g>
 
@@ -1112,6 +1222,54 @@ function getVisionConePath(p1: { x: number; y: number }, p2: { x: number; y: num
             class="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-xs cursor-pointer shadow"
           >
             Place Note
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 3: JOIN ROOM MODAL -->
+    <div
+      v-if="isJoinRoomModalOpen"
+      class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+      @click.self="isJoinRoomModalOpen = false"
+    >
+      <div class="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <Radio class="w-4 h-4 text-emerald-400" />
+            <h3 class="text-sm font-black uppercase text-white">Join Tactical Room</h3>
+          </div>
+          <button @click="isJoinRoomModalOpen = false" class="text-slate-400 hover:text-white cursor-pointer">
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+
+        <p class="text-xs text-slate-300">
+          Enter a room code or paste an invite link shared by your team leader or coach.
+        </p>
+
+        <input
+          v-model="newRoomInput"
+          @keyup.enter="joinTacticalRoom(newRoomInput)"
+          type="text"
+          placeholder="e.g. SQUAD-ALPHA or PRO-9821"
+          class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white font-mono uppercase focus:outline-none focus:border-amber-500"
+          autofocus
+        />
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <button
+            @click="isJoinRoomModalOpen = false"
+            class="px-4 py-2 text-slate-400 hover:text-white text-xs font-bold cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            @click="joinTacticalRoom(newRoomInput)"
+            :disabled="!newRoomInput.trim()"
+            class="px-5 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 disabled:opacity-40 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow-lg"
+          >
+            Connect Room
           </button>
         </div>
       </div>

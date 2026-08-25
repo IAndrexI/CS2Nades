@@ -57,6 +57,8 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     return hostUsername.value !== null && members.value.some(m => m.isHost && m.username === hostUsername.value)
   })
 
+  const allowGuestsToDraw = ref<boolean>(true)
+
   function getSocket(): Socket {
     if (!socket.value) {
       socket.value = io({
@@ -80,6 +82,15 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
         members.value = state.members
         liveDrawings.value = state.drawings || []
         activeBroadcastLineups.value = state.activeLineups || []
+        if (state.allowGuestsToDraw !== undefined) allowGuestsToDraw.value = state.allowGuestsToDraw
+      })
+
+      socket.value.on('room:lock_updated', (data: { allowGuestsToDraw: boolean }) => {
+        allowGuestsToDraw.value = data.allowGuestsToDraw
+        announcements.value.push({
+          text: data.allowGuestsToDraw ? '🔓 Host unlocked tactical drawing for all guests' : '🔒 Host locked tactical drawing (Read-Only Mode)',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        })
       })
 
       socket.value.on('room:members', (updatedMembers: RoomMember[]) => {
@@ -204,11 +215,20 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     }
   }
 
+  function setRoomLock(allowGuests: boolean) {
+    allowGuestsToDraw.value = allowGuests
+    if (socket.value && socket.value.connected) {
+      socket.value.emit('room:set_lock', { allowGuestsToDraw: allowGuests })
+    }
+  }
+
   return {
     socket,
     isConnected,
     currentRoomCode,
     hostUsername,
+    isHost,
+    allowGuestsToDraw,
     currentMapId,
     members,
     liveDrawings,
@@ -217,7 +237,6 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     announcements,
     squadGroups,
     selectedGroupId,
-    isHost,
     joinRoom,
     leaveRoom,
     sendStroke,
@@ -225,6 +244,7 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     pushLineup,
     switchMap,
     sendChatMessage,
+    setRoomLock,
     fetchGroups,
     createGroup
   }

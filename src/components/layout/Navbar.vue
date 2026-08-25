@@ -10,6 +10,8 @@ import { BRANDING, NAV_LABELS } from '../../config/site'
 import DataSyncModal from '../common/DataSyncModal.vue'
 import MapSettingsModal from '../map/MapSettingsModal.vue'
 import LineupConflictModal from '../lineups/LineupConflictModal.vue'
+import UserSettingsModal from '../user/UserSettingsModal.vue'
+import DirectMessagesModal from '../user/DirectMessagesModal.vue'
 
 import { 
   Crosshair, 
@@ -26,8 +28,7 @@ import {
   BookMarked, 
   Radio, 
   RefreshCw,
-  Sun,
-  Moon,
+  MessageSquare,
   Smartphone,
   Monitor,
   Menu,
@@ -48,6 +49,8 @@ const isMapDropdownOpen = ref(false)
 const isUserDropdownOpen = ref(false)
 const isDataModalOpen = ref(false)
 const isMobileMenuOpen = ref(false)
+const isUserSettingsOpen = ref(false)
+const isDirectMessagesOpen = ref(false)
 
 const customRoleInput = ref('')
 
@@ -225,16 +228,6 @@ async function handleSyncLineups() {
           <span class="hidden lg:inline">Discord</span>
         </a>
 
-        <!-- LIGHT / DARK MODE TOGGLE BUTTON -->
-        <button
-          @click="themeStore.toggleTheme"
-          :title="themeStore.theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
-          class="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-amber-400 rounded-xl transition-colors cursor-pointer"
-        >
-          <Sun v-if="themeStore.theme === 'dark'" class="w-3.5 h-3.5 text-amber-400" />
-          <Moon v-else class="w-3.5 h-3.5 text-slate-300" />
-        </button>
-
         <!-- USER PROFILE / LOGIN BUTTON -->
         <div class="relative">
           <template v-if="authStore.isAuthenticated">
@@ -255,7 +248,7 @@ async function handleSyncLineups() {
             <!-- USER DROPDOWN -->
             <div 
               v-if="isUserDropdownOpen"
-              class="absolute top-full right-0 mt-2 w-60 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in text-xs"
+              class="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in text-xs"
             >
               <div class="p-3 border-b border-slate-800 flex flex-col gap-1 bg-slate-950/60">
                 <div class="flex items-center justify-between">
@@ -305,6 +298,24 @@ async function handleSyncLineups() {
                   </button>
                 </div>
               </div>
+
+              <!-- PROFILE & ACCOUNT SETTINGS -->
+              <button
+                @click="isUserSettingsOpen = true; isUserDropdownOpen = false"
+                class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors w-full text-left cursor-pointer"
+              >
+                <Settings2 class="w-4 h-4 text-amber-400" />
+                <span>Profile & Settings</span>
+              </button>
+
+              <!-- DIRECT MESSAGES -->
+              <button
+                @click="isDirectMessagesOpen = true; isUserDropdownOpen = false"
+                class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors w-full text-left cursor-pointer"
+              >
+                <MessageSquare class="w-4 h-4 text-amber-400" />
+                <span>Private Messages</span>
+              </button>
 
               <router-link
                 to="/game-room"
@@ -417,6 +428,14 @@ async function handleSyncLineups() {
     <MapSettingsModal
       :is-open="mapStore.isMapSettingsOpen"
       @close="mapStore.isMapSettingsOpen = false"
+    />
+    <UserSettingsModal
+      :is-open="isUserSettingsOpen"
+      @close="isUserSettingsOpen = false"
+    />
+    <DirectMessagesModal
+      :is-open="isDirectMessagesOpen"
+      @close="isDirectMessagesOpen = false"
     />
     <LineupConflictModal />
   </header>
