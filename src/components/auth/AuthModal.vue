@@ -99,9 +99,7 @@ async function handleQuickGuest() {
           ]"
         >
           <!-- STEAM ICON -->
-          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
-            <path d="M12 2a10 10 0 0 0-10 10c0 4.42 2.87 8.17 6.84 9.5l1.62-2.36a3.68 3.68 0 0 1-.46-.34L7.5 17.1a2.8 2.8 0 1 1 2.8-2.8l1.7 1.15a3.65 3.65 0 1 1 5.3 4.15l-1.95 1.35A10 10 0 1 0 12 2zm3.3 12.35a2.15 2.15 0 1 0 0 4.3 2.15 2.15 0 0 0 0-4.3z" />
-          </svg>
+          <img src="/icons/steam.webp" alt="Steam" class="w-4 h-4 object-contain" />
           <span>Steam Profile Connect</span>
         </button>
 
@@ -139,9 +137,7 @@ async function handleQuickGuest() {
               @click="authStore.loginWithSteamOpenId()"
               class="w-full py-3 px-4 bg-[#171a21] hover:bg-[#2a475e] text-white border border-[#2a475e] font-black text-xs rounded-2xl shadow-xl transition-all cursor-pointer flex items-center justify-center gap-3 group"
             >
-              <svg class="w-5 h-5 fill-[#66c0f4] group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
-                <path d="M12 2a10 10 0 0 0-10 10c0 4.42 2.87 8.17 6.84 9.5l1.62-2.36a3.68 3.68 0 0 1-.46-.34L7.5 17.1a2.8 2.8 0 1 1 2.8-2.8l1.7 1.15a3.65 3.65 0 1 1 5.3 4.15l-1.95 1.35A10 10 0 1 0 12 2zm3.3 12.35a2.15 2.15 0 1 0 0 4.3 2.15 2.15 0 0 0 0-4.3z" />
-              </svg>
+              <img src="/icons/steam.webp" alt="Steam" class="w-5 h-5 object-contain group-hover:scale-110 transition-transform" />
               <span class="tracking-wide">Sign In Directly with Steam (1-Click)</span>
             </button>
           </div>

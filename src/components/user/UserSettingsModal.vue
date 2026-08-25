@@ -434,6 +434,7 @@ async function handleDeleteAccount() {
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div class="flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300 flex items-center gap-1.5">
+                  <img src="/icons/steam.webp" alt="Steam" class="w-3.5 h-3.5 object-contain" />
                   <span>Steam Profile URL / SteamID</span>
                 </label>
                 <input

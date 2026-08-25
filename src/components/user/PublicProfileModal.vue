@@ -132,6 +132,7 @@ watch(() => props.isOpen, (open) => {
               target="_blank"
               class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-xl transition-colors font-mono text-[11px]"
             >
+              <img src="/icons/steam.webp" alt="Steam" class="w-3.5 h-3.5 object-contain" />
               <span>Steam</span>
               <ExternalLink class="w-3 h-3 text-slate-500" />
             </a>
