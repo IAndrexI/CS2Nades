@@ -105,12 +105,13 @@ watch(() => props.initialTargetUserId, (newId) => {
 </script>
 
 <template>
-  <div
-    v-if="isOpen"
-    class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fade-in"
-    @click.self="emit('close')"
-  >
-    <div class="my-auto w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-[88vh] sm:h-[80vh] max-h-[92vh] sm:max-h-[85vh]">
+  <Teleport to="body">
+    <div
+      v-if="isOpen"
+      class="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fade-in"
+      @click.self="emit('close')"
+    >
+      <div class="my-auto w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-[88vh] sm:h-[80vh] max-h-[92vh] sm:max-h-[85vh]">
       <!-- LEFT SIDEBAR: CONTACTS LIST -->
       <div class="w-full md:w-72 bg-slate-950 p-4 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col justify-between shrink-0 max-h-[30vh] md:max-h-none">
         <div class="flex flex-col gap-3 min-h-0 flex-1">
@@ -228,4 +229,5 @@ watch(() => props.initialTargetUserId, (newId) => {
       </div>
     </div>
   </div>
+</Teleport>
 </template>

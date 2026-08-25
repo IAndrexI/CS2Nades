@@ -55,12 +55,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div 
-    v-if="lineup"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
-    @click.self="lineupStore.closeLineup()"
-  >
-    <div class="relative w-full max-w-4xl max-h-[90vh] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+  <Teleport to="body">
+    <div 
+      v-if="lineup"
+      class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto animate-fade-in"
+      @click.self="lineupStore.closeLineup()"
+    >
+      <div class="relative w-full max-w-4xl max-h-[90vh] my-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
       <!-- HEADER -->
       <div class="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/60">
         <div class="flex items-center gap-3">
@@ -276,4 +277,5 @@ onUnmounted(() => {
       </div>
     </div>
   </div>
+</Teleport>
 </template>

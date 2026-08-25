@@ -57,12 +57,13 @@ async function handleQuickGuest() {
 </script>
 
 <template>
-  <div 
-    v-if="authStore.isAuthModalOpen"
-    class="fixed inset-0 z-50 overflow-y-auto bg-black/90 backdrop-blur-md flex min-h-full items-center justify-center p-4 sm:p-6 text-center animate-fade-in"
-    @click.self="authStore.isAuthenticated ? (authStore.isAuthModalOpen = false) : null"
-  >
-    <div class="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden my-auto text-left flex flex-col">
+  <Teleport to="body">
+    <div 
+      v-if="authStore.isAuthModalOpen"
+      class="fixed inset-0 z-[9999] overflow-y-auto bg-black/90 backdrop-blur-md flex min-h-full items-center justify-center p-4 sm:p-6 text-center animate-fade-in"
+      @click.self="authStore.isAuthenticated ? (authStore.isAuthModalOpen = false) : null"
+    >
+      <div class="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden my-auto text-left flex flex-col">
       <!-- HEADER -->
       <div class="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/80">
         <div class="flex items-center gap-3">
@@ -305,4 +306,5 @@ async function handleQuickGuest() {
       </div>
     </div>
   </div>
+</Teleport>
 </template>

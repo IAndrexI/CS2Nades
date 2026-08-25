@@ -22,12 +22,13 @@ const remainingCount = computed(() => lineupStore.pendingConflicts.length)
 </script>
 
 <template>
-  <div 
-    v-if="lineupStore.isConflictModalOpen && currentConflict"
-    class="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md flex min-h-full items-center justify-center p-4 text-center animate-fade-in"
-    @click.self="lineupStore.isConflictModalOpen = false"
-  >
-    <div class="relative w-full max-w-2xl bg-slate-900 border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden my-auto text-left flex flex-col">
+  <Teleport to="body">
+    <div 
+      v-if="lineupStore.isConflictModalOpen && currentConflict"
+      class="fixed inset-0 z-[9999] overflow-y-auto bg-black/85 backdrop-blur-md flex min-h-full items-center justify-center p-4 text-center animate-fade-in"
+      @click.self="lineupStore.isConflictModalOpen = false"
+    >
+      <div class="relative w-full max-w-2xl bg-slate-900 border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden my-auto text-left flex flex-col">
       <!-- HEADER -->
       <div class="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/70">
         <div class="flex items-center gap-3">
@@ -135,4 +136,5 @@ const remainingCount = computed(() => lineupStore.pendingConflicts.length)
       </div>
     </div>
   </div>
+</Teleport>
 </template>
