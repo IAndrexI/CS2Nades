@@ -7,7 +7,6 @@ import { useAuthStore } from '../../stores/authStore'
 import VectorMapBlueprint from '../map/VectorMapBlueprint.vue'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { TacticsElement, TacticsElementType } from '../../types'
-import { calculateVisionMesh } from '../../utils/mapColliders'
 import axios from 'axios'
 import { 
   Move, 
@@ -185,7 +184,6 @@ const allToolsCatalogue = [
   { id: 'pen', label: 'Freehand Pen', icon: PenTool, category: 'Drawing' },
   { id: 'arrow', label: 'Arrow', icon: ArrowUpRight, category: 'Drawing' },
   { id: 'line', label: 'Sightline / Line', icon: Minus, category: 'Drawing' },
-  { id: 'vision_cone', label: 'Vision FOV', icon: Eye, category: 'Drawing' },
   { id: 'text', label: 'Text Callout', icon: Type, category: 'General' },
   { id: 'smoke', label: 'Smoke Bloom', icon: Cloud, category: 'Utility' },
   { id: 'flash', label: 'Flash Burst', icon: Zap, category: 'Utility' },
@@ -200,7 +198,7 @@ const allToolsCatalogue = [
 ]
 
 const enabledToolIds = ref<string[]>([
-  'select', 'pen', 'arrow', 'line', 'vision_cone', 'text',
+  'select', 'pen', 'arrow', 'line', 'text',
   'smoke', 'flash', 'molotov', 'he_blast', 'c4_bomb',
   'plant_a', 'plant_b', 'player_t', 'player_ct', 'eraser'
 ])
@@ -612,7 +610,7 @@ function handleMouseMove(e: MouseEvent) {
 
   if (tool === 'pen') {
     currentStroke.value.push(coords)
-  } else if (tool === 'arrow' || tool === 'line' || tool === 'vision_cone') {
+  } else if (tool === 'arrow' || tool === 'line') {
     if (currentStroke.value.length === 1) {
       currentStroke.value.push(coords)
     } else {
@@ -647,7 +645,7 @@ function handleMouseUp() {
 
     addElement({
       id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      type: (tool === 'pen' ? 'pen' : tool === 'arrow' ? 'arrow' : tool === 'vision_cone' ? 'vision_cone' : 'line') as TacticsElementType,
+      type: (tool === 'pen' ? 'pen' : tool === 'arrow' ? 'arrow' : 'line') as TacticsElementType,
       color: stratStore.activeColor,
       strokeWidth: activeStrokeWidth.value,
       points: finalPoints
@@ -741,10 +739,6 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
   const rightX = tipX - len * Math.cos(angle) - width * Math.sin(angle)
   const rightY = tipY - len * Math.sin(angle) + width * Math.cos(angle)
   return `${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`
-}
-
-function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number }) {
-  return calculateVisionMesh(p1, p2, mapStore.currentMapId)
 }
 </script>
 
@@ -1130,13 +1124,6 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
             <stop offset="50%" stop-color="#f97316" stop-opacity="0.6" />
             <stop offset="100%" stop-color="#ef4444" stop-opacity="0" />
           </radialGradient>
-
-          <!-- VISION CONE GRADIENT (TRANSLUCENT SEE-THROUGH OVERLAY) -->
-          <radialGradient id="visionGradient" cx="0%" cy="0%" r="100%">
-            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.22" />
-            <stop offset="70%" stop-color="#0284c7" stop-opacity="0.08" />
-            <stop offset="100%" stop-color="#0369a1" stop-opacity="0.02" />
-          </radialGradient>
         </defs>
 
         <!-- LAYER 1: RADAR BLUEPRINT -->
@@ -1206,53 +1193,7 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
               />
             </g>
 
-            <!-- 4. VISION FOV CONE (REAL-TIME RAYCAST WALL OBSTRUCTION - SEE-THROUGH) -->
-            <g v-else-if="el.type === 'vision_cone' && el.points.length >= 2" class="pointer-events-none">
-              <!-- Field of View Cone Polygon stopping at walls -->
-              <path
-                :d="getVisionMesh(el.points[0], el.points[1]).path"
-                fill="url(#visionGradient)"
-                :stroke="el.color || '#38bdf8'"
-                stroke-width="1.5"
-                stroke-dasharray="4 3"
-                stroke-opacity="0.8"
-              />
-              <!-- Center Sightline Ray (clamped to wall collision hit) -->
-              <line
-                :x1="el.points[0].x * 10"
-                :y1="el.points[0].y * 10"
-                :x2="getVisionMesh(el.points[0], el.points[1]).centerRayHit.x"
-                :y2="getVisionMesh(el.points[0], el.points[1]).centerRayHit.y"
-                :stroke="el.color || '#38bdf8'"
-                stroke-width="1.2"
-                stroke-dasharray="3 2"
-                stroke-opacity="0.75"
-              />
-              <!-- Blocked Sight Impact Barrier Lines on Walls (High Contrast Obstruction) -->
-              <line
-                v-for="(edge, eIdx) in getVisionMesh(el.points[0], el.points[1]).blockedEdges"
-                :key="`b-edge-${eIdx}`"
-                :x1="edge.x1"
-                :y1="edge.y1"
-                :x2="edge.x2"
-                :y2="edge.y2"
-                stroke="#f43f5e"
-                stroke-width="4"
-                stroke-linecap="round"
-                class="filter drop-shadow-[0_0_6px_rgba(244,63,94,1)]"
-              />
-              <!-- Player Eye Origin Dot -->
-              <circle
-                :cx="el.points[0].x * 10"
-                :cy="el.points[0].y * 10"
-                r="3.5"
-                :fill="el.color || '#38bdf8'"
-                stroke="#0f172a"
-                stroke-width="1.5"
-              />
-            </g>
-
-            <!-- 5. SMOKE BLOOM (CS2 VOLUMETRIC SCALED RADIUS) -->
+            <!-- 4. SMOKE BLOOM (CS2 VOLUMETRIC SCALED RADIUS) -->
             <g v-else-if="el.type === 'smoke_cloud'">
               <circle
                 :cx="el.points[0].x * 10"
@@ -1422,48 +1363,6 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
             :stroke-width="activeStrokeWidth"
             stroke-linecap="round"
           />
-
-          <!-- VISION CONE PREVIEW (REAL-TIME RAYCAST WALL OBSTRUCTION - SEE-THROUGH) -->
-          <g v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'vision_cone'" class="pointer-events-none">
-            <path
-              :d="getVisionMesh(currentStroke[0], currentStroke[1]).path"
-              fill="url(#visionGradient)"
-              :stroke="stratStore.activeColor || '#38bdf8'"
-              stroke-width="1.5"
-              stroke-dasharray="4 3"
-              stroke-opacity="0.8"
-            />
-            <line
-              :x1="currentStroke[0].x * 10"
-              :y1="currentStroke[0].y * 10"
-              :x2="getVisionMesh(currentStroke[0], currentStroke[1]).centerRayHit.x"
-              :y2="getVisionMesh(currentStroke[0], currentStroke[1]).centerRayHit.y"
-              :stroke="stratStore.activeColor || '#38bdf8'"
-              stroke-width="1.2"
-              stroke-dasharray="3 2"
-              stroke-opacity="0.75"
-            />
-            <line
-              v-for="(edge, eIdx) in getVisionMesh(currentStroke[0], currentStroke[1]).blockedEdges"
-              :key="`b-prev-${eIdx}`"
-              :x1="edge.x1"
-              :y1="edge.y1"
-              :x2="edge.x2"
-              :y2="edge.y2"
-              stroke="#f43f5e"
-              stroke-width="4"
-              stroke-linecap="round"
-              class="filter drop-shadow-[0_0_6px_rgba(244,63,94,1)]"
-            />
-            <circle
-              :cx="currentStroke[0].x * 10"
-              :cy="currentStroke[0].y * 10"
-              r="3.5"
-              :fill="stratStore.activeColor || '#38bdf8'"
-              stroke="#0f172a"
-              stroke-width="1.5"
-            />
-          </g>
         </g>
       </svg>
     </div>

@@ -149,7 +149,6 @@ export type TacticsElementType =
   | 'c4_bomb'
   | 'plant_a'
   | 'plant_b'
-  | 'vision_cone'
 
 export interface TacticsElement {
   id: string

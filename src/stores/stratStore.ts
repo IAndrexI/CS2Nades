@@ -21,7 +21,6 @@ export const useStratStore = defineStore('strat', () => {
     | 'pen'
     | 'arrow'
     | 'line'
-    | 'vision_cone'
     | 'text'
     | 'smoke'
     | 'flash'
