@@ -1,34 +1,40 @@
 <script setup lang="ts">
 import { useMapStore } from '../stores/mapStore'
+import { useStratStore } from '../stores/stratStore'
+import { useGameRoomStore } from '../stores/gameRoomStore'
+import MapSelectorSidebar from '../components/map/MapSelectorSidebar.vue'
 import TacticsBoard from '../components/tactics/TacticsBoard.vue'
-import { PenTool } from 'lucide-vue-next'
+import MapSettingsModal from '../components/map/MapSettingsModal.vue'
 
 const mapStore = useMapStore()
+const stratStore = useStratStore()
+const gameRoomStore = useGameRoomStore()
+
+function handleMapSelect(mapId: string) {
+  if (!mapId) return
+  stratStore.saveCurrentMapElements(mapStore.currentMapId)
+  mapStore.setMap(mapId)
+  stratStore.loadMapElements(mapId)
+  gameRoomStore.switchMap(mapId, stratStore.getElementsForMap(mapId))
+}
 </script>
 
 <template>
-  <div class="tactics-view max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6 animate-fade-in">
-    <!-- HEADER -->
-    <div class="flex items-center justify-between p-5 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl">
-      <div class="flex items-center gap-3">
-        <div class="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl">
-          <PenTool class="w-6 h-6 stroke-[2.5]" />
-        </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="text-xl font-black uppercase text-white tracking-wide">Tactics Drawing Board</h1>
-            <span class="px-2 py-0.5 rounded bg-slate-800 text-amber-400 text-xs font-mono font-bold">
-              {{ mapStore.currentMap.name }}
-            </span>
-          </div>
-          <p class="text-xs text-slate-400 mt-0.5">
-            Draw custom execute paths, assign player roles (P1-P5), place smoke blooms, and plan team movements
-          </p>
-        </div>
-      </div>
+  <div class="tactics-view flex flex-col lg:flex-row gap-6 max-w-[1650px] mx-auto px-4 sm:px-6 py-6 animate-fade-in">
+    <!-- LEFT SIDE: MAP SELECTION SIDEBAR (MATCHING LINEUPS) -->
+    <div class="w-full lg:w-60 xl:w-64 flex-shrink-0">
+      <MapSelectorSidebar @select="handleMapSelect" />
     </div>
 
-    <!-- TACTICS BOARD COMPONENT -->
-    <TacticsBoard />
+    <!-- RIGHT SIDE / MAIN CONTENT: TACTICS BOARD CANVAS & TOOLBAR -->
+    <div class="flex-grow flex flex-col gap-4 min-w-0">
+      <TacticsBoard />
+    </div>
+
+    <!-- MODALS -->
+    <MapSettingsModal 
+      :is-open="mapStore.isMapSettingsOpen" 
+      @close="mapStore.isMapSettingsOpen = false" 
+    />
   </div>
 </template>

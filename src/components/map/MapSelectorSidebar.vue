@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
@@ -22,6 +22,15 @@ const filteredMaps = computed(() => {
   }
   return mapStore.availableMaps
 })
+
+const emit = defineEmits<{
+  (e: 'select', mapId: string): void
+}>()
+
+function handleSelectMap(mapId: string) {
+  mapStore.setMap(mapId)
+  emit('select', mapId)
+}
 
 const activeCount = computed(() => mapStore.availableMaps.filter(m => m.activePool).length)
 const reserveCount = computed(() => mapStore.availableMaps.filter(m => !m.activePool).length)
@@ -86,7 +95,7 @@ const reserveCount = computed(() => mapStore.availableMaps.filter(m => !m.active
       <button
         v-for="map in filteredMaps"
         :key="map.id"
-        @click="mapStore.setMap(map.id)"
+        @click="handleSelectMap(map.id)"
         :class="[
           'group relative flex-shrink-0 w-44 sm:w-48 lg:w-full rounded-xl overflow-hidden border text-left transition-all duration-200 cursor-pointer',
           mapStore.currentMapId === map.id

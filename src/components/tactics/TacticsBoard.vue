@@ -686,6 +686,14 @@ function handleMapSelect(mapId: string) {
   gameRoomStore.switchMap(mapId, stratStore.getElementsForMap(mapId))
 }
 
+watch(() => mapStore.currentMapId, (newMapId, oldMapId) => {
+  if (oldMapId && newMapId && newMapId !== oldMapId) {
+    stratStore.saveCurrentMapElements(oldMapId)
+    stratStore.loadMapElements(newMapId)
+    gameRoomStore.switchMap(newMapId, stratStore.getElementsForMap(newMapId))
+  }
+})
+
 function getSvgPath(points: { x: number; y: number }[]): string {
   if (!points || points.length === 0) return ''
   return points.reduce((acc, pt, idx) => {
