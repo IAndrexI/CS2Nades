@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useMapStore } from '../../stores/mapStore'
 import { useStratStore } from '../../stores/stratStore'
 import { useGameRoomStore } from '../../stores/gameRoomStore'
@@ -305,6 +305,30 @@ onMounted(async () => {
       }
     })
   }
+
+  // Automatic Background Reconciliation Auto-Sync
+  autoSyncTimer = setInterval(() => {
+    const s = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+    if (s && s.connected) {
+      s.emit('room:request_sync', { mapId: mapStore.currentMapId })
+    }
+  }, 7000)
+
+  window.addEventListener('focus', handleWindowFocusSync)
+})
+
+let autoSyncTimer: any = null
+
+function handleWindowFocusSync() {
+  const s = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  if (s && s.connected) {
+    s.emit('room:request_sync', { mapId: mapStore.currentMapId })
+  }
+}
+
+onUnmounted(() => {
+  if (autoSyncTimer) clearInterval(autoSyncTimer)
+  window.removeEventListener('focus', handleWindowFocusSync)
 })
 
 function toggleToolEnabled(toolId: string) {
@@ -735,18 +759,28 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
           <span>Members ({{ gameRoomStore.members.length }})</span>
         </button>
 
-        <!-- FORCE SYNC BOARD BUTTON (IF VISUALS DO NOT MATCH) -->
-        <button
-          @click="handleForceSyncBoard"
-          :class="[
-            'flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group',
-            isSyncingBoard ? 'text-amber-400 border-amber-500/50' : 'text-slate-300 hover:text-white'
-          ]"
-          title="Force synchronize tactical board visuals if visuals do not match"
-        >
-          <RefreshCw :class="['w-3.5 h-3.5 text-amber-400', isSyncingBoard ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500']" />
-          <span>{{ isSyncingBoard ? 'Syncing...' : 'Sync Board' }}</span>
-        </button>
+        <!-- LIVE AUTO-SYNC BADGE & FORCE SYNC OPTION BUTTON -->
+        <div class="flex items-center gap-1.5 p-1 pl-2.5 bg-slate-950/90 rounded-xl border border-slate-800 text-xs shadow-sm">
+          <div class="flex items-center gap-1.5 mr-1" title="Real-time automatic tactical synchronization active">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span class="text-[11px] font-bold text-slate-300">Auto-Synced</span>
+          </div>
+
+          <button
+            @click="handleForceSyncBoard"
+            :class="[
+              'flex items-center gap-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700/60 rounded-lg text-[11px] font-bold transition-all cursor-pointer group',
+              isSyncingBoard ? 'text-amber-400 border-amber-500/50' : 'text-slate-300 hover:text-white'
+            ]"
+            title="Force a manual hard re-sync of all tactical elements with the server"
+          >
+            <RefreshCw :class="['w-3 h-3 text-amber-400', isSyncingBoard ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500']" />
+            <span>{{ isSyncingBoard ? 'Syncing...' : 'Force Sync' }}</span>
+          </button>
+        </div>
 
         <!-- HOST LOCK / GUEST PERMISSION TOGGLE -->
         <div v-if="gameRoomStore.isHost" class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
