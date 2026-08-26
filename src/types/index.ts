@@ -178,6 +178,7 @@ export interface UserSocials {
   steamUrl?: string
   steamId?: string
   discordTag?: string
+  discordWebhook?: string
   reddit?: string
   youtube?: string
   twitter?: string

@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted } from 'vue'
 import { useAuthStore } from '../../stores/authStore'
+import { useThemeStore } from '../../stores/themeStore'
+import { useLineupStore } from '../../stores/lineupStore'
+import { useStratStore } from '../../stores/stratStore'
+import { useMapStore } from '../../stores/mapStore'
+import JSZip from 'jszip'
 import { 
   User, 
   Settings, 
@@ -16,6 +21,9 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Download,
+  FolderDown,
+  Sparkles,
   AlertTriangle
 } from 'lucide-vue-next'
 
@@ -28,11 +36,17 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
+const lineupStore = useLineupStore()
+const stratStore = useStratStore()
+const mapStore = useMapStore()
 
-const activeTab = ref<'profile' | 'appearance' | 'banners' | 'socials' | 'notifications' | 'privacy' | 'security'>('profile')
+const activeTab = ref<'profile' | 'appearance' | 'banners' | 'socials' | 'notifications' | 'backup' | 'privacy' | 'security'>('profile')
 const isSaving = ref(false)
 const saveSuccess = ref(false)
 const errorMessage = ref('')
+const isExportingZip = ref(false)
+const exportSuccess = ref(false)
 
 const profileForm = reactive({
   inGameRole: '',
@@ -45,6 +59,7 @@ const profileForm = reactive({
 const socialsForm = reactive({
   steamUrl: '',
   discordTag: '',
+  discordWebhook: '',
   reddit: '',
   youtube: '',
   twitter: '',
@@ -77,26 +92,41 @@ const deleteConfirmInput = ref('')
 const isDeleteModalOpen = ref(false)
 
 const bannerPresets = [
-  { id: 'mirage', name: 'Mirage Sunset', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200&auto=format&fit=crop&q=80' },
-  { id: 'dust2', name: 'Dust II Palms', url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80' },
-  { id: 'inferno', name: 'Inferno Alley', url: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=1200&auto=format&fit=crop&q=80' },
-  { id: 'nuke', name: 'Nuke Silo', url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80' },
-  { id: 'carbon', name: 'Carbon Fiber Gold', url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=1200&auto=format&fit=crop&q=80' },
-  { id: 'crimson', name: 'Crimson Cyber', url: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=1200&auto=format&fit=crop&q=80' }
+  { id: 'mirage', name: 'Mirage', url: '/radar/mirage.png' },
+  { id: 'dust2', name: 'Dust II', url: '/radar/dust2.png' },
+  { id: 'inferno', name: 'Inferno', url: '/radar/inferno.png' },
+  { id: 'nuke', name: 'Nuke', url: '/radar/nuke.png' },
+  { id: 'anubis', name: 'Anubis', url: '/radar/anubis.png' },
+  { id: 'ancient', name: 'Ancient', url: '/radar/ancient.png' },
+  { id: 'vertigo', name: 'Vertigo', url: '/radar/vertigo.png' },
+  { id: 'overpass', name: 'Overpass', url: '/radar/overpass.png' },
+  { id: 'office', name: 'Office', url: '/radar/office.png' },
+  { id: 'italy', name: 'Italy', url: '/radar/italy.png' },
+  { id: 'cache', name: 'Cache', url: '/radar/cache.png' }
 ]
 
 const selectedBanner = ref('')
 const customBannerUrl = ref('')
 
-const themeColors = [
+const presetAccentColors = [
   { hex: '#de9b35', name: 'CS2 Gold (Default)' },
   { hex: '#f97316', name: 'T Orange' },
   { hex: '#0ea5e9', name: 'CT Blue' },
-  { hex: '#ef4444', name: 'Crimson Red' },
+  { hex: '#ef4444', name: 'Danger Red' },
   { hex: '#10b981', name: 'Emerald Green' },
   { hex: '#a855f7', name: 'Amethyst Purple' },
   { hex: '#06b6d4', name: 'Cyber Cyan' },
   { hex: '#eab308', name: 'Flash Yellow' }
+]
+
+const presetBgColors = [
+  { hex: '#090d13', name: 'Midnight Navy (Default)' },
+  { hex: '#0b0e14', name: 'Carbon Black' },
+  { hex: '#0f172a', name: 'Deep Slate' },
+  { hex: '#000000', name: 'Pitch Black' },
+  { hex: '#071811', name: 'Dark Emerald' },
+  { hex: '#190a0a', name: 'Dark Crimson' },
+  { hex: '#110a1f', name: 'Deep Violet' }
 ]
 
 function populateForms() {
@@ -114,6 +144,7 @@ function populateForms() {
   const s = u.socials || {}
   socialsForm.steamUrl = s.steamUrl || ''
   socialsForm.discordTag = s.discordTag || ''
+  socialsForm.discordWebhook = s.discordWebhook || ''
   socialsForm.reddit = s.reddit || ''
   socialsForm.youtube = s.youtube || ''
   socialsForm.twitter = s.twitter || ''
@@ -136,11 +167,15 @@ function populateForms() {
 }
 
 watch(() => props.isOpen, (open) => {
-  if (open) populateForms()
+  if (open) {
+    populateForms()
+    saveSuccess.value = false
+    errorMessage.value = ''
+  }
 })
 
 onMounted(() => {
-  populateForms()
+  if (props.isOpen) populateForms()
 })
 
 async function handleSaveSettings() {
@@ -149,42 +184,33 @@ async function handleSaveSettings() {
   saveSuccess.value = false
 
   try {
-    const updatePayload: any = {
+    const updates = {
       inGameRole: profileForm.inGameRole,
       bio: profileForm.bio,
       gender: profileForm.gender,
       birthday: profileForm.birthday,
       avatar: profileForm.avatar,
-      banner: selectedBanner.value || customBannerUrl.value,
+      banner: selectedBanner.value,
       socials: { ...socialsForm },
       privacy: { ...privacyForm },
       notifications: { ...notificationsForm },
-      email: securityForm.email
+      themeSettings: {
+        bg: themeStore.customBgColor,
+        accent: themeStore.customAccentColor
+      }
     }
 
-    if (securityForm.newPassword) {
-      if (securityForm.newPassword !== securityForm.confirmPassword) {
-        errorMessage.value = 'New passwords do not match'
-        isSaving.value = false
-        return
-      }
-      if (securityForm.newPassword.length < 4) {
-        errorMessage.value = 'Password must be at least 4 characters'
-        isSaving.value = false
-        return
-      }
-      updatePayload.password = securityForm.newPassword
-    }
-
-    const ok = await authStore.updateProfile(updatePayload)
-    if (ok) {
+    const success = await authStore.updateProfile(updates)
+    if (success) {
       saveSuccess.value = true
-      securityForm.newPassword = ''
-      securityForm.confirmPassword = ''
-      setTimeout(() => { saveSuccess.value = false }, 3000)
+      setTimeout(() => {
+        saveSuccess.value = false
+      }, 3000)
+    } else {
+      errorMessage.value = authStore.authError || 'Failed to save settings'
     }
   } catch (err: any) {
-    errorMessage.value = err.message || 'Failed to save settings'
+    errorMessage.value = err?.message || 'Error updating settings'
   } finally {
     isSaving.value = false
   }
@@ -192,9 +218,64 @@ async function handleSaveSettings() {
 
 async function handleDeleteAccount() {
   if (deleteConfirmInput.value.toUpperCase() !== 'DELETE') return
-  await authStore.deleteAccount()
-  isDeleteModalOpen.value = false
-  emit('close')
+  try {
+    await authStore.deleteAccount()
+    isDeleteModalOpen.value = false
+    emit('close')
+  } catch (err) {
+    alert('Failed to delete account')
+  }
+}
+
+async function handleExportZipData() {
+  isExportingZip.value = true
+  exportSuccess.value = false
+
+  try {
+    const zip = new JSZip()
+
+    const backupData = {
+      exportDate: new Date().toISOString(),
+      user: authStore.currentUser,
+      lineups: lineupStore.customLineups,
+      strats: stratStore.customStrats,
+      boardElements: stratStore.boardElements,
+      customCallouts: mapStore.customCallouts,
+      customRadarImages: mapStore.customRadarImages,
+      theme: {
+        bgColor: themeStore.customBgColor,
+        accentColor: themeStore.customAccentColor,
+        themeMode: themeStore.theme
+      }
+    }
+
+    zip.file('cs2_tactical_data_summary.json', JSON.stringify(backupData, null, 2))
+    zip.file('lineups.json', JSON.stringify(lineupStore.customLineups, null, 2))
+    zip.file('strats.json', JSON.stringify(stratStore.customStrats, null, 2))
+    zip.file('custom_callouts.json', JSON.stringify(mapStore.customCallouts, null, 2))
+    zip.file('user_profile.json', JSON.stringify(authStore.currentUser, null, 2))
+    zip.file('local_storage_dump.json', JSON.stringify(localStorage, null, 2))
+
+    const blob = await zip.generateAsync({ type: 'blob' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `CS2Nades_Tactical_Backup_${authStore.currentUser?.username || 'offline'}_${Date.now()}.zip`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+
+    exportSuccess.value = true
+    setTimeout(() => {
+      exportSuccess.value = false
+    }, 4000)
+  } catch (e) {
+    console.error('ZIP export error:', e)
+    alert('Failed to package zip file: ' + String(e))
+  } finally {
+    isExportingZip.value = false
+  }
 }
 </script>
 
@@ -202,35 +283,33 @@ async function handleDeleteAccount() {
   <Teleport to="body">
     <div
       v-if="isOpen"
-      class="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fade-in"
+      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-fade-in"
       @click.self="emit('close')"
     >
-      <div class="my-auto w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[92vh] sm:max-h-[85vh]">
-      <!-- LEFT SIDEBAR TABS -->
-      <div class="w-full md:w-64 bg-slate-950 p-4 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col justify-between shrink-0">
-        <div class="flex flex-col gap-2">
-          <!-- TOP HEADER WITH USER INFO & MOBILE CLOSE -->
-          <div class="flex items-center justify-between p-2.5 bg-slate-900 rounded-2xl border border-slate-800">
-            <div class="flex items-center gap-2.5 min-w-0">
+      <div class="relative w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[92vh] sm:max-h-[85vh]">
+      <!-- LEFT TABS SIDEBAR -->
+      <div class="w-full md:w-60 bg-slate-950 border-b md:border-b-0 md:border-r border-slate-800 p-4 flex flex-col justify-between shrink-0">
+        <div class="flex flex-col gap-3">
+          <!-- USER BADGE -->
+          <div class="flex items-center gap-3 p-2 bg-slate-900/60 rounded-2xl border border-slate-800">
+            <div class="w-10 h-10 rounded-xl overflow-hidden bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">
               <img
-                :src="profileForm.avatar || authStore.currentUser?.avatar || ('https://api.dicebear.com/7.x/bottts/svg?seed=' + (authStore.currentUser?.username || 'user'))"
-                class="w-9 h-9 rounded-xl object-cover border border-amber-500/40 shrink-0"
+                v-if="authStore.currentUser?.avatar"
+                :src="authStore.currentUser.avatar"
+                class="w-full h-full object-cover"
               />
-              <div class="flex flex-col leading-tight min-w-0">
-                <span class="font-black text-white text-xs truncate">{{ authStore.currentUser?.username }}</span>
-                <span class="text-[10px] text-amber-400 font-mono font-bold">{{ profileForm.inGameRole || 'Player' }}</span>
-              </div>
+              <span v-else class="font-black text-sm text-amber-400 font-mono">
+                {{ authStore.currentUser?.username.slice(0, 2).toUpperCase() }}
+              </span>
             </div>
-            <button
-              @click="emit('close')"
-              class="md:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
-            >
-              <X class="w-4 h-4" />
-            </button>
+            <div class="flex flex-col min-w-0">
+              <span class="font-bold text-white text-xs truncate">{{ authStore.currentUser?.username }}</span>
+              <span class="text-[10px] text-amber-400 font-mono">{{ authStore.currentUser?.inGameRole || 'Player' }}</span>
+            </div>
           </div>
 
-          <!-- TABS LIST (Horizontal on mobile, vertical on desktop) -->
-          <div class="flex flex-row md:flex-col overflow-x-auto md:overflow-y-auto gap-1 py-1 md:py-0 scrollbar-thin">
+          <!-- TABS -->
+          <div class="flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
             <button
               @click="activeTab = 'profile'"
               :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'profile' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
@@ -244,7 +323,7 @@ async function handleDeleteAccount() {
               :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'appearance' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
             >
               <Palette class="w-4 h-4 shrink-0" />
-              <span>Theme Accent Color</span>
+              <span>Theme & Colors</span>
             </button>
 
             <button
@@ -252,7 +331,7 @@ async function handleDeleteAccount() {
               :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'banners' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
             >
               <Image class="w-4 h-4 shrink-0" />
-              <span>Profile Banners</span>
+              <span>CS2 Map Banners</span>
             </button>
 
             <button
@@ -264,11 +343,11 @@ async function handleDeleteAccount() {
             </button>
 
             <button
-              @click="activeTab = 'notifications'"
-              :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'notifications' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
+              @click="activeTab = 'backup'"
+              :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'backup' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
             >
-              <Bell class="w-4 h-4 shrink-0" />
-              <span>Notifications</span>
+              <FolderDown class="w-4 h-4 shrink-0" />
+              <span>Data Backup (ZIP)</span>
             </button>
 
             <button
@@ -276,7 +355,7 @@ async function handleDeleteAccount() {
               :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'privacy' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
             >
               <Shield class="w-4 h-4 shrink-0" />
-              <span>Privacy & Visibility</span>
+              <span>Privacy</span>
             </button>
 
             <button
@@ -284,17 +363,17 @@ async function handleDeleteAccount() {
               :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'security' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
             >
               <Lock class="w-4 h-4 shrink-0" />
-              <span>Security & Danger Zone</span>
+              <span>Security & Account</span>
             </button>
           </div>
         </div>
 
         <button
           @click="emit('close')"
-          class="hidden md:flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-white text-xs font-bold transition-colors cursor-pointer mt-4"
+          class="hidden md:flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-white text-xs font-bold transition-colors cursor-pointer"
         >
           <X class="w-4 h-4" />
-          <span>Close Window</span>
+          <span>Close Settings</span>
         </button>
       </div>
 
@@ -302,11 +381,10 @@ async function handleDeleteAccount() {
       <div class="flex-1 flex flex-col justify-between min-h-0 bg-slate-900 overflow-hidden">
         <!-- TOP DESKTOP HEADER -->
         <div class="hidden md:flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/40">
-          <span class="text-xs font-black uppercase tracking-wider text-amber-400">Settings & Customization</span>
+          <span class="text-xs font-black uppercase tracking-wider text-amber-400">User Settings</span>
           <button
             @click="emit('close')"
             class="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-            title="Close Settings"
           >
             <X class="w-4 h-4" />
           </button>
@@ -318,15 +396,20 @@ async function handleDeleteAccount() {
           <div v-if="activeTab === 'profile'" class="flex flex-col gap-4 text-xs">
             <h3 class="text-sm font-black uppercase text-white tracking-wide">Profile Information</h3>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300">Tactical In-Game Role</label>
-                <input
+                <label class="font-bold text-slate-300">Competitive Role</label>
+                <select
                   v-model="profileForm.inGameRole"
-                  type="text"
-                  placeholder="e.g. Entry Fragger, IGL, AWP"
-                  class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                />
+                  class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs font-bold"
+                >
+                  <option value="IGL">In-Game Leader (IGL)</option>
+                  <option value="AWPer">Primary AWPer</option>
+                  <option value="Entry Fragger">Entry Fragger</option>
+                  <option value="Support / Utility">Support / Utility</option>
+                  <option value="Lurker">Lurker</option>
+                  <option value="Coach / Analyst">Coach / Analyst</option>
+                </select>
               </div>
 
               <div class="flex flex-col gap-1.5">
@@ -335,25 +418,6 @@ async function handleDeleteAccount() {
                   v-model="profileForm.avatar"
                   type="text"
                   placeholder="https://... image link"
-                  class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                />
-              </div>
-
-              <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300">Gender (Optional)</label>
-                <input
-                  v-model="profileForm.gender"
-                  type="text"
-                  placeholder="e.g. Male / Female / Non-binary"
-                  class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                />
-              </div>
-
-              <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300">Birthday (Optional)</label>
-                <input
-                  v-model="profileForm.birthday"
-                  type="date"
                   class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
                 />
               </div>
@@ -370,31 +434,97 @@ async function handleDeleteAccount() {
             </div>
           </div>
 
-          <!-- TAB 2: THEME & ACCENT COLOR -->
-          <div v-if="activeTab === 'appearance'" class="flex flex-col gap-4 text-xs">
-            <h3 class="text-sm font-black uppercase text-white tracking-wide">Website Theme Accent Color</h3>
-            <p class="text-slate-400">Choose your personalized website accent color. This replaces basic dark/light mode and permanently saves to your account and device.</p>
+          <!-- TAB 2: THEME & COLOR WHEEL / HEX CUSTOMIZER -->
+          <div v-if="activeTab === 'appearance'" class="flex flex-col gap-6 text-xs">
+            <!-- ACCENT COLOR CUSTOMIZER -->
+            <div class="flex flex-col gap-3 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-sm font-black uppercase text-white tracking-wide">Website Accent Color</h3>
+                  <p class="text-slate-400 text-[11px]">Choose your personalized accent glow using the color wheel or custom hex code.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <input
+                    type="color"
+                    :value="themeStore.customAccentColor"
+                    @input="themeStore.setCustomAccentColor(($event.target as HTMLInputElement).value)"
+                    class="w-8 h-8 rounded-xl bg-transparent border-0 cursor-pointer p-0"
+                    title="Open Color Wheel"
+                  />
+                  <input
+                    type="text"
+                    :value="themeStore.customAccentColor"
+                    @input="themeStore.setCustomAccentColor(($event.target as HTMLInputElement).value)"
+                    class="w-24 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-white font-mono text-center text-xs uppercase"
+                    placeholder="#de9b35"
+                  />
+                </div>
+              </div>
 
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <button
-                v-for="color in themeColors"
-                :key="color.hex"
-                @click="authStore.setThemeColor(color.hex)"
-                :class="[
-                  'flex items-center gap-2.5 p-3 rounded-2xl border transition-all cursor-pointer text-left',
-                  authStore.userThemeColor === color.hex ? 'bg-slate-800 border-white shadow-lg' : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                ]"
-              >
-                <div class="w-6 h-6 rounded-full border border-slate-700 shadow shrink-0" :style="{ backgroundColor: color.hex }" />
-                <span class="font-bold text-slate-200 text-xs">{{ color.name }}</span>
-              </button>
+              <!-- PRESET ACCENTS -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+                <button
+                  v-for="color in presetAccentColors"
+                  :key="color.hex"
+                  @click="themeStore.setCustomAccentColor(color.hex)"
+                  :class="[
+                    'flex items-center gap-2 p-2.5 rounded-xl border transition-all cursor-pointer text-left',
+                    themeStore.customAccentColor.toLowerCase() === color.hex.toLowerCase() ? 'bg-slate-800 border-white shadow' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                  ]"
+                >
+                  <div class="w-4 h-4 rounded-full border border-slate-700 shrink-0 shadow" :style="{ backgroundColor: color.hex }" />
+                  <span class="font-bold text-slate-200 text-[11px] truncate">{{ color.name }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- BACKGROUND COLOR CUSTOMIZER -->
+            <div class="flex flex-col gap-3 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-sm font-black uppercase text-white tracking-wide">Website Background Color</h3>
+                  <p class="text-slate-400 text-[11px]">Customize the entire website canvas background color for yourself.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <input
+                    type="color"
+                    :value="themeStore.customBgColor"
+                    @input="themeStore.setCustomBgColor(($event.target as HTMLInputElement).value)"
+                    class="w-8 h-8 rounded-xl bg-transparent border-0 cursor-pointer p-0"
+                    title="Open Color Wheel"
+                  />
+                  <input
+                    type="text"
+                    :value="themeStore.customBgColor"
+                    @input="themeStore.setCustomBgColor(($event.target as HTMLInputElement).value)"
+                    class="w-24 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-white font-mono text-center text-xs uppercase"
+                    placeholder="#090d13"
+                  />
+                </div>
+              </div>
+
+              <!-- PRESET BACKGROUNDS -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+                <button
+                  v-for="color in presetBgColors"
+                  :key="color.hex"
+                  @click="themeStore.setCustomBgColor(color.hex)"
+                  :class="[
+                    'flex items-center gap-2 p-2.5 rounded-xl border transition-all cursor-pointer text-left',
+                    themeStore.customBgColor.toLowerCase() === color.hex.toLowerCase() ? 'bg-slate-800 border-white shadow' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                  ]"
+                >
+                  <div class="w-4 h-4 rounded-full border border-slate-700 shrink-0 shadow" :style="{ backgroundColor: color.hex }" />
+                  <span class="font-bold text-slate-200 text-[11px] truncate">{{ color.name }}</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- TAB 3: BANNERS -->
+          <!-- TAB 3: CS2 MAP BANNERS -->
           <div v-if="activeTab === 'banners'" class="flex flex-col gap-4 text-xs">
-            <h3 class="text-sm font-black uppercase text-white tracking-wide">Profile Banners</h3>
-            <p class="text-slate-400">Select a CS2 tactical banner to display on your public profile header.</p>
+            <h3 class="text-sm font-black uppercase text-white tracking-wide">CS2 Map Profile Banners</h3>
+            <p class="text-slate-400">Select a CS2 map banner to display on your public profile header when other players view your card.</p>
 
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div
@@ -402,15 +532,15 @@ async function handleDeleteAccount() {
                 :key="banner.id"
                 @click="selectedBanner = banner.url"
                 :class="[
-                  'relative h-24 rounded-2xl overflow-hidden border-2 transition-all cursor-pointer group',
+                  'relative h-24 rounded-2xl overflow-hidden border-2 transition-all cursor-pointer group bg-slate-950',
                   selectedBanner === banner.url ? 'border-amber-500 shadow-xl' : 'border-slate-800 opacity-70 hover:opacity-100'
                 ]"
               >
                 <img :src="banner.url" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2">
-                  <span class="text-[10px] font-black text-white uppercase">{{ banner.name }}</span>
+                <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex items-end p-2">
+                  <span class="text-[10px] font-black text-white uppercase font-mono tracking-wider">{{ banner.name }}</span>
                 </div>
-                <div v-if="selectedBanner === banner.url" class="absolute top-2 right-2 p-1 bg-amber-500 text-slate-950 rounded-full">
+                <div v-if="selectedBanner === banner.url" class="absolute top-2 right-2 p-1 bg-amber-500 text-slate-950 rounded-full shadow">
                   <Check class="w-3 h-3 stroke-[3]" />
                 </div>
               </div>
@@ -428,7 +558,7 @@ async function handleDeleteAccount() {
             </div>
           </div>
 
-          <!-- TAB 4: SOCIALS LINKING -->
+          <!-- TAB 4: SOCIALS & DISCORD DM NOTIFICATIONS -->
           <div v-if="activeTab === 'socials'" class="flex flex-col gap-4 text-xs">
             <h3 class="text-sm font-black uppercase text-white tracking-wide">Link Social Media Accounts</h3>
             <p class="text-slate-400">Connect your profiles so teammates and friends can find your channels and Steam profile.</p>
@@ -448,113 +578,74 @@ async function handleDeleteAccount() {
               </div>
 
               <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300">Discord Username / Tag</label>
+                <label class="font-bold text-slate-300 flex items-center gap-1.5">
+                  <span class="text-[#5865F2] font-bold">#</span>
+                  <span>Discord Username / Tag</span>
+                </label>
                 <input
                   v-model="socialsForm.discordTag"
                   type="text"
-                  placeholder="e.g. player#0001 or username"
+                  placeholder="username#0000 or username"
                   class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
                 />
               </div>
 
-              <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300">YouTube Channel</label>
+              <!-- DISCORD WEBHOOK DM NOTIFICATION -->
+              <div class="flex flex-col gap-1.5 sm:col-span-2 p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                <label class="font-bold text-slate-200 flex items-center gap-2">
+                  <Bell class="w-4 h-4 text-[#5865F2]" />
+                  <span>Discord Private DM Forwarding Webhook</span>
+                </label>
+                <span class="text-[11px] text-slate-400">Receive an automated Discord ping whenever someone sends you a private DM.</span>
                 <input
-                  v-model="socialsForm.youtube"
+                  v-model="socialsForm.discordWebhook"
                   type="text"
-                  placeholder="https://youtube.com/@..."
-                  class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                />
-              </div>
-
-              <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300">Reddit Username</label>
-                <input
-                  v-model="socialsForm.reddit"
-                  type="text"
-                  placeholder="u/username"
-                  class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                />
-              </div>
-
-              <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300">Twitch Channel</label>
-                <input
-                  v-model="socialsForm.twitch"
-                  type="text"
-                  placeholder="https://twitch.tv/..."
-                  class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                />
-              </div>
-
-              <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300">Twitter / X</label>
-                <input
-                  v-model="socialsForm.twitter"
-                  type="text"
-                  placeholder="https://x.com/..."
-                  class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
+                  placeholder="https://discord.com/api/webhooks/..."
+                  class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs font-mono mt-1"
                 />
               </div>
             </div>
           </div>
 
-          <!-- TAB 5: NOTIFICATIONS -->
-          <div v-if="activeTab === 'notifications'" class="flex flex-col gap-4 text-xs">
-            <h3 class="text-sm font-black uppercase text-white tracking-wide">Notification Settings</h3>
+          <!-- TAB 5: DATA BACKUP & LOCAL ZIP EXPORT -->
+          <div v-if="activeTab === 'backup'" class="flex flex-col gap-4 text-xs">
+            <h3 class="text-sm font-black uppercase text-white tracking-wide">Data Backup & Local ZIP Export</h3>
+            <p class="text-slate-400">
+              Download all your personal lineups, custom tactical board saves, custom callouts, and profile settings into a single downloadable .ZIP archive.
+            </p>
 
-            <div class="flex flex-col gap-3">
-              <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
+            <div class="p-5 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-4">
+              <div class="flex items-center justify-between">
                 <div>
-                  <span class="font-bold text-white block">Email Lineup Updates</span>
-                  <span class="text-[11px] text-slate-400">Receive email alerts when team members add new lineups</span>
+                  <span class="font-bold text-white text-sm block">Export All Tactical Data to ZIP</span>
+                  <span class="text-slate-400 text-xs">Packages lineups.json, strats.json, callouts.json, and user_profile.json</span>
                 </div>
-                <input v-model="notificationsForm.emailLineups" type="checkbox" class="w-4 h-4 accent-amber-500 cursor-pointer" />
-              </label>
+                <button
+                  type="button"
+                  @click="handleExportZipData"
+                  :disabled="isExportingZip"
+                  class="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
+                >
+                  <Download class="w-4 h-4" />
+                  <span>{{ isExportingZip ? 'Packaging ZIP...' : 'Download ZIP Backup' }}</span>
+                </button>
+              </div>
 
-              <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
-                <div>
-                  <span class="font-bold text-white block">Email Strategy Alerts</span>
-                  <span class="text-[11px] text-slate-400">Notify me when competitive playbook strats are created or updated</span>
-                </div>
-                <input v-model="notificationsForm.emailStrats" type="checkbox" class="w-4 h-4 accent-amber-500 cursor-pointer" />
-              </label>
-
-              <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
-                <div>
-                  <span class="font-bold text-white block">Discord Webhook Alerts</span>
-                  <span class="text-[11px] text-slate-400">Broadcast room invites and new strats to Discord</span>
-                </div>
-                <input v-model="notificationsForm.discordAlerts" type="checkbox" class="w-4 h-4 accent-amber-500 cursor-pointer" />
-              </label>
+              <div v-if="exportSuccess" class="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl flex items-center gap-2 font-bold animate-fade-in">
+                <Check class="w-4 h-4" />
+                <span>ZIP downloaded successfully to your computer!</span>
+              </div>
             </div>
           </div>
 
           <!-- TAB 6: PRIVACY -->
           <div v-if="activeTab === 'privacy'" class="flex flex-col gap-4 text-xs">
-            <h3 class="text-sm font-black uppercase text-white tracking-wide">Privacy & Visibility</h3>
-
-            <div class="flex flex-col gap-3">
-              <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
-                <div>
-                  <span class="font-bold text-white block">Hide Personal Details</span>
-                  <span class="text-[11px] text-slate-400">Hide gender and birthday from your public profile card</span>
-                </div>
-                <input v-model="privacyForm.hideDetails" type="checkbox" class="w-4 h-4 accent-amber-500 cursor-pointer" />
-              </label>
-
-              <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
-                <div>
-                  <span class="font-bold text-white block">Hide Steam Account</span>
-                  <span class="text-[11px] text-slate-400">Keep your SteamID and profile private from other users</span>
-                </div>
-                <input v-model="privacyForm.hideSteam" type="checkbox" class="w-4 h-4 accent-amber-500 cursor-pointer" />
-              </label>
-
+            <h3 class="text-sm font-black uppercase text-white tracking-wide">Privacy & Visibility Settings</h3>
+            <div class="flex flex-col gap-2.5">
               <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
                 <div>
                   <span class="font-bold text-white block">Visible in Direct Messages & User Directory</span>
-                  <span class="text-[11px] text-slate-400">Allow teammates and players to discover your profile and message you (Default: Visible)</span>
+                  <span class="text-[11px] text-slate-400">Allow teammates to find your profile in People & Squads</span>
                 </div>
                 <input 
                   type="checkbox" 
@@ -567,17 +658,17 @@ async function handleDeleteAccount() {
               <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
                 <div>
                   <span class="font-bold text-white block">Hide Linked Socials</span>
-                  <span class="text-[11px] text-slate-400">Do not display YouTube, Discord, Reddit, or Twitch links</span>
+                  <span class="text-[11px] text-slate-400">Do not display social profile links on your card</span>
                 </div>
                 <input v-model="privacyForm.hideSocials" type="checkbox" class="w-4 h-4 accent-amber-500 cursor-pointer" />
               </label>
             </div>
           </div>
 
-          <!-- TAB 7: SECURITY & DANGER ZONE -->
+          <!-- TAB 7: SECURITY & CLEAN DELETE -->
           <div v-if="activeTab === 'security'" class="flex flex-col gap-6 text-xs">
             <div class="flex flex-col gap-3">
-              <h3 class="text-sm font-black uppercase text-white tracking-wide">Change Email & Password</h3>
+              <h3 class="text-sm font-black uppercase text-white tracking-wide">Account Security</h3>
 
               <div class="flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300">Account Email</label>
@@ -587,51 +678,27 @@ async function handleDeleteAccount() {
                   class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
                 />
               </div>
-
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div class="flex flex-col gap-1.5">
-                  <label class="font-bold text-slate-300">New Password</label>
-                  <input
-                    v-model="securityForm.newPassword"
-                    type="password"
-                    placeholder="••••••••"
-                    class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                  />
-                </div>
-                <div class="flex flex-col gap-1.5">
-                  <label class="font-bold text-slate-300">Confirm New Password</label>
-                  <input
-                    v-model="securityForm.confirmPassword"
-                    type="password"
-                    placeholder="••••••••"
-                    class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                  />
-                </div>
-              </div>
             </div>
 
-            <!-- DANGER ZONE -->
-            <div class="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex flex-col gap-3 mt-4">
-              <div class="flex items-center gap-2 text-rose-400 font-black uppercase text-xs">
-                <AlertTriangle class="w-4 h-4" />
-                <span>Danger Zone: Delete Account</span>
+            <!-- CLEAN DELETE ACCOUNT -->
+            <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-between gap-4 mt-4">
+              <div class="flex flex-col gap-0.5">
+                <span class="font-bold text-white text-xs">Delete Account & Data</span>
+                <span class="text-[11px] text-slate-400">Permanently wipe your account credentials and personal tactical files.</span>
               </div>
-              <p class="text-[11px] text-slate-300">
-                Permanently delete your account, personal lineups, custom strats, and server files. This action is irreversible.
-              </p>
               <button
                 type="button"
                 @click="isDeleteModalOpen = true"
-                class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl text-xs cursor-pointer self-start shadow"
+                class="px-4 py-2 bg-rose-600/90 hover:bg-rose-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow transition-colors shrink-0"
               >
-                Delete Account Completely
+                Delete
               </button>
             </div>
           </div>
         </div>
 
         <!-- FOOTER ACTIONS -->
-        <div class="pt-4 border-t border-slate-800 flex items-center justify-between mt-6">
+        <div class="p-4 sm:px-6 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
           <div>
             <span v-if="saveSuccess" class="text-emerald-400 font-bold text-xs flex items-center gap-1">
               <Check class="w-3.5 h-3.5" /> Saved successfully!
@@ -653,22 +720,23 @@ async function handleDeleteAccount() {
               :disabled="isSaving"
               class="px-6 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow-lg disabled:opacity-50"
             >
-              {{ isSaving ? 'Saving...' : 'Save Settings' }}
+              {{ isSaving ? 'Saving...' : 'Save Changes' }}
             </button>
           </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- DELETE CONFIRM MODAL -->
+  <!-- DELETE CONFIRM MODAL -->
     <div
       v-if="isDeleteModalOpen"
       class="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
     >
       <div class="w-full max-w-md bg-slate-900 border border-rose-500/50 rounded-2xl p-6 shadow-2xl flex flex-col gap-4">
-        <h3 class="text-base font-black text-rose-400 uppercase">Confirm Account Deletion</h3>
+        <h3 class="text-base font-black text-rose-400 uppercase">Confirm Delete</h3>
         <p class="text-xs text-slate-300 leading-relaxed">
-          This will wipe your credentials, personal lineups, and all custom tactics data. Type <span class="font-mono font-bold text-rose-400">DELETE</span> to confirm.
+          Type <span class="font-mono font-bold text-rose-400">DELETE</span> to confirm permanently removing your account.
         </p>
         <input
           v-model="deleteConfirmInput"
@@ -688,11 +756,10 @@ async function handleDeleteAccount() {
             :disabled="deleteConfirmInput.toUpperCase() !== 'DELETE'"
             class="px-5 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-30 text-white font-black rounded-xl text-xs cursor-pointer shadow"
           >
-            Wipe & Delete
+            Delete
           </button>
         </div>
       </div>
     </div>
-  </div>
-</Teleport>
+  </Teleport>
 </template>

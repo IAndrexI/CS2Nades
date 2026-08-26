@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useAuthStore } from '../../stores/authStore'
 import { 
@@ -13,10 +13,12 @@ import {
   Eye, 
   EyeOff, 
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  Lock
 } from 'lucide-vue-next'
 import axios from 'axios'
 import type { DirectMessage } from '../../types'
+import { generateConversationSecret, encryptMessage, decryptMessage } from '../../utils/crypto'
 
 const props = defineProps<{
   isOpen: boolean
@@ -67,7 +69,17 @@ async function fetchConversations() {
   if (!authStore.token) return
   try {
     const res = await axios.get('/api/dm/conversations')
-    contacts.value = res.data
+    const rawContacts = res.data
+    // Decrypt preview of last messages
+    if (authStore.currentUser) {
+      for (const c of rawContacts) {
+        if (c.lastMessage && c.lastMessage.startsWith('ENC:')) {
+          const secret = generateConversationSecret(authStore.currentUser.id, c.id)
+          c.lastMessage = await decryptMessage(c.lastMessage, secret)
+        }
+      }
+    }
+    contacts.value = rawContacts
     if (props.initialTargetUserId) {
       selectedContactId.value = props.initialTargetUserId
       await fetchMessages(props.initialTargetUserId)
@@ -94,7 +106,19 @@ async function fetchMessages(targetId: string) {
   isLoading.value = true
   try {
     const res = await axios.get(`/api/dm/messages/${targetId}`)
-    messages.value = res.data
+    const rawMsgs = res.data
+    if (authStore.currentUser) {
+      const secret = generateConversationSecret(authStore.currentUser.id, targetId)
+      const decrypted = await Promise.all(
+        rawMsgs.map(async (m: DirectMessage) => {
+          const plain = await decryptMessage(m.text, secret)
+          return { ...m, text: plain }
+        })
+      )
+      messages.value = decrypted
+    } else {
+      messages.value = rawMsgs
+    }
     await scrollToBottom()
   } catch (err) {
     console.error('Failed to load messages', err)
@@ -145,13 +169,16 @@ async function handleToggleVisibility() {
 }
 
 async function handleSendMessage() {
-  if (!messageInput.value.trim() || !selectedContactId.value) return
+  if (!messageInput.value.trim() || !selectedContactId.value || !authStore.currentUser) return
   const textToSend = messageInput.value.trim()
   messageInput.value = ''
 
   try {
-    const res = await axios.post(`/api/dm/messages/${selectedContactId.value}`, { text: textToSend })
-    messages.value.push(res.data)
+    const secret = generateConversationSecret(authStore.currentUser.id, selectedContactId.value)
+    const encryptedText = await encryptMessage(textToSend, secret)
+    
+    const res = await axios.post(`/api/dm/messages/${selectedContactId.value}`, { text: encryptedText })
+    messages.value.push({ ...res.data, text: textToSend })
     await scrollToBottom()
     // Refresh conversation list preview
     const c = contacts.value.find(x => x.id === selectedContactId.value)
@@ -159,7 +186,6 @@ async function handleSendMessage() {
       c.lastMessage = textToSend
       c.lastMessageTime = new Date().toISOString()
     } else if (selectedContactInfo.value) {
-      // Add newly started conversation to contacts
       contacts.value.unshift({
         id: selectedContactInfo.value.id,
         username: selectedContactInfo.value.username,
@@ -381,9 +407,15 @@ watch(() => props.initialTargetUserId, (newId) => {
                 class="w-7 h-7 rounded-lg object-cover border border-slate-700"
               />
               <div>
-                <span class="text-xs font-bold text-slate-200">
-                  {{ selectedContactInfo?.username ? ('Chat with ' + selectedContactInfo.username) : 'Direct Message' }}
-                </span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-200">
+                    {{ selectedContactInfo?.username ? ('Chat with ' + selectedContactInfo.username) : 'Direct Message' }}
+                  </span>
+                  <span v-if="selectedContactInfo" class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
+                    <Lock class="w-2.5 h-2.5" />
+                    <span>Encrypted</span>
+                  </span>
+                </div>
                 <span v-if="selectedContactInfo?.inGameRole" class="block text-[10px] text-amber-400 font-mono">
                   {{ selectedContactInfo.inGameRole }}
                 </span>

@@ -6,8 +6,9 @@ import { useGameRoomStore } from '../../stores/gameRoomStore'
 import { useAuthStore } from '../../stores/authStore'
 import VectorMapBlueprint from '../map/VectorMapBlueprint.vue'
 import NadeIcon from '../common/NadeIcon.vue'
-import type { TacticsElement, TacticsElementType } from '../../types'
+import type { TacticsElement, TacticsElementType, DirectMessage } from '../../types'
 import axios from 'axios'
+import { generateConversationSecret, encryptMessage, decryptMessage } from '../../utils/crypto'
 import { 
   Move, 
   ArrowUpRight, 
@@ -38,7 +39,10 @@ import {
   Gamepad2,
   RefreshCw,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  MessageSquare,
+  Send,
+  Lock
 } from 'lucide-vue-next'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
 import CS2ServerConnectModal from '../lineups/CS2ServerConnectModal.vue'
@@ -48,6 +52,68 @@ const stratStore = useStratStore()
 const gameRoomStore = useGameRoomStore()
 const authStore = useAuthStore()
 const { confirmAction } = useConfirmDialog()
+
+// RIGHT TACTICAL SIDEBAR (ROOM CHAT / PRIVATE CHAT / PLAYER LIST)
+const isRightSidebarVisible = ref(true)
+const rightSidebarTab = ref<'public_chat' | 'private_chat' | 'players'>('public_chat')
+const roomChatInput = ref('')
+const selectedPrivateRecipientId = ref<string | null>(null)
+const selectedPrivateRecipientUser = ref<any | null>(null)
+const privateChatInput = ref('')
+const privateMessages = ref<DirectMessage[]>([])
+const isPrivateChatLoading = ref(false)
+
+function sendRoomMessage() {
+  if (!roomChatInput.value.trim()) return
+  gameRoomStore.sendChatMessage(roomChatInput.value.trim())
+  roomChatInput.value = ''
+}
+
+async function selectPrivateRecipient(member: any) {
+  selectedPrivateRecipientId.value = member.id || member.username
+  selectedPrivateRecipientUser.value = member
+  rightSidebarTab.value = 'private_chat'
+  await loadPrivateThread(member.id || member.username)
+}
+
+async function loadPrivateThread(targetId: string) {
+  if (!authStore.token) return
+  isPrivateChatLoading.value = true
+  try {
+    const res = await axios.get(`/api/dm/messages/${targetId}`)
+    if (authStore.currentUser) {
+      const secret = generateConversationSecret(authStore.currentUser.id, targetId)
+      const decrypted = await Promise.all(
+        res.data.map(async (m: DirectMessage) => {
+          const plain = await decryptMessage(m.text, secret)
+          return { ...m, text: plain }
+        })
+      )
+      privateMessages.value = decrypted
+    } else {
+      privateMessages.value = res.data
+    }
+  } catch (e) {
+    console.error('Failed to load private DM thread', e)
+  } finally {
+    isPrivateChatLoading.value = false
+  }
+}
+
+async function sendPrivateMessage() {
+  if (!privateChatInput.value.trim() || !selectedPrivateRecipientId.value || !authStore.currentUser) return
+  const textToSend = privateChatInput.value.trim()
+  privateChatInput.value = ''
+
+  try {
+    const secret = generateConversationSecret(authStore.currentUser.id, selectedPrivateRecipientId.value)
+    const cipher = await encryptMessage(textToSend, secret)
+    const res = await axios.post(`/api/dm/messages/${selectedPrivateRecipientId.value}`, { text: cipher })
+    privateMessages.value.push({ ...res.data, text: textToSend })
+  } catch (e) {
+    console.error('Failed to send encrypted private DM', e)
+  }
+}
 
 const isCs2ServerModalOpen = ref(false)
 const isMapSwitchWarnModalOpen = ref(false)
@@ -821,14 +887,14 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           <span>{{ authStore.isUserPreviewMode ? 'User Mode: Active' : 'User Mode' }}</span>
         </button>
 
-        <!-- CS2 DIRECT SERVER CONNECT -->
+        <!-- DIRECT SERVER CONNECT -->
         <button
           @click="isCs2ServerModalOpen = true"
           class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 border border-slate-800 hover:border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
           title="Connect to CS2 Practice Server via RCON to capture live in-game lineups"
         >
           <Gamepad2 class="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
-          <span>CS2 Connect</span>
+          <span>Server</span>
         </button>
 
         <!-- LIVE AUTO-SYNC BADGE & FORCE SYNC OPTION BUTTON -->
@@ -1046,6 +1112,17 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           <Trash2 class="w-4 h-4" />
         </button>
         <button
+          @click="isRightSidebarVisible = !isRightSidebarVisible"
+          :class="[
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-sm',
+            isRightSidebarVisible ? 'bg-amber-500 text-slate-950 font-black border-amber-400' : 'bg-slate-950 hover:bg-slate-900 text-slate-300 border-slate-800'
+          ]"
+          title="Toggle Right Tactical Panel (Room Chat, Private DMs & Players List)"
+        >
+          <MessageSquare class="w-3.5 h-3.5" />
+          <span>Chat & Squad</span>
+        </button>
+        <button
           @click="handleClearBoard"
           title="Clear Board"
           class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-rose-500/20 hover:text-rose-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
@@ -1078,99 +1155,89 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
       </p>
     </div>
 
-    <!-- RADAR CANVAS AREA -->
-    <div class="relative w-full aspect-square max-w-4xl mx-auto bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center select-none">
-      <svg
-        ref="svgRef"
-        viewBox="0 0 1000 1000"
-        class="w-full h-full cursor-crosshair"
-        @mousedown="handleMouseDown"
-        @mousemove="handleMouseMove"
-        @mouseup="handleMouseUp"
-        @mouseleave="handleMouseUp"
-      >
-        <defs>
-          <marker
-            id="arrowhead-gold"
-            markerWidth="8"
-            markerHeight="8"
-            refX="6"
-            refY="4"
-            orient="auto"
-          >
-            <polygon points="0 0, 8 4, 0 8" fill="#de9b35" />
-          </marker>
-          <marker
-            id="arrowhead-active"
-            markerWidth="8"
-            markerHeight="8"
-            refX="6"
-            refY="4"
-            orient="auto"
-          >
-            <polygon points="0 0, 8 4, 0 8" :fill="stratStore.activeColor" />
-          </marker>
+    <!-- TACTICAL BOARD + RIGHT SIDEBAR (PUBLIC CHAT, PRIVATE CHAT & PLAYERS LIST) -->
+    <div class="flex flex-col xl:flex-row gap-4 items-start w-full">
+      <!-- RADAR CANVAS AREA -->
+      <div class="relative flex-grow w-full aspect-square max-w-4xl mx-auto bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center select-none">
+        <svg
+          ref="svgRef"
+          viewBox="0 0 1000 1000"
+          class="w-full h-full cursor-crosshair"
+          @mousedown="handleMouseDown"
+          @mousemove="handleMouseMove"
+          @mouseup="handleMouseUp"
+          @mouseleave="handleMouseUp"
+        >
+          <defs>
+            <marker
+              id="arrowhead-gold"
+              markerWidth="8"
+              markerHeight="8"
+              refX="6"
+              refY="4"
+              orient="auto"
+            >
+              <polygon points="0 0, 8 4, 0 8" fill="#de9b35" />
+            </marker>
+            <marker
+              id="arrowhead-active"
+              markerWidth="8"
+              markerHeight="8"
+              refX="6"
+              refY="4"
+              orient="auto"
+            >
+              <polygon points="0 0, 8 4, 0 8" :fill="stratStore.activeColor" />
+            </marker>
 
-          <!-- SMOKE GRADIENT -->
-          <radialGradient id="smokeGradient" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#94a3b8" stop-opacity="0.75" />
-            <stop offset="70%" stop-color="#64748b" stop-opacity="0.5" />
-            <stop offset="100%" stop-color="#475569" stop-opacity="0" />
-          </radialGradient>
+            <!-- SMOKE GRADIENT -->
+            <radialGradient id="smokeGradient" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#94a3b8" stop-opacity="0.75" />
+              <stop offset="70%" stop-color="#64748b" stop-opacity="0.5" />
+              <stop offset="100%" stop-color="#475569" stop-opacity="0" />
+            </radialGradient>
 
-          <!-- MOLOTOV FIRE GRADIENT -->
-          <radialGradient id="fireGradient" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.8" />
-            <stop offset="50%" stop-color="#f97316" stop-opacity="0.6" />
-            <stop offset="100%" stop-color="#ef4444" stop-opacity="0" />
-          </radialGradient>
-        </defs>
+            <!-- MOLOTOV FIRE GRADIENT -->
+            <radialGradient id="fireGradient" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.8" />
+              <stop offset="50%" stop-color="#f97316" stop-opacity="0.6" />
+              <stop offset="100%" stop-color="#ef4444" stop-opacity="0" />
+            </radialGradient>
+          </defs>
 
-        <!-- LAYER 1: RADAR BLUEPRINT -->
-        <VectorMapBlueprint
-          :map-info="mapStore.currentMap"
-          :show-callouts="true"
-        />
+          <!-- LAYER 1: RADAR BLUEPRINT -->
+          <VectorMapBlueprint
+            :map-info="mapStore.currentMap"
+            :show-callouts="true"
+          />
 
-        <!-- LAYER 2: PLACED TACTICAL ELEMENTS -->
-        <g class="tactics-elements-layer">
-          <g
-            v-for="el in stratStore.boardElements"
-            :key="el.id"
-            @mousedown="(e) => handleElementMouseDown(e, el)"
-            @click="(e) => handleElementClick(e, el)"
-            :class="{ 
-              'opacity-80': selectedElementId === el.id, 
-              'cursor-grab active:cursor-grabbing': stratStore.activeTool === 'select',
-              'cursor-pointer': stratStore.activeTool === 'eraser' 
-            }"
-          >
-            <!-- 1. FREEHAND PEN STROKE -->
-            <path
-              v-if="el.type === 'pen'"
-              :d="getSvgPath(el.points)"
-              fill="none"
-              :stroke="el.color"
-              :stroke-width="el.strokeWidth || 4"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
+          <!-- LAYER 2: PLACED TACTICAL ELEMENTS -->
+          <g class="tactics-elements-layer">
+            <g
+              v-for="el in stratStore.boardElements"
+              :key="el.id"
+              @mousedown="(e) => handleElementMouseDown(e, el)"
+              @click="(e) => handleElementClick(e, el)"
+              :class="{ 
+                'opacity-80': selectedElementId === el.id, 
+                'cursor-grab active:cursor-grabbing': stratStore.activeTool === 'select',
+                'cursor-pointer': stratStore.activeTool === 'eraser' 
+              }"
+            >
+              <!-- 1. FREEHAND PEN STROKE -->
+              <path
+                v-if="el.type === 'pen'"
+                :d="getSvgPath(el.points)"
+                fill="none"
+                :stroke="el.color"
+                :stroke-width="el.strokeWidth || 4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
 
-            <!-- 2. STRAIGHT LINE -->
-            <line
-              v-else-if="el.type === 'line' && el.points.length >= 2"
-              :x1="el.points[0].x * 10"
-              :y1="el.points[0].y * 10"
-              :x2="el.points[1].x * 10"
-              :y2="el.points[1].y * 10"
-              :stroke="el.color"
-              :stroke-width="el.strokeWidth || 4"
-              stroke-linecap="round"
-            />
-
-            <!-- 3. DIRECTIONAL ARROW (IMMUTABLE COLOR) -->
-            <g v-else-if="el.type === 'arrow' && el.points.length >= 2">
+              <!-- 2. STRAIGHT LINE -->
               <line
+                v-else-if="el.type === 'line' && el.points.length >= 2"
                 :x1="el.points[0].x * 10"
                 :y1="el.points[0].y * 10"
                 :x2="el.points[1].x * 10"
@@ -1179,192 +1246,406 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                 :stroke-width="el.strokeWidth || 4"
                 stroke-linecap="round"
               />
+
+              <!-- 3. DIRECTIONAL ARROW (IMMUTABLE COLOR) -->
+              <g v-else-if="el.type === 'arrow' && el.points.length >= 2">
+                <line
+                  :x1="el.points[0].x * 10"
+                  :y1="el.points[0].y * 10"
+                  :x2="el.points[1].x * 10"
+                  :y2="el.points[1].y * 10"
+                  :stroke="el.color"
+                  :stroke-width="el.strokeWidth || 4"
+                  stroke-linecap="round"
+                />
+                <circle
+                  :cx="el.points[0].x * 10"
+                  :cy="el.points[0].y * 10"
+                  r="3.5"
+                  :fill="el.color"
+                  stroke="#0f172a"
+                  stroke-width="1.5"
+                />
+                <polygon
+                  :points="getArrowheadPolygon(el.points[0], el.points[1])"
+                  :fill="el.color"
+                />
+              </g>
+
+              <!-- 4. SMOKE BLOOM (CS2 VOLUMETRIC SCALED RADIUS) -->
+              <g v-else-if="el.type === 'smoke_cloud'">
+                <circle
+                  :cx="el.points[0].x * 10"
+                  :cy="el.points[0].y * 10"
+                  r="32"
+                  fill="url(#smokeGradient)"
+                  stroke="#94a3b8"
+                  stroke-width="1.5"
+                  stroke-dasharray="4 3"
+                />
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="10" fill="#0f172a" stroke="#94a3b8" stroke-width="1.5" />
+                <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3.5" fill="#ffffff" font-size="9" font-weight="black" text-anchor="middle">S</text>
+              </g>
+
+              <!-- 6. FLASH BURST -->
+              <g v-else-if="el.type === 'flash_burst'">
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="16" fill="#eab308" fill-opacity="0.25" stroke="#eab308" stroke-width="1.5" stroke-dasharray="3 2" />
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="9" fill="#0f172a" stroke="#eab308" stroke-width="1.5" />
+                <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3" fill="#fde047" font-size="8" font-weight="black" text-anchor="middle">F</text>
+              </g>
+
+              <!-- 7. MOLOTOV FIRE -->
+              <g v-else-if="el.type === 'molotov_fire'">
+                <circle
+                  :cx="el.points[0].x * 10"
+                  :cy="el.points[0].y * 10"
+                  r="25"
+                  fill="url(#fireGradient)"
+                  stroke="#f97316"
+                  stroke-width="1.5"
+                  stroke-dasharray="4 3"
+                />
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="10" fill="#0f172a" stroke="#f97316" stroke-width="1.5" />
+                <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3.5" fill="#fb923c" font-size="9" font-weight="black" text-anchor="middle">M</text>
+              </g>
+
+              <!-- 8. HE GRENADE BLAST -->
+              <g v-else-if="el.type === 'he_blast'">
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="20" fill="#22c55e" fill-opacity="0.2" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="3 2" />
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="9" fill="#0f172a" stroke="#22c55e" stroke-width="1.5" />
+                <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3" fill="#4ade80" font-size="8" font-weight="black" text-anchor="middle">HE</text>
+              </g>
+
+              <!-- 9. C4 BOMB / PLANT SPOT -->
+              <g v-else-if="el.type === 'c4_bomb' || el.type === 'plant_a' || el.type === 'plant_b'">
+                <rect
+                  :x="el.points[0].x * 10 - 12"
+                  :y="el.points[0].y * 10 - 12"
+                  width="24"
+                  height="24"
+                  rx="5"
+                  :fill="el.type === 'c4_bomb' ? '#b91c1c' : el.color"
+                  stroke="#ffffff"
+                  stroke-width="1.5"
+                  class="shadow-lg"
+                />
+                <text
+                  :x="el.points[0].x * 10"
+                  :y="el.points[0].y * 10 + 4"
+                  fill="#ffffff"
+                  font-size="11"
+                  font-weight="black"
+                  font-family="monospace"
+                  text-anchor="middle"
+                >
+                  {{ el.text || 'C4' }}
+                </text>
+              </g>
+
+              <!-- 10. PLAYER PIN (5v5 ROSTER, MOVEABLE) -->
+              <g v-else-if="el.type === 'player_t' || el.type === 'player_ct' || el.type === 'player_icon'">
+                <circle
+                  :cx="el.points[0].x * 10"
+                  :cy="el.points[0].y * 10"
+                  r="15"
+                  :fill="el.color"
+                  stroke="#0f172a"
+                  stroke-width="2.5"
+                  class="shadow-xl"
+                />
+                <text
+                  :x="el.points[0].x * 10"
+                  :y="el.points[0].y * 10 + 4.5"
+                  fill="#0f172a"
+                  font-size="12"
+                  font-weight="900"
+                  font-family="sans-serif"
+                  text-anchor="middle"
+                >
+                  {{ el.playerNum || '1' }}
+                </text>
+              </g>
+
+              <!-- 11. TEXT ANNOTATION -->
+              <g v-else-if="el.type === 'text'">
+                <rect
+                  :x="el.points[0].x * 10 - 4"
+                  :y="el.points[0].y * 10 - 14"
+                  :width="Math.max(40, (el.text?.length || 5) * 8 + 12)"
+                  height="22"
+                  rx="4"
+                  fill="#0f172a"
+                  fill-opacity="0.85"
+                  stroke="#334155"
+                  stroke-width="1"
+                />
+                <text
+                  :x="el.points[0].x * 10 + 2"
+                  :y="el.points[0].y * 10 + 1"
+                  :fill="el.color"
+                  :font-size="el.radius || 12"
+                  font-weight="bold"
+                  font-family="sans-serif"
+                >
+                  {{ el.text }}
+                </text>
+              </g>
+            </g>
+
+            <!-- ACTIVE CURRENT DRAWING STROKE -->
+            <path
+              v-if="isDrawing && currentStroke.length > 1 && stratStore.activeTool === 'pen'"
+              :d="getSvgPath(currentStroke)"
+              fill="none"
+              :stroke="stratStore.activeColor"
+              :stroke-width="activeStrokeWidth"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+
+            <!-- ARROW PREVIEW (TAIL-GUIDED) -->
+            <g v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'arrow'">
+              <line
+                :x1="arrowControlMode === 'tail_controls' ? currentStroke[1].x * 10 : currentStroke[0].x * 10"
+                :y1="arrowControlMode === 'tail_controls' ? currentStroke[1].y * 10 : currentStroke[0].y * 10"
+                :x2="arrowControlMode === 'tail_controls' ? currentStroke[0].x * 10 : currentStroke[1].x * 10"
+                :y2="arrowControlMode === 'tail_controls' ? currentStroke[0].y * 10 : currentStroke[1].y * 10"
+                :stroke="stratStore.activeColor"
+                :stroke-width="activeStrokeWidth"
+                stroke-linecap="round"
+              />
+              <!-- Visual Tail Pivot Circle -->
               <circle
-                :cx="el.points[0].x * 10"
-                :cy="el.points[0].y * 10"
-                r="3.5"
-                :fill="el.color"
+                :cx="arrowControlMode === 'tail_controls' ? currentStroke[1].x * 10 : currentStroke[0].x * 10"
+                :cy="arrowControlMode === 'tail_controls' ? currentStroke[1].y * 10 : currentStroke[0].y * 10"
+                r="4.5"
+                :fill="stratStore.activeColor"
                 stroke="#0f172a"
                 stroke-width="1.5"
               />
               <polygon
-                :points="getArrowheadPolygon(el.points[0], el.points[1])"
-                :fill="el.color"
+                :points="getArrowheadPolygon(
+                  arrowControlMode === 'tail_controls' ? currentStroke[1] : currentStroke[0],
+                  arrowControlMode === 'tail_controls' ? currentStroke[0] : currentStroke[1]
+                )"
+                :fill="stratStore.activeColor"
               />
             </g>
 
-            <!-- 4. SMOKE BLOOM (CS2 VOLUMETRIC SCALED RADIUS) -->
-            <g v-else-if="el.type === 'smoke_cloud'">
-              <circle
-                :cx="el.points[0].x * 10"
-                :cy="el.points[0].y * 10"
-                r="32"
-                fill="url(#smokeGradient)"
-                stroke="#94a3b8"
-                stroke-width="1.5"
-                stroke-dasharray="4 3"
-              />
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="10" fill="#0f172a" stroke="#94a3b8" stroke-width="1.5" />
-              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3.5" fill="#ffffff" font-size="9" font-weight="black" text-anchor="middle">S</text>
-            </g>
-
-            <!-- 6. FLASH BURST -->
-            <g v-else-if="el.type === 'flash_burst'">
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="16" fill="#eab308" fill-opacity="0.25" stroke="#eab308" stroke-width="1.5" stroke-dasharray="3 2" />
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="9" fill="#0f172a" stroke="#eab308" stroke-width="1.5" />
-              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3" fill="#fde047" font-size="8" font-weight="black" text-anchor="middle">F</text>
-            </g>
-
-            <!-- 7. MOLOTOV FIRE -->
-            <g v-else-if="el.type === 'molotov_fire'">
-              <circle
-                :cx="el.points[0].x * 10"
-                :cy="el.points[0].y * 10"
-                r="25"
-                fill="url(#fireGradient)"
-                stroke="#f97316"
-                stroke-width="1.5"
-                stroke-dasharray="4 3"
-              />
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="10" fill="#0f172a" stroke="#f97316" stroke-width="1.5" />
-              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3.5" fill="#fb923c" font-size="9" font-weight="black" text-anchor="middle">M</text>
-            </g>
-
-            <!-- 8. HE GRENADE BLAST -->
-            <g v-else-if="el.type === 'he_blast'">
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="20" fill="#22c55e" fill-opacity="0.2" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="3 2" />
-              <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="9" fill="#0f172a" stroke="#22c55e" stroke-width="1.5" />
-              <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3" fill="#4ade80" font-size="8" font-weight="black" text-anchor="middle">HE</text>
-            </g>
-
-            <!-- 9. C4 BOMB / PLANT SPOT -->
-            <g v-else-if="el.type === 'c4_bomb' || el.type === 'plant_a' || el.type === 'plant_b'">
-              <rect
-                :x="el.points[0].x * 10 - 12"
-                :y="el.points[0].y * 10 - 12"
-                width="24"
-                height="24"
-                rx="5"
-                :fill="el.type === 'c4_bomb' ? '#b91c1c' : el.color"
-                stroke="#ffffff"
-                stroke-width="1.5"
-                class="shadow-lg"
-              />
-              <text
-                :x="el.points[0].x * 10"
-                :y="el.points[0].y * 10 + 4"
-                fill="#ffffff"
-                font-size="11"
-                font-weight="black"
-                font-family="monospace"
-                text-anchor="middle"
-              >
-                {{ el.text || 'C4' }}
-              </text>
-            </g>
-
-            <!-- 10. PLAYER PIN (5v5 ROSTER, MOVEABLE) -->
-            <g v-else-if="el.type === 'player_t' || el.type === 'player_ct' || el.type === 'player_icon'">
-              <circle
-                :cx="el.points[0].x * 10"
-                :cy="el.points[0].y * 10"
-                r="15"
-                :fill="el.color"
-                stroke="#0f172a"
-                stroke-width="2.5"
-                class="shadow-xl"
-              />
-              <text
-                :x="el.points[0].x * 10"
-                :y="el.points[0].y * 10 + 4.5"
-                fill="#0f172a"
-                font-size="12"
-                font-weight="900"
-                font-family="sans-serif"
-                text-anchor="middle"
-              >
-                {{ el.playerNum || '1' }}
-              </text>
-            </g>
-
-            <!-- 11. TEXT ANNOTATION -->
-            <g v-else-if="el.type === 'text'">
-              <rect
-                :x="el.points[0].x * 10 - 4"
-                :y="el.points[0].y * 10 - 14"
-                :width="Math.max(40, (el.text?.length || 5) * 8 + 12)"
-                height="22"
-                rx="4"
-                fill="#0f172a"
-                fill-opacity="0.85"
-                stroke="#334155"
-                stroke-width="1"
-              />
-              <text
-                :x="el.points[0].x * 10 + 2"
-                :y="el.points[0].y * 10 + 1"
-                :fill="el.color"
-                :font-size="el.radius || 12"
-                font-weight="bold"
-                font-family="sans-serif"
-              >
-                {{ el.text }}
-              </text>
-            </g>
-          </g>
-
-          <!-- ACTIVE CURRENT DRAWING STROKE -->
-          <path
-            v-if="isDrawing && currentStroke.length > 1 && stratStore.activeTool === 'pen'"
-            :d="getSvgPath(currentStroke)"
-            fill="none"
-            :stroke="stratStore.activeColor"
-            :stroke-width="activeStrokeWidth"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-
-          <!-- ARROW PREVIEW (TAIL-GUIDED) -->
-          <g v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'arrow'">
             <line
-              :x1="arrowControlMode === 'tail_controls' ? currentStroke[1].x * 10 : currentStroke[0].x * 10"
-              :y1="arrowControlMode === 'tail_controls' ? currentStroke[1].y * 10 : currentStroke[0].y * 10"
-              :x2="arrowControlMode === 'tail_controls' ? currentStroke[0].x * 10 : currentStroke[1].x * 10"
-              :y2="arrowControlMode === 'tail_controls' ? currentStroke[0].y * 10 : currentStroke[1].y * 10"
+              v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'line'"
+              :x1="currentStroke[0].x * 10"
+              :y1="currentStroke[0].y * 10"
+              :x2="currentStroke[1].x * 10"
+              :y2="currentStroke[1].y * 10"
               :stroke="stratStore.activeColor"
               :stroke-width="activeStrokeWidth"
               stroke-linecap="round"
             />
-            <!-- Visual Tail Pivot Circle -->
-            <circle
-              :cx="arrowControlMode === 'tail_controls' ? currentStroke[1].x * 10 : currentStroke[0].x * 10"
-              :cy="arrowControlMode === 'tail_controls' ? currentStroke[1].y * 10 : currentStroke[0].y * 10"
-              r="4.5"
-              :fill="stratStore.activeColor"
-              stroke="#0f172a"
-              stroke-width="1.5"
-            />
-            <polygon
-              :points="getArrowheadPolygon(
-                arrowControlMode === 'tail_controls' ? currentStroke[1] : currentStroke[0],
-                arrowControlMode === 'tail_controls' ? currentStroke[0] : currentStroke[1]
-              )"
-              :fill="stratStore.activeColor"
-            />
           </g>
+        </svg>
+      </div>
 
-          <line
-            v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'line'"
-            :x1="currentStroke[0].x * 10"
-            :y1="currentStroke[0].y * 10"
-            :x2="currentStroke[1].x * 10"
-            :y2="currentStroke[1].y * 10"
-            :stroke="stratStore.activeColor"
-            :stroke-width="activeStrokeWidth"
-            stroke-linecap="round"
-          />
-        </g>
-      </svg>
+      <!-- RIGHT TACTICAL SIDEBAR (PUBLIC ROOM CHAT / PRIVATE DM / PLAYERS LIST) -->
+      <div
+        v-if="isRightSidebarVisible"
+        class="w-full xl:w-80 h-[560px] xl:h-[720px] bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden shrink-0 animate-fade-in"
+      >
+        <!-- HEADER TABS -->
+        <div class="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-1 shrink-0">
+          <div class="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 flex-1">
+            <button
+              @click="rightSidebarTab = 'public_chat'"
+              :class="[
+                'flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                rightSidebarTab === 'public_chat' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+              ]"
+            >
+              <MessageSquare class="w-3.5 h-3.5" />
+              <span>Room Chat</span>
+            </button>
+
+            <button
+              @click="rightSidebarTab = 'private_chat'"
+              :class="[
+                'flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                rightSidebarTab === 'private_chat' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+              ]"
+            >
+              <Lock class="w-3.5 h-3.5" />
+              <span>Private</span>
+            </button>
+
+            <button
+              @click="rightSidebarTab = 'players'"
+              :class="[
+                'flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                rightSidebarTab === 'players' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+              ]"
+            >
+              <Users class="w-3.5 h-3.5" />
+              <span>Players ({{ gameRoomStore.members.length }})</span>
+            </button>
+          </div>
+
+          <button
+            @click="isRightSidebarVisible = false"
+            class="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
+            title="Hide Sidebar"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+
+        <!-- TAB 1: PUBLIC ROOM CHAT -->
+        <div v-if="rightSidebarTab === 'public_chat'" class="flex-1 flex flex-col justify-between overflow-hidden">
+          <div class="flex-1 p-3 overflow-y-auto flex flex-col gap-2.5 scrollbar-thin text-xs">
+            <div v-if="gameRoomStore.chatMessages.length === 0" class="m-auto text-center text-slate-500 italic p-4">
+              <span>No room messages yet. Say hello to everyone!</span>
+            </div>
+            <div
+              v-for="(msg, mIdx) in gameRoomStore.chatMessages"
+              :key="`rc-${mIdx}`"
+              :class="[
+                'flex flex-col max-w-[88%] rounded-2xl p-2.5 text-xs',
+                msg.username === (authStore.currentUser?.username || 'Teammate')
+                  ? 'self-end bg-amber-500 text-slate-950 font-medium'
+                  : 'self-start bg-slate-950 border border-slate-800 text-slate-200'
+              ]"
+            >
+              <div class="flex items-center gap-1.5 mb-0.5 opacity-80 text-[10px]">
+                <span class="font-bold">{{ msg.username }}</span>
+                <span v-if="msg.inGameRole" class="font-mono text-[9px] text-amber-400">[{{ msg.inGameRole }}]</span>
+                <span class="text-[9px] opacity-75">{{ msg.time }}</span>
+              </div>
+              <p class="leading-relaxed whitespace-pre-wrap break-words">{{ msg.text }}</p>
+            </div>
+          </div>
+
+          <form @submit.prevent="sendRoomMessage" class="p-2.5 border-t border-slate-800 bg-slate-950/80 flex items-center gap-1.5">
+            <input
+              v-model="roomChatInput"
+              type="text"
+              placeholder="Message everyone in room..."
+              class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+            />
+            <button
+              type="submit"
+              :disabled="!roomChatInput.trim()"
+              class="p-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-30 text-slate-950 font-black rounded-xl cursor-pointer"
+            >
+              <Send class="w-4 h-4" />
+            </button>
+          </form>
+        </div>
+
+        <!-- TAB 2: ENCRYPTED PRIVATE CHAT -->
+        <div v-else-if="rightSidebarTab === 'private_chat'" class="flex-1 flex flex-col justify-between overflow-hidden">
+          <div v-if="!selectedPrivateRecipientId" class="flex-1 p-4 flex flex-col items-center justify-center text-center gap-3 text-xs">
+            <Lock class="w-8 h-8 text-emerald-400/70" />
+            <span class="font-bold text-slate-200">Encrypted Private Messages</span>
+            <span class="text-[11px] text-slate-400">Select a player from the Players tab to start an encrypted direct message.</span>
+            <button
+              @click="rightSidebarTab = 'players'"
+              class="px-4 py-2 bg-amber-500 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow"
+            >
+              Choose Player
+            </button>
+          </div>
+
+          <template v-else>
+            <!-- TARGET HEADER -->
+            <div class="px-3 py-2 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between text-xs shrink-0">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-white">DM with {{ selectedPrivateRecipientUser?.username || selectedPrivateRecipientId }}</span>
+                <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-bold flex items-center gap-1">
+                  <Lock class="w-2.5 h-2.5" />
+                  <span>E2EE</span>
+                </span>
+              </div>
+              <button
+                @click="selectedPrivateRecipientId = null; selectedPrivateRecipientUser = null"
+                class="text-[10px] text-slate-400 hover:text-white cursor-pointer font-bold"
+              >
+                Change
+              </button>
+            </div>
+
+            <!-- PRIVATE FEED -->
+            <div class="flex-1 p-3 overflow-y-auto flex flex-col gap-2.5 scrollbar-thin text-xs">
+              <div v-if="privateMessages.length === 0" class="m-auto text-center text-slate-500 italic p-4">
+                <span>No private messages yet. Say hello!</span>
+              </div>
+              <div
+                v-for="pmsg in privateMessages"
+                :key="pmsg.id"
+                :class="[
+                  'flex flex-col max-w-[88%] rounded-2xl p-2.5 text-xs',
+                  pmsg.senderId === authStore.currentUser?.id
+                    ? 'self-end bg-amber-500 text-slate-950 font-medium'
+                    : 'self-start bg-slate-950 border border-slate-800 text-slate-200'
+                ]"
+              >
+                <div class="flex items-center gap-1.5 mb-0.5 opacity-80 text-[10px]">
+                  <span class="font-bold">{{ pmsg.senderUsername }}</span>
+                  <span class="text-[9px] opacity-75">{{ new Date(pmsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
+                </div>
+                <p class="leading-relaxed whitespace-pre-wrap break-words">{{ pmsg.text }}</p>
+              </div>
+            </div>
+
+            <form @submit.prevent="sendPrivateMessage" class="p-2.5 border-t border-slate-800 bg-slate-950/80 flex items-center gap-1.5">
+              <input
+                v-model="privateChatInput"
+                type="text"
+                placeholder="Send encrypted message..."
+                class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+              <button
+                type="submit"
+                :disabled="!privateChatInput.trim()"
+                class="p-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-30 text-slate-950 font-black rounded-xl cursor-pointer"
+              >
+                <Send class="w-4 h-4" />
+              </button>
+            </form>
+          </template>
+        </div>
+
+        <!-- TAB 3: PLAYERS ROSTER -->
+        <div v-else-if="rightSidebarTab === 'players'" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 text-xs scrollbar-thin">
+          <div
+            v-for="member in gameRoomStore.members"
+            :key="member.socketId"
+            class="flex items-center justify-between p-2.5 rounded-2xl bg-slate-950 border border-slate-800"
+          >
+            <div class="flex items-center gap-2.5 min-w-0">
+              <img
+                :src="member.avatar || ('https://api.dicebear.com/7.x/bottts/svg?seed=' + member.username)"
+                class="w-7 h-7 rounded-xl object-cover border border-slate-700 shrink-0"
+              />
+              <div class="flex flex-col min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold text-white text-xs truncate">{{ member.username }}</span>
+                  <Crown v-if="member.isHost" class="w-3 h-3 text-amber-400 shrink-0" title="Room Host" />
+                </div>
+                <span class="text-[10px] text-amber-400 font-mono">{{ member.inGameRole || 'Player' }}</span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-1">
+              <button
+                v-if="member.username !== authStore.currentUser?.username"
+                @click="selectPrivateRecipient(member)"
+                class="p-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 rounded-lg cursor-pointer border border-slate-700"
+                title="Send Private Message"
+              >
+                <MessageSquare class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- MODAL 1: CUSTOMIZE TOOLBAR & ENABLED ICONS -->

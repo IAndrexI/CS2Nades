@@ -659,7 +659,7 @@ app.get('/api/dm/messages/:targetId', requireAuth, (req, res) => {
   res.json(thread)
 })
 
-app.post('/api/dm/messages/:targetId', requireAuth, (req, res) => {
+app.post('/api/dm/messages/:targetId', requireAuth, async (req, res) => {
   db = loadDB()
   if (!db.dms) db.dms = []
   const userId = req.user.id
@@ -669,6 +669,8 @@ app.post('/api/dm/messages/:targetId', requireAuth, (req, res) => {
   if (!text || !text.trim()) return res.status(400).json({ error: 'Message cannot be empty' })
 
   const sender = db.users.find(u => u.id === userId)
+  const recipient = db.users.find(u => u.id === targetId)
+
   const newMsg = {
     id: `dm-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     senderId: userId,
@@ -685,6 +687,38 @@ app.post('/api/dm/messages/:targetId', requireAuth, (req, res) => {
 
   // Emit real-time DM to recipient if connected
   io.emit(`dm:${targetId}`, newMsg)
+
+  // Discord Webhook DM Forwarding Notification
+  if (recipient?.socials?.discordWebhook) {
+    try {
+      const webhookUrl = recipient.socials.discordWebhook.trim()
+      if (webhookUrl.startsWith('http')) {
+        const isEnc = text.startsWith('ENC:')
+        const displayBody = isEnc 
+          ? '🔒 *[End-to-End Encrypted Message Received]*' 
+          : (text.length > 200 ? text.slice(0, 197) + '...' : text)
+
+        await axios.post(webhookUrl, {
+          username: 'Protutech Tactical DM',
+          avatar_url: 'https://raw.githubusercontent.com/IAndrexI/CS2Nades/main/public/logo.png',
+          embeds: [
+            {
+              title: `📬 New Direct Message from ${sender?.username || req.user.username}`,
+              description: displayBody,
+              color: 0xde9b35,
+              timestamp: new Date().toISOString(),
+              footer: {
+                text: 'Protutech | CS2 nade'
+              }
+            }
+          ]
+        }).catch(err => console.error('Discord webhook post failed:', err.message))
+      }
+    } catch (whErr) {
+      console.error('Failed to dispatch Discord DM webhook', whErr)
+    }
+  }
+
   res.json(newMsg)
 })
 

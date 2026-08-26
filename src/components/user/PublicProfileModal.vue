@@ -52,12 +52,12 @@ watch(() => props.isOpen, (open) => {
     >
       <div class="my-auto w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh]">
       <!-- PROFILE BANNER -->
-      <div class="relative h-36 w-full bg-slate-950">
+      <div class="relative h-40 w-full bg-slate-950">
         <img
-          :src="profile.banner || 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200&auto=format&fit=crop&q=80'"
+          :src="profile.banner || '/radar/mirage.png'"
           class="w-full h-full object-cover"
         />
-        <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-black/40"></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/30 to-black/50"></div>
         <button
           @click="emit('close')"
           class="absolute top-3 right-3 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors cursor-pointer"
