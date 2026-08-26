@@ -194,19 +194,12 @@ export function setRadarImageData(mapId: string, data: ImageData) {
   radarImageCache[cleanId] = data
 }
 
-export function isColorPassable(mapId: string, r: number, g: number, b: number, a: number): boolean {
-  if (a < 20) return false // Transparent / void
-  // If close to dark background #090c13 / #090d13 (R: 9, G: 12..13, B: 19), it is solid obstacle/void!
-  if (r <= 16 && g <= 20 && b <= 26) return false
-
-  const cleanId = (mapId || 'mirage').toLowerCase().replace('de_', '').trim()
-  const allowedHexes = MAP_PASSABLE_COLORS[cleanId] || MAP_PASSABLE_COLORS.mirage || ['#1c222e']
-
-  for (const hex of allowedHexes) {
-    const target = hexToRgb(hex)
-    const dist = Math.hypot(r - target.r, g - target.g, b - target.b)
-    if (dist <= 35) return true
-  }
+export function isWallPixel(r: number, g: number, b: number, a: number): boolean {
+  if (a < 30) return true // Outside map boundaries / transparent
+  // Dark void / solid wall background (#090c13, #090d13, #0b0e14, etc.)
+  if (r <= 20 && g <= 24 && b <= 30) return true
+  // Dark wall dividing borders
+  if (r + g + b < 62) return true
   return false
 }
 
@@ -284,15 +277,18 @@ export function calculateVisionMesh(
       }
     }
 
-    // 2. Check pixel radar colors if available
+    // 2. Check pixel radar obstacles if image data is available
     if (imgData) {
-      const stepDist = 5
-      const steps = Math.floor(maxDistance / stepDist)
+      const stepDist = 4
+      const minStartDist = 18 // Avoid self-blocking at player pin origin
+      const startStep = Math.ceil(minStartDist / stepDist)
+      const totalSteps = Math.floor(maxDistance / stepDist)
       const cosA = Math.cos(rayAngle)
       const sinA = Math.sin(rayAngle)
 
-      // Start testing past origin
-      for (let s = 3; s <= steps; s++) {
+      let consecutiveWallHits = 0
+
+      for (let s = startStep; s <= totalSteps; s++) {
         const curDist = s * stepDist
         if (closestHit && curDist >= closestHit.dist) break
 
@@ -310,9 +306,20 @@ export function calculateVisionMesh(
           const b = imgData.data[pixelIdx + 2]
           const a = imgData.data[pixelIdx + 3]
 
-          if (!isColorPassable(cleanMapId, r, g, b, a)) {
-            closestHit = { x: curX, y: curY, dist: curDist, wallIndex: 9999 }
-            break
+          if (isWallPixel(r, g, b, a)) {
+            consecutiveWallHits++
+            // Require 2 consecutive wall hits to confirm real obstacle boundary
+            if (consecutiveWallHits >= 2) {
+              closestHit = {
+                x: curX - cosA * stepDist,
+                y: curY - sinA * stepDist,
+                dist: curDist - stepDist,
+                wallIndex: 9999
+              }
+              break
+            }
+          } else {
+            consecutiveWallHits = 0
           }
         }
       }
