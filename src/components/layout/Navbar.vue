@@ -12,6 +12,8 @@ import MapSettingsModal from '../map/MapSettingsModal.vue'
 import LineupConflictModal from '../lineups/LineupConflictModal.vue'
 import UserSettingsModal from '../user/UserSettingsModal.vue'
 import DirectMessagesModal from '../user/DirectMessagesModal.vue'
+import PeopleAndGroupsModal from '../user/PeopleAndGroupsModal.vue'
+import CS2ServerConnectModal from '../lineups/CS2ServerConnectModal.vue'
 
 import { 
   Crosshair, 
@@ -23,6 +25,9 @@ import {
   Settings2, 
   Layers, 
   User, 
+  Users,
+  Gamepad2,
+  Ghost,
   ShieldCheck, 
   LogOut, 
   BookMarked, 
@@ -51,6 +56,18 @@ const isDataModalOpen = ref(false)
 const isMobileMenuOpen = ref(false)
 const isUserSettingsOpen = ref(false)
 const isDirectMessagesOpen = ref(false)
+const isPeopleGroupsOpen = ref(false)
+const isCs2ServerOpen = ref(false)
+const directMessageTargetId = ref<string | undefined>(undefined)
+
+function openDirectMessageWith(userId: string) {
+  directMessageTargetId.value = userId
+  isDirectMessagesOpen.value = true
+}
+
+function handleJoinRoomFromPeople(roomCode: string, isGhost = false) {
+  router.push(`/tactics?room=${roomCode}`)
+}
 
 const customRoleInput = ref('')
 
@@ -212,8 +229,28 @@ async function handleSyncLineups() {
         </router-link>
       </nav>
 
-      <!-- RIGHT ACTIONS: DISCORD, THEME, SYNC, USER PROFILE, NEW NADE -->
+      <!-- RIGHT ACTIONS: CS2 CONNECT, PEOPLE & GROUPS, DISCORD, USER PROFILE, NEW NADE -->
       <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- CS2 DEDICATED SERVER CONNECT -->
+        <button
+          @click="isCs2ServerOpen = true"
+          class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-amber-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+          title="Connect to CS2 Server to directly create lineups"
+        >
+          <Gamepad2 class="w-3.5 h-3.5" />
+          <span class="hidden md:inline">CS2 Connect</span>
+        </button>
+
+        <!-- PEOPLE & SQUAD GROUPS -->
+        <button
+          @click="isPeopleGroupsOpen = true"
+          class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+          title="View community players, squads, and live channels"
+        >
+          <Users class="w-3.5 h-3.5 text-amber-400" />
+          <span class="hidden md:inline">People & Squads</span>
+        </button>
+
         <!-- DISCORD INVITE BUTTON -->
         <a
           href="https://discord.gg/XEDqfYEW5h"
@@ -239,10 +276,18 @@ async function handleSyncLineups() {
                 <span class="text-white text-xs font-bold truncate max-w-[90px]">{{ authStore.currentUser?.username }}</span>
                 <span class="text-[9px] text-amber-400 font-mono font-semibold">{{ authStore.currentUser?.inGameRole || 'Player' }}</span>
               </div>
-              <img 
-                :src="authStore.currentUser?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${authStore.currentUser?.username}`" 
-                class="w-6 h-6 rounded-lg bg-slate-950 border border-slate-700 object-cover flex-shrink-0" 
-              />
+              <div class="relative">
+                <img 
+                  :src="authStore.currentUser?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${authStore.currentUser?.username}`" 
+                  class="w-6 h-6 rounded-lg bg-slate-950 border border-slate-700 object-cover flex-shrink-0" 
+                />
+                <span 
+                  :class="[
+                    'absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-slate-950',
+                    authStore.currentUserStatus === 'online' ? 'bg-emerald-500' : 'bg-amber-500'
+                  ]"
+                ></span>
+              </div>
             </button>
 
             <!-- USER DROPDOWN -->
@@ -435,7 +480,18 @@ async function handleSyncLineups() {
     />
     <DirectMessagesModal
       :is-open="isDirectMessagesOpen"
-      @close="isDirectMessagesOpen = false"
+      :initial-target-user-id="directMessageTargetId"
+      @close="isDirectMessagesOpen = false; directMessageTargetId = undefined"
+    />
+    <PeopleAndGroupsModal
+      :is-open="isPeopleGroupsOpen"
+      @close="isPeopleGroupsOpen = false"
+      @open-dm="openDirectMessageWith"
+      @join-room="handleJoinRoomFromPeople"
+    />
+    <CS2ServerConnectModal
+      :is-open="isCs2ServerOpen"
+      @close="isCs2ServerOpen = false"
     />
     <LineupConflictModal />
   </header>

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useAdminStore } from '../stores/adminStore'
 import { useLineupStore } from '../stores/lineupStore'
 import { useGameRoomStore } from '../stores/gameRoomStore'
+import axios from 'axios'
 import { 
   ShieldCheck, 
   Sliders, 
@@ -17,15 +19,54 @@ import {
   Sparkles,
   Lock,
   Download,
-  AlertCircle
+  AlertCircle,
+  Radio,
+  Ghost,
+  RefreshCw
 } from 'lucide-vue-next'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const adminStore = useAdminStore()
 const lineupStore = useLineupStore()
 
-const activeTab = ref<'branding' | 'users' | 'groups' | 'system'>('branding')
+const activeTab = ref<'branding' | 'users' | 'groups' | 'rooms' | 'system'>('branding')
 const saveSuccess = ref(false)
+
+const openRooms = ref<any[]>([])
+const isLoadingRooms = ref(false)
+
+async function fetchOpenRooms() {
+  isLoadingRooms.value = true
+  try {
+    const res = await axios.get('/api/admin/rooms')
+    openRooms.value = res.data
+  } catch (e) {
+    console.error('Failed to load open channels', e)
+  } finally {
+    isLoadingRooms.value = false
+  }
+}
+
+async function handleCloseAdminRoom(code: string) {
+  const ok = await confirmAction({
+    title: 'Close Channel / Room?',
+    message: `Are you sure you want to forcibly close room "${code}"? All active participants will be disconnected.`,
+    confirmLabel: 'Close Room',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (ok) {
+    try {
+      await axios.delete(`/api/admin/rooms/${code}`)
+      await fetchOpenRooms()
+    } catch (e) {}
+  }
+}
+
+function handleJoinAdminRoom(code: string, isGhost = false) {
+  router.push(`/tactics?room=${code}`)
+}
 
 // Squad group form
 const newGroupName = ref('')
@@ -196,6 +237,17 @@ async function handleAddSquadGroup() {
         >
           <ShieldCheck class="w-3.5 h-3.5" />
           <span>Squad Groups (Auto-Allow)</span>
+        </button>
+
+        <button
+          @click="activeTab = 'rooms'; fetchOpenRooms()"
+          :class="[
+            'flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all cursor-pointer',
+            activeTab === 'rooms' ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'text-purple-400 hover:text-purple-300'
+          ]"
+        >
+          <Radio class="w-3.5 h-3.5" />
+          <span>Open Channels & Live Rooms ({{ openRooms.length }})</span>
         </button>
 
         <button
@@ -425,7 +477,79 @@ async function handleAddSquadGroup() {
         </div>
       </div>
 
-      <!-- TAB 4: PROXMOX & SYSTEM STORAGE -->
+      <!-- TAB 4: OPEN CHANNELS & LIVE ROOMS -->
+      <div v-else-if="activeTab === 'rooms'" class="p-6 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col gap-5 shadow-xl text-xs text-slate-300">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <Radio class="w-4 h-4 text-amber-400" />
+            <h2 class="text-sm font-black uppercase tracking-wider text-white">Live Channels & Open Rooms</h2>
+          </div>
+          <button
+            @click="fetchOpenRooms"
+            :disabled="isLoadingRooms"
+            class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer text-xs"
+          >
+            <RefreshCw :class="['w-3.5 h-3.5 text-amber-400', isLoadingRooms ? 'animate-spin' : '']" />
+            <span>Refresh Rooms</span>
+          </button>
+        </div>
+
+        <div v-if="openRooms.length === 0" class="text-center p-8 text-slate-500 italic bg-slate-950/60 rounded-xl border border-slate-800">
+          No tactical rooms are currently active on the server.
+        </div>
+
+        <div class="grid grid-cols-1 gap-3">
+          <div
+            v-for="room in openRooms"
+            :key="room.code"
+            class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+          >
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-black font-mono text-amber-400 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+                  {{ room.code }}
+                </span>
+                <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono uppercase text-[10px] font-bold">
+                  {{ room.mapId }}
+                </span>
+                <span class="text-xs text-slate-400">Host: <strong class="text-white">{{ room.host }}</strong></span>
+              </div>
+              <div class="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
+                <span>Members: <strong class="text-emerald-400">{{ room.membersCount }}</strong></span>
+                <span>Drawings / Pins: <strong class="text-amber-400">{{ room.elementsCount }}</strong></span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button
+                @click="handleJoinAdminRoom(room.code, true)"
+                class="px-3 py-1.5 bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-500/50 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                title="Observe room without appearing on roster"
+              >
+                <Ghost class="w-3.5 h-3.5" />
+                <span>Ghost Observe</span>
+              </button>
+
+              <button
+                @click="handleJoinAdminRoom(room.code, false)"
+                class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition-all cursor-pointer"
+              >
+                Join Room
+              </button>
+
+              <button
+                @click="handleCloseAdminRoom(room.code)"
+                class="p-2 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded-xl transition-all cursor-pointer"
+                title="Force close room"
+              >
+                <Trash2 class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5: PROXMOX & SYSTEM STORAGE -->
       <div v-else class="p-6 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col gap-4 shadow-xl text-xs text-slate-300">
         <h2 class="text-sm font-black uppercase tracking-wider text-white">Self-Hosted LXC & Database Status</h2>
         

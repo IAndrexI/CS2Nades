@@ -58,7 +58,7 @@ onMounted(async () => {
 })
 
 function handleCreateOrJoin() {
-  const code = joinRoomCode.value.trim() || 'SQUAD'
+  const code = joinRoomCode.value.trim() || `PIC-${Math.floor(1000 + Math.random() * 9000)}`
   const user = authStore.currentUser || {
     username: `Player_${Math.floor(1000 + Math.random() * 9000)}`,
     inGameRole: 'Entry',

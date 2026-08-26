@@ -26,7 +26,41 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const isAuthenticated = computed(() => !!currentUser.value && !!token.value)
-  const isAdmin = computed(() => currentUser.value?.role === 'admin')
+  const isAdmin = computed(() => currentUser.value?.role === 'admin' || currentUser.value?.username?.toLowerCase() === 'andrex')
+
+  // User Real-Time Presence & Online/Away Status
+  const userPresenceMap = ref<Record<string, { status: string; lastSeen?: number }>>({})
+  const currentUserStatus = ref<'online' | 'away'>('online')
+
+  async function fetchPresence() {
+    try {
+      const res = await axios.get('/api/users/presence')
+      userPresenceMap.value = res.data
+    } catch (e) {}
+  }
+
+  async function setUserStatus(status: 'online' | 'away') {
+    currentUserStatus.value = status
+    if (currentUser.value) {
+      userPresenceMap.value[currentUser.value.username.toLowerCase()] = { status, lastSeen: Date.now() }
+    }
+    try {
+      await axios.post('/api/users/status', { status })
+    } catch (e) {}
+  }
+
+  function getUserStatus(username: string): 'online' | 'away' | 'offline' {
+    if (!username) return 'offline'
+    const key = username.toLowerCase()
+    if (currentUser.value && currentUser.value.username.toLowerCase() === key) {
+      return currentUserStatus.value
+    }
+    const p = userPresenceMap.value[key]
+    if (!p) return 'offline'
+    if (p.status === 'away') return 'away'
+    if (p.status === 'online') return 'online'
+    return 'offline'
+  }
 
   // Setup Axios Auth Header
   function setAuthToken(newToken: string | null) {
@@ -256,6 +290,11 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     isAuthenticated,
     isAdmin,
+    userPresenceMap,
+    currentUserStatus,
+    fetchPresence,
+    setUserStatus,
+    getUserStatus,
     isAuthModalOpen,
     authMode,
     isLoading,

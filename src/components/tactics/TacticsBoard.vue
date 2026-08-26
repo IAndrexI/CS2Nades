@@ -35,9 +35,12 @@ import {
   Bomb,
   Crown,
   Users,
+  Ghost,
+  Gamepad2,
   RefreshCw
 } from 'lucide-vue-next'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
+import CS2ServerConnectModal from '../lineups/CS2ServerConnectModal.vue'
 
 const mapStore = useMapStore()
 const stratStore = useStratStore()
@@ -45,6 +48,7 @@ const gameRoomStore = useGameRoomStore()
 const authStore = useAuthStore()
 const { confirmAction } = useConfirmDialog()
 
+const isCs2ServerModalOpen = ref(false)
 const svgRef = ref<SVGSVGElement | null>(null)
 const isDrawing = ref(false)
 const currentStroke = ref<{ x: number; y: number }[]>([])
@@ -221,7 +225,7 @@ onMounted(async () => {
       roomCodeInput.value = roomParam.toUpperCase()
       joinTacticalRoom(roomParam.toUpperCase())
     } else if (!gameRoomStore.currentRoomCode) {
-      roomCodeInput.value = `TACTIC-${Math.floor(1000 + Math.random() * 9000)}`
+      roomCodeInput.value = `PIC-${Math.floor(1000 + Math.random() * 9000)}`
       joinTacticalRoom(roomCodeInput.value)
     } else {
       roomCodeInput.value = gameRoomStore.currentRoomCode
@@ -360,7 +364,7 @@ function handleDeleteCustomPin(pinId: string) {
 }
 
 function joinTacticalRoom(codeToJoin?: string) {
-  const code = (codeToJoin || roomCodeInput.value || 'TACTIC-SQUAD').trim().toUpperCase()
+  const code = (codeToJoin || roomCodeInput.value || `PIC-${Math.floor(1000 + Math.random() * 9000)}`).trim().toUpperCase()
   roomCodeInput.value = code
   const user = authStore.currentUser || {
     id: `guest-${Date.now()}`,
@@ -373,14 +377,14 @@ function joinTacticalRoom(codeToJoin?: string) {
 }
 
 function handleCopyRoomCode() {
-  const room = gameRoomStore.currentRoomCode || roomCodeInput.value || 'TACTIC-SQUAD'
+  const room = gameRoomStore.currentRoomCode || roomCodeInput.value || 'PIC-1001'
   copyToClipboard(room)
   copySuccessToast.value = 'Room ID Copied!'
   setTimeout(() => { copySuccessToast.value = '' }, 2500)
 }
 
 function handleCopyRoomLink() {
-  const room = gameRoomStore.currentRoomCode || roomCodeInput.value || 'TACTIC-SQUAD'
+  const room = gameRoomStore.currentRoomCode || roomCodeInput.value || 'PIC-1001'
   const baseDomain = serverPublicUrl.value || window.location.origin
   const url = `${baseDomain}/tactics?room=${room}`
   copyToClipboard(url)
@@ -765,6 +769,31 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
           <Crown v-if="gameRoomStore.isHost" class="w-3.5 h-3.5 text-amber-400" />
           <Users v-else class="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-400" />
           <span>Members ({{ gameRoomStore.members.length }})</span>
+        </button>
+
+        <!-- GHOST MODE TOGGLE (SILENT JOIN / INVISIBLE OBSERVATION) -->
+        <button
+          @click="gameRoomStore.toggleGhostMode"
+          :class="[
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-sm',
+            gameRoomStore.isGhostMode
+              ? 'bg-purple-950/90 text-purple-300 border-purple-500/60 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+              : 'bg-slate-950 hover:bg-slate-900 text-slate-400 border-slate-800'
+          ]"
+          :title="gameRoomStore.isGhostMode ? 'Ghost Mode Active: You are invisible to other room members' : 'Enable Ghost Mode to join & observe silently without being seen on member roster'"
+        >
+          <Ghost :class="['w-3.5 h-3.5', gameRoomStore.isGhostMode ? 'text-purple-400 animate-pulse' : 'text-slate-500']" />
+          <span>{{ gameRoomStore.isGhostMode ? 'Ghost: Invisible' : 'Ghost Mode' }}</span>
+        </button>
+
+        <!-- CS2 DIRECT SERVER CONNECT -->
+        <button
+          @click="isCs2ServerModalOpen = true"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 border border-slate-800 hover:border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
+          title="Connect to CS2 Practice Server via RCON to capture live in-game lineups"
+        >
+          <Gamepad2 class="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+          <span>CS2 Connect</span>
         </button>
 
         <!-- LIVE AUTO-SYNC BADGE & FORCE SYNC OPTION BUTTON -->
@@ -1689,5 +1718,11 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
         </div>
       </div>
     </Teleport>
+
+    <!-- CS2 DEDICATED SERVER CONNECT MODAL -->
+    <CS2ServerConnectModal
+      :is-open="isCs2ServerModalOpen"
+      @close="isCs2ServerModalOpen = false"
+    />
   </div>
 </template>

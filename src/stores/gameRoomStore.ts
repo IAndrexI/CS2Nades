@@ -144,12 +144,19 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     return socket.value
   }
 
-  function joinRoom(roomCode: string, user: any, groupId?: string) {
+  const isGhostMode = ref<boolean>(false)
+
+  function toggleGhostMode() {
+    isGhostMode.value = !isGhostMode.value
+  }
+
+  function joinRoom(roomCode: string, user: any, groupId?: string, isGhost?: boolean) {
     const s = getSocket()
     if (!s.connected) s.connect()
     selectedGroupId.value = groupId || null
     currentUsername.value = user?.username || ''
-    s.emit('room:join', { roomCode: roomCode.trim().toUpperCase(), user, groupId })
+    const ghost = isGhost !== undefined ? isGhost : isGhostMode.value
+    s.emit('room:join', { roomCode: roomCode.trim().toUpperCase(), user, groupId, isGhost: ghost })
     currentRoomCode.value = roomCode.trim().toUpperCase()
   }
 
@@ -255,6 +262,8 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     announcements,
     squadGroups,
     selectedGroupId,
+    isGhostMode,
+    toggleGhostMode,
     joinRoom,
     leaveRoom,
     sendStroke,

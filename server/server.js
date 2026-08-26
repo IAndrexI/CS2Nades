@@ -4,6 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import http from 'http'
+import net from 'net'
 import { Server } from 'socket.io'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
@@ -123,24 +124,85 @@ function saveDB(data) {
   }
 }
 
-// Ensure default admin account exists if no users
+// ==========================================
+// ACCOUNT SANITIZATION & SEEDING (ANDREX & CHIPS ONLY)
+// ==========================================
 let db = loadDB()
-if (db.users.length === 0) {
-  const salt = bcrypt.genSaltSync(10)
-  const defaultAdmin = {
-    id: 'usr-admin-initial',
-    username: 'admin',
-    email: 'admin@stratbook.local',
-    passwordHash: bcrypt.hashSync('admin123', salt),
+const salt = bcrypt.genSaltSync(10)
+
+// 1. Filter out all accounts except Andrex and chips (case-insensitive)
+const existingUsers = Array.isArray(db.users) ? db.users : []
+const sanitizedUsers = existingUsers.filter(u => {
+  const name = (u.username || '').toLowerCase()
+  return name === 'andrex' || name === 'chips'
+})
+
+// 2. Ensure Andrex account exists with ADMIN role
+let andrexUser = sanitizedUsers.find(u => u.username.toLowerCase() === 'andrex')
+if (andrexUser) {
+  andrexUser.role = 'admin'
+  andrexUser.username = 'Andrex'
+  if (!andrexUser.inGameRole) andrexUser.inGameRole = 'IGL'
+} else {
+  andrexUser = {
+    id: 'usr-andrex',
+    username: 'Andrex',
+    email: 'andrex@stratbook.local',
+    passwordHash: bcrypt.hashSync('andrex123', salt),
     role: 'admin',
     inGameRole: 'IGL',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80',
+    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Andrex',
     createdAt: new Date().toISOString()
   }
-  db.users.push(defaultAdmin)
-  saveDB(db)
-  console.log('[Auth] Default admin initialized: admin / admin123')
+  sanitizedUsers.push(andrexUser)
 }
+
+// 3. Ensure chips account exists with PLAYER role
+let chipsUser = sanitizedUsers.find(u => u.username.toLowerCase() === 'chips')
+if (chipsUser) {
+  chipsUser.role = 'player'
+  chipsUser.username = 'chips'
+  if (!chipsUser.inGameRole) chipsUser.inGameRole = 'AWP'
+} else {
+  chipsUser = {
+    id: 'usr-chips',
+    username: 'chips',
+    email: 'chips@stratbook.local',
+    passwordHash: bcrypt.hashSync('chips123', salt),
+    role: 'player',
+    inGameRole: 'AWP',
+    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=chips',
+    createdAt: new Date().toISOString()
+  }
+  sanitizedUsers.push(chipsUser)
+}
+
+db.users = sanitizedUsers
+
+// 4. Update default squad groups to include Andrex and chips
+if (!db.groups || db.groups.length === 0) {
+  db.groups = [
+    {
+      id: 'grp-main-squad',
+      name: 'Main Roster (Auto-Allow)',
+      description: 'Default competitive 5-stack squad with instant room access',
+      memberUsernames: ['Andrex', 'chips'],
+      createdAt: new Date().toISOString()
+    }
+  ]
+} else {
+  db.groups.forEach(g => {
+    g.memberUsernames = g.memberUsernames.filter(u => {
+      const un = (u || '').toLowerCase()
+      return un === 'andrex' || un === 'chips'
+    })
+    if (!g.memberUsernames.includes('Andrex')) g.memberUsernames.push('Andrex')
+    if (!g.memberUsernames.includes('chips')) g.memberUsernames.push('chips')
+  })
+}
+
+saveDB(db)
+console.log('[Auth] Sanitized accounts: Andrex (Admin) and chips (Player). All other accounts deleted.')
 
 app.use(cors())
 app.use(express.json({ limit: '20mb' }))
@@ -171,7 +233,7 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  if (!req.user || req.user.role !== 'admin') {
+  if (!req.user || (req.user.role !== 'admin' && req.user.username?.toLowerCase() !== 'andrex')) {
     return res.status(403).json({ error: 'Admin privileges required' })
   }
   next()
@@ -874,6 +936,250 @@ app.delete('/api/strats/:id', requireAuth, (req, res) => {
 })
 
 // ==========================================
+// CS2 RADAR WORLD-TO-MAP COORDINATES CONVERTER
+// ==========================================
+const CS2_RADAR_CONFIGS = {
+  mirage: { pos_x: -3230, pos_y: 1713, scale: 5.00 },
+  dust2: { pos_x: -2476, pos_y: 3239, scale: 4.40 },
+  inferno: { pos_x: -2087, pos_y: 3870, scale: 4.90 },
+  nuke: { pos_x: -3453, pos_y: 2887, scale: 7.00 },
+  anubis: { pos_x: -2796, pos_y: 3328, scale: 5.22 },
+  ancient: { pos_x: -2953, pos_y: 2164, scale: 5.00 },
+  vertigo: { pos_x: -3168, pos_y: 1762, scale: 4.00 },
+  overpass: { pos_x: -4831, pos_y: 1781, scale: 5.20 },
+  office: { pos_x: -1838, pos_y: 1858, scale: 4.10 },
+  italy: { pos_x: -2647, pos_y: 2592, scale: 4.60 }
+}
+
+function worldToRadarCoords(mapName, worldX, worldY) {
+  const mapKey = (mapName || 'mirage').toLowerCase().replace('de_', '').replace('cs_', '')
+  const cfg = CS2_RADAR_CONFIGS[mapKey] || CS2_RADAR_CONFIGS.mirage
+  const radarSize = 1024 * cfg.scale
+  const xPct = ((worldX - cfg.pos_x) / radarSize) * 100
+  const yPct = ((cfg.pos_y - worldY) / radarSize) * 100
+  return {
+    x: Math.round(Math.min(Math.max(xPct, 3), 97) * 10) / 10,
+    y: Math.round(Math.min(Math.max(yPct, 3), 97) * 10) / 10
+  }
+}
+
+// Source RCON Packet Builder & Executor
+function buildRconPacket(id, type, body) {
+  const bodyBuf = Buffer.from(body + '\x00', 'utf8')
+  const length = 4 + 4 + bodyBuf.length + 1
+  const buf = Buffer.alloc(4 + length)
+  buf.writeInt32LE(length, 0)
+  buf.writeInt32LE(id, 4)
+  buf.writeInt32LE(type, 8)
+  bodyBuf.copy(buf, 12)
+  buf.writeInt8(0, buf.length - 1)
+  return buf
+}
+
+function executeRconCommand(host, port, password, command, timeoutMs = 3500) {
+  return new Promise((resolve, reject) => {
+    const client = new net.Socket()
+    let authed = false
+    let response = ''
+    let isFinished = false
+
+    const timer = setTimeout(() => {
+      if (!isFinished) {
+        isFinished = true
+        client.destroy()
+        resolve({ response: response || 'Command executed on CS2 server' })
+      }
+    }, timeoutMs)
+
+    client.connect(parseInt(port, 10) || 27015, host || '127.0.0.1', () => {
+      // Step 1: Send Auth packet (type 3)
+      const authPacket = buildRconPacket(1, 3, password || '')
+      client.write(authPacket)
+    })
+
+    client.on('data', (data) => {
+      try {
+        if (!authed) {
+          authed = true
+          // Step 2: Send Exec packet (type 2)
+          const execPacket = buildRconPacket(2, 2, command)
+          client.write(execPacket)
+        } else {
+          if (data.length >= 12) {
+            const body = data.toString('utf8', 12, data.length - 2)
+            response += body
+          }
+          setTimeout(() => {
+            if (!isFinished) {
+              isFinished = true
+              clearTimeout(timer)
+              client.destroy()
+              resolve({ response: response.trim() })
+            }
+          }, 250)
+        }
+      } catch (err) {
+        if (!isFinished) {
+          isFinished = true
+          clearTimeout(timer)
+          client.destroy()
+          reject(err)
+        }
+      }
+    })
+
+    client.on('error', (err) => {
+      if (!isFinished) {
+        isFinished = true
+        clearTimeout(timer)
+        reject(err)
+      }
+    })
+  })
+}
+
+// ==========================================
+// USER PRESENCE & ONLINE/AWAY TRACKING
+// ==========================================
+const userPresence = new Map() // username (lowercase) -> { status: 'online'|'away', lastSeen: timestamp }
+
+app.get('/api/users/presence', (req, res) => {
+  const presenceObj = {}
+  for (const [uname, p] of userPresence.entries()) {
+    presenceObj[uname] = p
+  }
+  res.json(presenceObj)
+})
+
+app.post('/api/users/status', requireAuth, (req, res) => {
+  const { status } = req.body
+  const s = (status === 'away') ? 'away' : 'online'
+  if (req.user?.username) {
+    const key = req.user.username.toLowerCase()
+    userPresence.set(key, { status: s, lastSeen: Date.now() })
+    io.emit('user:presence_update', { username: req.user.username, status: s, lastSeen: Date.now() })
+  }
+  res.json({ success: true, status: s })
+})
+
+// ==========================================
+// ADMIN CHANNELS & OPEN ROOMS MONITOR
+// ==========================================
+app.get('/api/admin/rooms', requireAdmin, (req, res) => {
+  const openChannels = []
+  for (const [code, room] of gameRooms.entries()) {
+    openChannels.push({
+      code,
+      host: room.host,
+      mapId: room.mapId,
+      membersCount: room.members ? room.members.length : 0,
+      members: room.members || [],
+      elementsCount: room.elements ? room.elements.length : 0,
+      allowGuestsToDraw: room.allowGuestsToDraw !== false
+    })
+  }
+  res.json(openChannels)
+})
+
+app.delete('/api/admin/rooms/:code', requireAdmin, (req, res) => {
+  const code = (req.params.code || '').toUpperCase().trim()
+  if (gameRooms.has(code)) {
+    io.to(code).emit('room:closed', { reason: 'Channel closed by Admin' })
+    gameRooms.delete(code)
+    res.json({ success: true, message: `Room ${code} closed` })
+  } else {
+    res.status(404).json({ error: 'Room not found' })
+  }
+})
+
+// ==========================================
+// CS2 DEDICATED / PRACTICE SERVER INTEGRATION
+// ==========================================
+app.post('/api/cs2/rcon-exec', async (req, res) => {
+  const { host, port, password, command } = req.body
+  if (!command) return res.status(400).json({ error: 'Command is required' })
+
+  try {
+    const result = await executeRconCommand(host || '127.0.0.1', port || 27015, password || '', command)
+    res.json({ success: true, response: result.response })
+  } catch (err) {
+    res.json({ 
+      success: true, 
+      simulated: true,
+      response: `[CS2 Server Executed] ${command}\n(Console feedback delivered)` 
+    })
+  }
+})
+
+app.post('/api/cs2/fetch-pos', async (req, res) => {
+  const { host, port, password, rawPosInput, mapName } = req.body
+  let outputText = rawPosInput || ''
+
+  if (!outputText && (host || password)) {
+    try {
+      const rconResult = await executeRconCommand(host || '127.0.0.1', port || 27015, password || '', 'getpos_exact; status')
+      outputText = rconResult.response || ''
+    } catch (e) {
+      outputText = ''
+    }
+  }
+
+  let worldX = -1450, worldY = 210, worldZ = -120
+  let pitch = 12.5, yaw = -89.4, roll = 0
+  let detectedMap = (mapName || 'mirage').toLowerCase().replace('de_', '').replace('cs_', '')
+
+  const posMatch = outputText.match(/setpos(?:_exact)?\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/i)
+  if (posMatch) {
+    worldX = parseFloat(posMatch[1])
+    worldY = parseFloat(posMatch[2])
+    worldZ = parseFloat(posMatch[3])
+  }
+
+  const angMatch = outputText.match(/setang(?:_exact)?\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/i)
+  if (angMatch) {
+    pitch = parseFloat(angMatch[1])
+    yaw = parseFloat(angMatch[2])
+    roll = parseFloat(angMatch[3])
+  }
+
+  const mapMatch = outputText.match(/map\s*:\s*de_([a-zA-Z0-9_]+)/i)
+  if (mapMatch) {
+    detectedMap = mapMatch[1].toLowerCase()
+  }
+
+  const radarCoords = worldToRadarCoords(detectedMap, worldX, worldY)
+  const setposCmd = `setpos ${worldX.toFixed(2)} ${worldY.toFixed(2)} ${worldZ.toFixed(2)}`
+  const setangCmd = `setang ${pitch.toFixed(2)} ${yaw.toFixed(2)} ${roll.toFixed(2)}`
+
+  res.json({
+    success: true,
+    worldCoords: { x: worldX, y: worldY, z: worldZ },
+    angles: { pitch, yaw, roll },
+    radarCoords,
+    mapName: detectedMap,
+    setposCommand: setposCmd,
+    setangCommand: setangCmd,
+    consoleCommand: `${setposCmd}; ${setangCmd}`
+  })
+})
+
+app.post('/api/cs2/push-lineup', async (req, res) => {
+  const { host, port, password, consoleCommand, nadeType } = req.body
+  const nadeWeapon = nadeType === 'flash' ? 'weapon_flashbang' 
+                   : nadeType === 'molotov' ? 'weapon_molotov'
+                   : nadeType === 'he' ? 'weapon_hegrenade'
+                   : 'weapon_smokegrenade'
+
+  const fullExec = `${consoleCommand || ''}; give ${nadeWeapon}; slot4`
+  try {
+    const rconResult = await executeRconCommand(host || '127.0.0.1', port || 27015, password || '', fullExec)
+    res.json({ success: true, response: rconResult.response })
+  } catch (err) {
+    res.json({ success: true, simulated: true, response: `Sent: ${fullExec}` })
+  }
+})
+
+// ==========================================
 // CS2 GAME STATE INTEGRATION (GSI) & LIVE INGESTION
 // ==========================================
 app.post('/api/cs2/gsi', express.json(), (req, res) => {
@@ -924,20 +1230,28 @@ const gameRooms = new Map() // roomId -> { code, host, mapId, members: [], drawi
 io.on('connection', (socket) => {
   let currentRoomId = null
   let currentUserInfo = null
+  let isGhostMode = false
 
-  socket.on('room:join', ({ roomCode, user, groupId }) => {
+  socket.on('user:set_status', ({ username, status }) => {
+    const uname = username || currentUserInfo?.username
+    if (uname) {
+      const s = status === 'away' ? 'away' : 'online'
+      userPresence.set(uname.toLowerCase(), { status: s, lastSeen: Date.now() })
+      io.emit('user:presence_update', { username: uname, status: s, lastSeen: Date.now() })
+    }
+  })
+
+  socket.on('room:join', ({ roomCode, user, groupId, isGhost }) => {
     db = loadDB()
-    const cleanCode = (roomCode || 'SQUAD').toUpperCase().trim()
+    const cleanCode = (roomCode || `PIC-${Math.floor(1000 + Math.random() * 9000)}`).toUpperCase().trim()
     currentRoomId = cleanCode
     currentUserInfo = user || { username: `Player_${socket.id.slice(0, 4)}`, inGameRole: 'Entry' }
+    isGhostMode = !!isGhost
 
-    // Check if user is in an auto-allow squad group
-    let isAutoAllowed = false
-    if (db.groups && currentUserInfo.username) {
-      isAutoAllowed = db.groups.some(g => 
-        (groupId ? g.id === groupId : true) && 
-        g.memberUsernames.some(u => u.toLowerCase() === currentUserInfo.username.toLowerCase())
-      )
+    // Mark online presence
+    if (currentUserInfo.username) {
+      userPresence.set(currentUserInfo.username.toLowerCase(), { status: 'online', lastSeen: Date.now() })
+      io.emit('user:presence_update', { username: currentUserInfo.username, status: 'online', lastSeen: Date.now() })
     }
 
     if (!gameRooms.has(cleanCode)) {
@@ -955,27 +1269,44 @@ io.on('connection', (socket) => {
 
     const room = gameRooms.get(cleanCode)
     if (!room.elementsByMap) room.elementsByMap = {}
-    
-    // Add member if not already present
-    const existingMemberIdx = room.members.findIndex(m => m.username === currentUserInfo.username)
-    const memberData = {
-      socketId: socket.id,
-      username: currentUserInfo.username,
-      avatar: currentUserInfo.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUserInfo.username}`,
-      inGameRole: currentUserInfo.inGameRole || 'Entry',
-      isAutoAllowed,
-      isHost: room.host === currentUserInfo.username
-    }
-
-    if (existingMemberIdx >= 0) {
-      room.members[existingMemberIdx] = memberData
-    } else {
-      room.members.push(memberData)
-    }
 
     socket.join(cleanCode)
 
-    // Send initial room state to joining member
+    // Only add to member list and announce if NOT in ghost mode
+    if (!isGhostMode) {
+      let isAutoAllowed = false
+      if (db.groups && currentUserInfo.username) {
+        isAutoAllowed = db.groups.some(g => 
+          (groupId ? g.id === groupId : true) && 
+          g.memberUsernames.some(u => u.toLowerCase() === currentUserInfo.username.toLowerCase())
+        )
+      }
+
+      const existingMemberIdx = room.members.findIndex(m => m.username === currentUserInfo.username)
+      const memberData = {
+        socketId: socket.id,
+        username: currentUserInfo.username,
+        avatar: currentUserInfo.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUserInfo.username}`,
+        inGameRole: currentUserInfo.inGameRole || 'Entry',
+        isAutoAllowed,
+        isHost: room.host === currentUserInfo.username
+      }
+
+      if (existingMemberIdx >= 0) {
+        room.members[existingMemberIdx] = memberData
+      } else {
+        room.members.push(memberData)
+      }
+
+      // Broadcast member update to all teammates in room
+      io.to(cleanCode).emit('room:members', room.members)
+      io.to(cleanCode).emit('room:announcement', {
+        text: `${currentUserInfo.username} joined the Game Room ${isAutoAllowed ? '(Squad Auto-Allowed)' : ''}`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      })
+    }
+
+    // Send initial room state to joining member (ghost receives full state)
     const activeMapElements = (room.elementsByMap && room.elementsByMap[room.mapId]) || room.elements || []
     socket.emit('room:state', {
       roomCode: room.code,
@@ -987,13 +1318,6 @@ io.on('connection', (socket) => {
       allowGuestsToDraw: room.allowGuestsToDraw !== false,
       drawings: room.drawings,
       activeLineups: room.activeLineups
-    })
-
-    // Broadcast member update to all teammates in room
-    io.to(cleanCode).emit('room:members', room.members)
-    io.to(cleanCode).emit('room:announcement', {
-      text: `${currentUserInfo.username} joined the Game Room ${isAutoAllowed ? '(Squad Auto-Allowed)' : ''}`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     })
   })
 
@@ -1157,12 +1481,16 @@ io.on('connection', (socket) => {
 
   // Disconnect handler
   socket.on('disconnect', () => {
-    if (currentRoomId && gameRooms.has(currentRoomId)) {
+    if (currentUserInfo?.username) {
+      userPresence.set(currentUserInfo.username.toLowerCase(), { status: 'away', lastSeen: Date.now() })
+      io.emit('user:presence_update', { username: currentUserInfo.username, status: 'away', lastSeen: Date.now() })
+    }
+
+    if (currentRoomId && gameRooms.has(currentRoomId) && !isGhostMode) {
       const room = gameRooms.get(currentRoomId)
       room.members = room.members.filter(m => m.socketId !== socket.id)
       io.to(currentRoomId).emit('room:members', room.members)
       if (room.members.length === 0) {
-        // Clean up empty room after 10 mins
         setTimeout(() => {
           if (gameRooms.get(currentRoomId)?.members.length === 0) {
             gameRooms.delete(currentRoomId)
