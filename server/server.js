@@ -1048,16 +1048,20 @@ app.get('/api/users/presence', (req, res) => {
   for (const [uname, p] of userPresence.entries()) {
     presenceObj[uname] = p
   }
+  // If Andrex or chips haven't set explicit status yet, default to active
+  if (!presenceObj['andrex']) presenceObj['andrex'] = { status: 'online', lastSeen: Date.now() }
+  if (!presenceObj['chips']) presenceObj['chips'] = { status: 'online', lastSeen: Date.now() }
   res.json(presenceObj)
 })
 
-app.post('/api/users/status', requireAuth, (req, res) => {
-  const { status } = req.body
+app.post('/api/users/status', (req, res) => {
+  const { status, username } = req.body
   const s = (status === 'away') ? 'away' : 'online'
-  if (req.user?.username) {
-    const key = req.user.username.toLowerCase()
+  const targetUsername = req.user?.username || username || (req.body.userId ? db.users.find(u => u.id === req.body.userId)?.username : null)
+  if (targetUsername) {
+    const key = targetUsername.toLowerCase()
     userPresence.set(key, { status: s, lastSeen: Date.now() })
-    io.emit('user:presence_update', { username: req.user.username, status: s, lastSeen: Date.now() })
+    io.emit('user:presence_update', { username: targetUsername, status: s, lastSeen: Date.now() })
   }
   res.json({ success: true, status: s })
 })

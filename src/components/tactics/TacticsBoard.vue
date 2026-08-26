@@ -795,8 +795,9 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
           <span>Members ({{ gameRoomStore.members.length }})</span>
         </button>
 
-        <!-- GHOST MODE TOGGLE (SILENT JOIN / INVISIBLE OBSERVATION) -->
+        <!-- GHOST MODE TOGGLE (ADMIN ONLY - SILENT JOIN / INVISIBLE OBSERVATION) -->
         <button
+          v-if="authStore.isAdmin"
           @click="gameRoomStore.toggleGhostMode"
           :class="[
             'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-sm',

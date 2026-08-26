@@ -29,23 +29,27 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => currentUser.value?.role === 'admin' || currentUser.value?.username?.toLowerCase() === 'andrex')
 
   // User Real-Time Presence & Online/Away Status
-  const userPresenceMap = ref<Record<string, { status: string; lastSeen?: number }>>({})
+  const userPresenceMap = ref<Record<string, { status: string; lastSeen?: number }>>({
+    andrex: { status: 'online', lastSeen: Date.now() },
+    chips: { status: 'online', lastSeen: Date.now() }
+  })
   const currentUserStatus = ref<'online' | 'away'>('online')
 
   async function fetchPresence() {
     try {
       const res = await axios.get('/api/users/presence')
-      userPresenceMap.value = res.data
+      if (res.data && typeof res.data === 'object') {
+        userPresenceMap.value = { ...userPresenceMap.value, ...res.data }
+      }
     } catch (e) {}
   }
 
   async function setUserStatus(status: 'online' | 'away') {
     currentUserStatus.value = status
-    if (currentUser.value) {
-      userPresenceMap.value[currentUser.value.username.toLowerCase()] = { status, lastSeen: Date.now() }
-    }
+    const uname = currentUser.value?.username || 'Andrex'
+    userPresenceMap.value[uname.toLowerCase()] = { status, lastSeen: Date.now() }
     try {
-      await axios.post('/api/users/status', { status })
+      await axios.post('/api/users/status', { status, username: uname })
     } catch (e) {}
   }
 
@@ -56,11 +60,16 @@ export const useAuthStore = defineStore('auth', () => {
       return currentUserStatus.value
     }
     const p = userPresenceMap.value[key]
-    if (!p) return 'offline'
-    if (p.status === 'away') return 'away'
-    if (p.status === 'online') return 'online'
+    if (p) {
+      if (p.status === 'away') return 'away'
+      if (p.status === 'online') return 'online'
+    }
+    // Default Andrex & chips to online if registered
+    if (key === 'andrex' || key === 'chips') return 'online'
     return 'offline'
   }
+
+  fetchPresence()
 
   // Setup Axios Auth Header
   function setAuthToken(newToken: string | null) {

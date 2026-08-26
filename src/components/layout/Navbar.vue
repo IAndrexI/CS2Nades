@@ -241,14 +241,13 @@ async function handleSyncLineups() {
           <span class="hidden md:inline">CS2 Connect</span>
         </button>
 
-        <!-- PEOPLE & SQUAD GROUPS -->
+        <!-- PEOPLE & SQUAD GROUPS (ICON ONLY) -->
         <button
           @click="isPeopleGroupsOpen = true"
-          class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-          title="View community players, squads, and live channels"
+          class="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm group"
+          title="People & Squads Directory"
         >
-          <Users class="w-3.5 h-3.5 text-amber-400" />
-          <span class="hidden md:inline">People & Squads</span>
+          <Users class="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
         </button>
 
         <!-- DISCORD INVITE BUTTON -->

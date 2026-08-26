@@ -23,138 +23,140 @@ const MAP_BOUNDS: WallSegment[] = [
 // Accurate CS2 Map Obstacle & Wall Colliders (0..1000 SVG coordinate space)
 export const MAP_WALL_COLLIDERS: Record<string, WallSegment[]> = {
   mirage: [
-    // A Site & Palace
-    { x1: 700, y1: 220, x2: 880, y2: 220 },
-    { x1: 880, y1: 220, x2: 880, y2: 440 },
-    { x1: 760, y1: 340, x2: 860, y2: 340 },
-    { x1: 700, y1: 440, x2: 820, y2: 440 },
-    { x1: 720, y1: 320, x2: 780, y2: 320 },
-    { x1: 680, y1: 240, x2: 740, y2: 240 },
-    { x1: 620, y1: 200, x2: 740, y2: 200 },
-    // Middle & Connector
-    { x1: 520, y1: 440, x2: 640, y2: 440 },
-    { x1: 540, y1: 360, x2: 620, y2: 360 },
-    { x1: 440, y1: 380, x2: 500, y2: 380 },
-    { x1: 400, y1: 340, x2: 480, y2: 340 },
-    { x1: 380, y1: 480, x2: 480, y2: 480 },
-    { x1: 340, y1: 520, x2: 420, y2: 520 },
-    { x1: 400, y1: 660, x2: 520, y2: 660 },
-    // B Site & Apartments
-    { x1: 160, y1: 440, x2: 300, y2: 440 },
-    { x1: 180, y1: 360, x2: 320, y2: 360 },
-    { x1: 220, y1: 260, x2: 340, y2: 260 },
-    { x1: 180, y1: 240, x2: 280, y2: 240 },
-    { x1: 340, y1: 220, x2: 460, y2: 220 },
-    { x1: 420, y1: 260, x2: 480, y2: 260 },
-    // T Spawn & T Ramp
-    { x1: 320, y1: 780, x2: 540, y2: 780 },
-    { x1: 580, y1: 620, x2: 680, y2: 620 }
+    // A Site, Palace & Jungle/Connector
+    { x1: 680, y1: 200, x2: 900, y2: 200 },
+    { x1: 900, y1: 200, x2: 900, y2: 460 },
+    { x1: 740, y1: 320, x2: 880, y2: 320 },
+    { x1: 680, y1: 420, x2: 840, y2: 420 },
+    { x1: 700, y1: 300, x2: 780, y2: 300 },
+    { x1: 660, y1: 220, x2: 740, y2: 220 },
+    { x1: 600, y1: 180, x2: 740, y2: 180 },
+    // Middle, Snipers Nest & Catwalk/Connector
+    { x1: 500, y1: 420, x2: 660, y2: 420 },
+    { x1: 520, y1: 340, x2: 640, y2: 340 },
+    { x1: 420, y1: 360, x2: 520, y2: 360 },
+    { x1: 380, y1: 320, x2: 480, y2: 320 },
+    { x1: 360, y1: 460, x2: 480, y2: 460 },
+    { x1: 320, y1: 500, x2: 440, y2: 500 },
+    { x1: 380, y1: 640, x2: 540, y2: 640 },
+    // B Site, Apartments, Market & Short
+    { x1: 140, y1: 420, x2: 320, y2: 420 },
+    { x1: 160, y1: 340, x2: 340, y2: 340 },
+    { x1: 200, y1: 240, x2: 360, y2: 240 },
+    { x1: 160, y1: 220, x2: 300, y2: 220 },
+    { x1: 320, y1: 200, x2: 480, y2: 200 },
+    { x1: 400, y1: 240, x2: 500, y2: 240 },
+    // T Spawn, T Roof, Palace Entrance & TV/Alley
+    { x1: 300, y1: 760, x2: 560, y2: 760 },
+    { x1: 560, y1: 600, x2: 700, y2: 600 },
+    { x1: 240, y1: 680, x2: 380, y2: 680 },
+    { x1: 480, y1: 820, x2: 680, y2: 820 }
   ],
 
   dust2: [
-    // Long A
-    { x1: 720, y1: 640, x2: 860, y2: 640 },
-    { x1: 820, y1: 420, x2: 920, y2: 420 },
-    { x1: 800, y1: 240, x2: 900, y2: 240 },
-    { x1: 740, y1: 280, x2: 820, y2: 280 },
-    { x1: 680, y1: 220, x2: 760, y2: 220 },
-    // Middle & Catwalk
-    { x1: 520, y1: 460, x2: 580, y2: 460 },
-    { x1: 480, y1: 340, x2: 560, y2: 340 },
-    { x1: 540, y1: 240, x2: 680, y2: 240 },
-    { x1: 420, y1: 520, x2: 520, y2: 520 },
-    // B Site & Upper Tunnels
-    { x1: 180, y1: 440, x2: 320, y2: 440 },
-    { x1: 140, y1: 240, x2: 280, y2: 240 },
-    { x1: 240, y1: 280, x2: 320, y2: 280 },
-    { x1: 280, y1: 220, x2: 360, y2: 220 },
-    // T Spawn & CT Spawn
-    { x1: 340, y1: 780, x2: 620, y2: 780 },
-    { x1: 460, y1: 180, x2: 600, y2: 180 }
+    // Long A & Pit
+    { x1: 700, y1: 620, x2: 880, y2: 620 },
+    { x1: 800, y1: 400, x2: 940, y2: 400 },
+    { x1: 780, y1: 220, x2: 920, y2: 220 },
+    { x1: 720, y1: 260, x2: 840, y2: 260 },
+    { x1: 660, y1: 200, x2: 780, y2: 200 },
+    // Middle, Xbox, Catwalk & Lower Tunnels
+    { x1: 500, y1: 440, x2: 600, y2: 440 },
+    { x1: 460, y1: 320, x2: 580, y2: 320 },
+    { x1: 520, y1: 220, x2: 700, y2: 220 },
+    { x1: 400, y1: 500, x2: 540, y2: 500 },
+    // B Site, Upper Tunnels & Doors
+    { x1: 160, y1: 420, x2: 340, y2: 420 },
+    { x1: 120, y1: 220, x2: 300, y2: 220 },
+    { x1: 220, y1: 260, x2: 340, y2: 260 },
+    { x1: 260, y1: 200, x2: 380, y2: 200 },
+    // T Spawn & CT Mid
+    { x1: 320, y1: 760, x2: 640, y2: 760 },
+    { x1: 440, y1: 160, x2: 620, y2: 160 }
   ],
 
   inferno: [
     // Banana & B Site
-    { x1: 260, y1: 640, x2: 380, y2: 640 },
-    { x1: 320, y1: 480, x2: 420, y2: 480 },
-    { x1: 240, y1: 260, x2: 360, y2: 260 },
-    { x1: 180, y1: 200, x2: 300, y2: 200 },
-    { x1: 320, y1: 180, x2: 440, y2: 180 },
-    // Mid & Apartments
-    { x1: 440, y1: 560, x2: 560, y2: 560 },
-    { x1: 480, y1: 440, x2: 620, y2: 440 },
-    { x1: 560, y1: 340, x2: 680, y2: 340 },
-    // A Site & Library
-    { x1: 660, y1: 260, x2: 780, y2: 260 },
-    { x1: 620, y1: 180, x2: 740, y2: 180 },
-    { x1: 520, y1: 220, x2: 620, y2: 220 }
+    { x1: 240, y1: 620, x2: 400, y2: 620 },
+    { x1: 300, y1: 460, x2: 440, y2: 460 },
+    { x1: 220, y1: 240, x2: 380, y2: 240 },
+    { x1: 160, y1: 180, x2: 320, y2: 180 },
+    { x1: 300, y1: 160, x2: 460, y2: 160 },
+    // Mid, Second Mid & Apartments
+    { x1: 420, y1: 540, x2: 580, y2: 540 },
+    { x1: 460, y1: 420, x2: 640, y2: 420 },
+    { x1: 540, y1: 320, x2: 700, y2: 320 },
+    // A Site, Pit, Balcony & Library
+    { x1: 640, y1: 240, x2: 800, y2: 240 },
+    { x1: 600, y1: 160, x2: 760, y2: 160 },
+    { x1: 500, y1: 200, x2: 640, y2: 200 }
   ],
 
   nuke: [
     // Outside & Garage
-    { x1: 680, y1: 440, x2: 820, y2: 440 },
-    { x1: 580, y1: 520, x2: 680, y2: 520 },
-    { x1: 540, y1: 360, x2: 640, y2: 360 },
-    // A Site & Hut
-    { x1: 420, y1: 380, x2: 520, y2: 380 },
-    { x1: 360, y1: 320, x2: 460, y2: 320 },
-    // Ramp & Radio
-    { x1: 260, y1: 480, x2: 380, y2: 480 },
-    { x1: 280, y1: 360, x2: 400, y2: 360 }
+    { x1: 660, y1: 420, x2: 840, y2: 420 },
+    { x1: 560, y1: 500, x2: 700, y2: 500 },
+    { x1: 520, y1: 340, x2: 660, y2: 340 },
+    // A Site, Hut, Squeaky & Vent
+    { x1: 400, y1: 360, x2: 540, y2: 360 },
+    { x1: 340, y1: 300, x2: 480, y2: 300 },
+    // Ramp, Radio & Trophy
+    { x1: 240, y1: 460, x2: 400, y2: 460 },
+    { x1: 260, y1: 340, x2: 420, y2: 340 }
   ],
 
   anubis: [
-    { x1: 420, y1: 520, x2: 580, y2: 520 },
-    { x1: 640, y1: 360, x2: 780, y2: 360 },
-    { x1: 240, y1: 360, x2: 380, y2: 360 },
-    { x1: 480, y1: 320, x2: 600, y2: 320 },
-    { x1: 300, y1: 600, x2: 440, y2: 600 },
-    { x1: 540, y1: 220, x2: 680, y2: 220 }
+    { x1: 400, y1: 500, x2: 600, y2: 500 },
+    { x1: 620, y1: 340, x2: 800, y2: 340 },
+    { x1: 220, y1: 340, x2: 400, y2: 340 },
+    { x1: 460, y1: 300, x2: 620, y2: 300 },
+    { x1: 280, y1: 580, x2: 460, y2: 580 },
+    { x1: 520, y1: 200, x2: 700, y2: 200 }
   ],
 
   ancient: [
-    { x1: 460, y1: 480, x2: 580, y2: 480 },
-    { x1: 680, y1: 340, x2: 820, y2: 340 },
-    { x1: 240, y1: 340, x2: 380, y2: 340 },
-    { x1: 420, y1: 360, x2: 520, y2: 360 },
-    { x1: 320, y1: 640, x2: 460, y2: 640 },
-    { x1: 540, y1: 240, x2: 680, y2: 240 }
+    { x1: 440, y1: 460, x2: 600, y2: 460 },
+    { x1: 660, y1: 320, x2: 840, y2: 320 },
+    { x1: 220, y1: 320, x2: 400, y2: 320 },
+    { x1: 400, y1: 340, x2: 540, y2: 340 },
+    { x1: 300, y1: 620, x2: 480, y2: 620 },
+    { x1: 520, y1: 220, x2: 700, y2: 220 }
   ],
 
   vertigo: [
     // A Ramp & A Site
-    { x1: 620, y1: 440, x2: 780, y2: 440 },
-    { x1: 680, y1: 320, x2: 840, y2: 320 },
+    { x1: 600, y1: 420, x2: 800, y2: 420 },
+    { x1: 660, y1: 300, x2: 860, y2: 300 },
     // Mid & Elevator
-    { x1: 440, y1: 460, x2: 560, y2: 460 },
-    { x1: 420, y1: 340, x2: 540, y2: 340 },
+    { x1: 420, y1: 440, x2: 580, y2: 440 },
+    { x1: 400, y1: 320, x2: 560, y2: 320 },
     // B Stairs & B Site
-    { x1: 220, y1: 480, x2: 360, y2: 480 },
-    { x1: 240, y1: 320, x2: 380, y2: 320 }
+    { x1: 200, y1: 460, x2: 380, y2: 460 },
+    { x1: 220, y1: 300, x2: 400, y2: 300 }
   ],
 
   overpass: [
     // Monster & B Site
-    { x1: 220, y1: 560, x2: 360, y2: 560 },
-    { x1: 280, y1: 400, x2: 420, y2: 400 },
+    { x1: 200, y1: 540, x2: 380, y2: 540 },
+    { x1: 260, y1: 380, x2: 440, y2: 380 },
     // Restrooms & Fountain
-    { x1: 480, y1: 580, x2: 620, y2: 580 },
-    { x1: 520, y1: 440, x2: 660, y2: 440 },
+    { x1: 460, y1: 560, x2: 640, y2: 560 },
+    { x1: 500, y1: 420, x2: 680, y2: 420 },
     // A Site & Bank
-    { x1: 640, y1: 320, x2: 780, y2: 320 },
-    { x1: 580, y1: 240, x2: 720, y2: 240 }
+    { x1: 620, y1: 300, x2: 800, y2: 300 },
+    { x1: 560, y1: 220, x2: 740, y2: 220 }
   ],
 
   office: [
-    { x1: 340, y1: 480, x2: 660, y2: 480 },
-    { x1: 260, y1: 360, x2: 480, y2: 360 },
-    { x1: 520, y1: 340, x2: 740, y2: 340 }
+    { x1: 320, y1: 460, x2: 680, y2: 460 },
+    { x1: 240, y1: 340, x2: 500, y2: 340 },
+    { x1: 500, y1: 320, x2: 760, y2: 320 }
   ],
 
   italy: [
-    { x1: 360, y1: 520, x2: 640, y2: 520 },
-    { x1: 280, y1: 380, x2: 520, y2: 380 },
-    { x1: 480, y1: 280, x2: 720, y2: 280 }
+    { x1: 340, y1: 500, x2: 660, y2: 500 },
+    { x1: 260, y1: 360, x2: 540, y2: 360 },
+    { x1: 460, y1: 260, x2: 740, y2: 260 }
   ]
 }
 
@@ -201,14 +203,15 @@ export function calculateVisionMesh(
 
   const centerAngle = Math.atan2(dy, dx)
   const spread = Math.PI / 4 // 90 deg field of view
-  const numRays = 33
+  const numRays = 65
 
+  const cleanMapId = (mapId || 'mirage').toLowerCase().replace('de_', '').trim()
   const colliders: WallSegment[] = [
-    ...(MAP_WALL_COLLIDERS[mapId] || MAP_WALL_COLLIDERS.mirage || []),
+    ...(MAP_WALL_COLLIDERS[cleanMapId] || MAP_WALL_COLLIDERS.mirage || []),
     ...MAP_BOUNDS
   ]
 
-  const hitPoints: Array<{ x: number; y: number; isBlocked: boolean }> = []
+  const hitPoints: Array<{ x: number; y: number; isBlocked: boolean; wallIndex: number }> = []
   const blockedEdges: Array<{ x1: number; y1: number; x2: number; y2: number }> = []
   let hasObstruction = false
 
@@ -217,32 +220,35 @@ export function calculateVisionMesh(
     const rayTargetX = x1 + Math.cos(rayAngle) * maxDistance
     const rayTargetY = y1 + Math.sin(rayAngle) * maxDistance
 
-    let closestHit: { x: number; y: number; dist: number } | null = null
+    let closestHit: { x: number; y: number; dist: number; wallIndex: number } | null = null
 
-    for (const wall of colliders) {
+    for (let wIdx = 0; wIdx < colliders.length; wIdx++) {
+      const wall = colliders[wIdx]
       const hit = lineIntersection(x1, y1, rayTargetX, rayTargetY, wall.x1, wall.y1, wall.x2, wall.y2)
       if (hit) {
         if (!closestHit || hit.dist < closestHit.dist) {
-          closestHit = hit
+          closestHit = { ...hit, wallIndex: wIdx }
         }
       }
     }
 
     if (closestHit && closestHit.dist < maxDistance - 1) {
-      hitPoints.push({ x: closestHit.x, y: closestHit.y, isBlocked: true })
+      hitPoints.push({ x: closestHit.x, y: closestHit.y, isBlocked: true, wallIndex: closestHit.wallIndex })
       hasObstruction = true
     } else {
-      hitPoints.push({ x: rayTargetX, y: rayTargetY, isBlocked: false })
+      hitPoints.push({ x: rayTargetX, y: rayTargetY, isBlocked: false, wallIndex: -1 })
     }
   }
 
   for (let i = 0; i < hitPoints.length - 1; i++) {
-    if (hitPoints[i].isBlocked && hitPoints[i + 1].isBlocked) {
+    const h1 = hitPoints[i]
+    const h2 = hitPoints[i + 1]
+    if (h1.isBlocked && h2.isBlocked && (h1.wallIndex === h2.wallIndex || Math.hypot(h1.x - h2.x, h1.y - h2.y) < 65)) {
       blockedEdges.push({
-        x1: hitPoints[i].x,
-        y1: hitPoints[i].y,
-        x2: hitPoints[i + 1].x,
-        y2: hitPoints[i + 1].y
+        x1: h1.x,
+        y1: h1.y,
+        x2: h2.x,
+        y2: h2.y
       })
     }
   }
