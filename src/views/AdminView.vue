@@ -86,8 +86,19 @@ async function handleResetPassword(userId: string) {
   alert('User password updated successfully!')
 }
 
+import { useConfirmDialog } from '../composables/useConfirmDialog'
+
+const { confirmAction } = useConfirmDialog()
+
 async function handleDeleteUser(userId: string, username: string) {
-  if (confirm(`Are you sure you want to delete user "${username}"?`)) {
+  const ok = await confirmAction({
+    title: 'Delete User Account?',
+    message: `Are you sure you want to permanently delete user "${username}"? All associated data will be removed.`,
+    confirmLabel: 'Delete User',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (ok) {
     await adminStore.deleteUser(userId)
   }
 }

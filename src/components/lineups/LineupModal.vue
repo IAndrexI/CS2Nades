@@ -38,9 +38,20 @@ function handleKeyDown(e: KeyboardEvent) {
   }
 }
 
-function handleDelete() {
+import { useConfirmDialog } from '../../composables/useConfirmDialog'
+
+const { confirmAction } = useConfirmDialog()
+
+async function handleDelete() {
   if (!lineup.value) return
-  if (confirm(`Delete lineup "${lineup.value.title}"?`)) {
+  const ok = await confirmAction({
+    title: 'Delete Lineup?',
+    message: `Are you sure you want to delete "${lineup.value.title}"? This action cannot be undone.`,
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (ok) {
     lineupStore.deleteLineup(lineup.value.id)
   }
 }

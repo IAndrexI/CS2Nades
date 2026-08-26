@@ -525,7 +525,42 @@ app.get('/api/users/:id', (req, res) => {
   res.json(safeProfile)
 })
 
-// DIRECT MESSAGES (PMs)
+// DIRECT MESSAGES (PMs) & USER DIRECTORY
+app.get('/api/dm/users', requireAuth, (req, res) => {
+  db = loadDB()
+  const currentUserId = req.user.id
+  // Filter out the requesting user and any users who toggled visibility off (default is visible)
+  const usersList = (db.users || [])
+    .filter(u => u.id !== currentUserId)
+    .filter(u => {
+      const isHidden = u.privacy?.hideFromList === true
+      return !isHidden
+    })
+    .map(u => ({
+      id: u.id,
+      username: u.username,
+      avatar: u.avatar,
+      inGameRole: u.inGameRole || 'Player',
+      bio: u.bio || '',
+      themeColor: u.themeColor,
+      createdAt: u.createdAt,
+      isOnline: true
+    }))
+  res.json(usersList)
+})
+
+app.post('/api/dm/visibility', requireAuth, (req, res) => {
+  db = loadDB()
+  const user = db.users.find(u => u.id === req.user.id)
+  if (!user) return res.status(404).json({ error: 'User not found' })
+  if (!user.privacy) user.privacy = {}
+  
+  const { isVisible } = req.body
+  user.privacy.hideFromList = isVisible === false
+  saveDB(db)
+  res.json({ success: true, isVisible: !user.privacy.hideFromList })
+})
+
 app.get('/api/dm/conversations', requireAuth, (req, res) => {
   db = loadDB()
   if (!db.dms) db.dms = []
@@ -1006,6 +1041,26 @@ io.on('connection', (socket) => {
     room.elementsByMap[targetMap] = elements
     room.elements = elements
     socket.to(currentRoomId).emit('room:elements_synced', { elements, mapId: targetMap })
+  })
+
+  // Manual Force Visual Sync Request
+  socket.on('room:request_sync', (payload) => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId)) return
+    const room = gameRooms.get(currentRoomId)
+    const targetMap = payload?.mapId || room.mapId || 'mirage'
+    const activeMapElements = (room.elementsByMap && room.elementsByMap[targetMap]) || room.elements || []
+    
+    socket.emit('room:state', {
+      roomCode: room.code,
+      host: room.host,
+      mapId: targetMap,
+      members: room.members,
+      elements: activeMapElements,
+      elementsByMap: room.elementsByMap || {},
+      allowGuestsToDraw: room.allowGuestsToDraw !== false,
+      drawings: room.drawings,
+      activeLineups: room.activeLineups
+    })
   })
 
   // Host Permission Controls (Allow Guests to Modify or Lock Board)

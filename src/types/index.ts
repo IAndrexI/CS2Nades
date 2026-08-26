@@ -190,6 +190,7 @@ export interface UserPrivacy {
   hideSocials?: boolean
   hideDetails?: boolean
   hideLineups?: boolean
+  hideFromList?: boolean
 }
 
 export interface UserNotifications {

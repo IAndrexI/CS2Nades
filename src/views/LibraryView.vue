@@ -63,8 +63,19 @@ const allDisplayLineups = computed(() => {
   })
 })
 
-function handleClearAll() {
-  if (confirm('Are you sure you want to delete ALL lineups? This cannot be undone.')) {
+import { useConfirmDialog } from '../composables/useConfirmDialog'
+
+const { confirmAction } = useConfirmDialog()
+
+async function handleClearAll() {
+  const ok = await confirmAction({
+    title: 'Delete All Lineups?',
+    message: 'Are you sure you want to delete ALL lineups in the library? This cannot be undone.',
+    confirmLabel: 'Delete All Lineups',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (ok) {
     lineupStore.clearAllLineups()
   }
 }

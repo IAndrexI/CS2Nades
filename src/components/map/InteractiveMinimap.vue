@@ -6,6 +6,7 @@ import VectorMapBlueprint from './VectorMapBlueprint.vue'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup, GrenadeType } from '../../types'
 import { clientToPct, pctToSvg, trajectoryPath } from '../../utils/radarCoords'
+import { useConfirmDialog } from '../../composables/useConfirmDialog'
 import { 
   ZoomIn, 
   ZoomOut, 
@@ -348,9 +349,18 @@ function closeTooltip() {
   lineupStore.setHoveredLineup(null)
 }
 
-function handleDeleteFromTooltip(lineup: Lineup, e: MouseEvent) {
+const { confirmAction } = useConfirmDialog()
+
+async function handleDeleteFromTooltip(lineup: Lineup, e: MouseEvent) {
   e.stopPropagation()
-  if (confirm(`Delete lineup "${lineup.title}"?`)) {
+  const ok = await confirmAction({
+    title: 'Delete Lineup?',
+    message: `Are you sure you want to delete "${lineup.title}"?`,
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (ok) {
     lineupStore.deleteLineup(lineup.id)
     if (selectedLineupId.value === lineup.id) selectedLineupId.value = null
     closeTooltip()

@@ -4,15 +4,25 @@ import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup } from '../../types'
 import { Heart, Play, ArrowRight, Trash2, Globe, BookmarkCheck } from 'lucide-vue-next'
 
+import { useConfirmDialog } from '../../composables/useConfirmDialog'
+
 const props = defineProps<{
   lineup: Lineup
 }>()
 
 const lineupStore = useLineupStore()
+const { confirmAction } = useConfirmDialog()
 
-function handleDelete(e: MouseEvent) {
+async function handleDelete(e: MouseEvent) {
   e.stopPropagation()
-  if (confirm(`Delete lineup "${props.lineup.title}"?`)) {
+  const ok = await confirmAction({
+    title: 'Delete Lineup?',
+    message: `Are you sure you want to delete "${props.lineup.title}"? This cannot be undone.`,
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (ok) {
     lineupStore.deleteLineup(props.lineup.id)
   }
 }

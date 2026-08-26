@@ -83,14 +83,32 @@ function handleCancelAdd() {
   newCalloutName.value = ''
 }
 
-function handleDeleteCallout(id: string) {
-  if (confirm('Delete this callout?')) {
+import { useConfirmDialog } from '../composables/useConfirmDialog'
+
+const { confirmAction } = useConfirmDialog()
+
+async function handleDeleteCallout(id: string) {
+  const ok = await confirmAction({
+    title: 'Delete Callout?',
+    message: 'Are you sure you want to delete this custom callout mark?',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (ok) {
     mapStore.deleteCustomCallout(mapStore.currentMapId, id)
   }
 }
 
-function handleClearAll() {
-  if (confirm(`Clear all callouts for ${mapStore.currentMap.name}?`)) {
+async function handleClearAll() {
+  const ok = await confirmAction({
+    title: 'Clear All Callouts?',
+    message: `Are you sure you want to clear all custom callouts for ${mapStore.currentMap.name}?`,
+    confirmLabel: 'Clear All',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (ok) {
     mapStore.clearCustomCallouts(mapStore.currentMapId)
   }
 }

@@ -38,9 +38,20 @@ function openLinkedLineup(lineupId: string) {
   }
 }
 
-function handleDelete() {
+import { useConfirmDialog } from '../../composables/useConfirmDialog'
+
+const { confirmAction } = useConfirmDialog()
+
+async function handleDelete() {
   if (!strat.value) return
-  if (confirm(`Delete strategy "${strat.value.title}"?`)) {
+  const ok = await confirmAction({
+    title: 'Delete Strategy?',
+    message: `Are you sure you want to delete strategy "${strat.value.title}"?`,
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (ok) {
     stratStore.deleteStrat(strat.value.id)
   }
 }

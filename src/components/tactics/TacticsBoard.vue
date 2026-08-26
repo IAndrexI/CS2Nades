@@ -34,13 +34,16 @@ import {
   X,
   Bomb,
   Crown,
-  Users
+  Users,
+  RefreshCw
 } from 'lucide-vue-next'
+import { useConfirmDialog } from '../../composables/useConfirmDialog'
 
 const mapStore = useMapStore()
 const stratStore = useStratStore()
 const gameRoomStore = useGameRoomStore()
 const authStore = useAuthStore()
+const { confirmAction } = useConfirmDialog()
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const isDrawing = ref(false)
@@ -93,13 +96,44 @@ const isMembersModalOpen = ref(false)
 const newRoomInput = ref('')
 const copySuccessToast = ref('')
 const isClearConfirmModalOpen = ref(false)
+const isSyncingBoard = ref(false)
 
-function handleTransferHost(newHostUsername: string) {
+async function handleTransferHost(newHostUsername: string) {
   if (!newHostUsername) return
-  if (confirm(`Transfer Room Host permissions to ${newHostUsername}?`)) {
+  const confirmed = await confirmAction({
+    title: 'Transfer Room Host?',
+    message: `Are you sure you want to transfer Host permissions to ${newHostUsername}? They will gain full control over room permissions and drawing locks.`,
+    confirmLabel: 'Transfer Host',
+    cancelLabel: 'Cancel',
+    isDestructive: false
+  })
+  if (confirmed) {
     gameRoomStore.transferHost(newHostUsername)
     isMembersModalOpen.value = false
   }
+}
+
+function handleForceSyncBoard() {
+  isSyncingBoard.value = true
+  // 1. Reload local elements for current map
+  stratStore.loadMapElements(mapStore.currentMapId)
+  
+  // 2. Request authoritative server sync
+  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  if (socket && socket.connected) {
+    socket.emit('room:request_sync', { mapId: mapStore.currentMapId })
+    if (gameRoomStore.isHost) {
+      socket.emit('room:elements_sync', { elements: stratStore.boardElements, mapId: mapStore.currentMapId })
+    }
+  }
+
+  setTimeout(() => {
+    isSyncingBoard.value = false
+    copySuccessToast.value = '✓ Visuals Synced'
+    setTimeout(() => {
+      copySuccessToast.value = ''
+    }, 2500)
+  }, 600)
 }
 
 const allToolsCatalogue = [
@@ -699,6 +733,19 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
           <Crown v-if="gameRoomStore.isHost" class="w-3.5 h-3.5 text-amber-400" />
           <Users v-else class="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-400" />
           <span>Members ({{ gameRoomStore.members.length }})</span>
+        </button>
+
+        <!-- FORCE SYNC BOARD BUTTON (IF VISUALS DO NOT MATCH) -->
+        <button
+          @click="handleForceSyncBoard"
+          :class="[
+            'flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group',
+            isSyncingBoard ? 'text-amber-400 border-amber-500/50' : 'text-slate-300 hover:text-white'
+          ]"
+          title="Force synchronize tactical board visuals if visuals do not match"
+        >
+          <RefreshCw :class="['w-3.5 h-3.5 text-amber-400', isSyncingBoard ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500']" />
+          <span>{{ isSyncingBoard ? 'Syncing...' : 'Sync Board' }}</span>
         </button>
 
         <!-- HOST LOCK / GUEST PERMISSION TOGGLE -->

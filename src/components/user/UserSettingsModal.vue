@@ -55,7 +55,8 @@ const privacyForm = reactive({
   hideSteam: false,
   hideSocials: false,
   hideDetails: false,
-  hideLineups: false
+  hideLineups: false,
+  hideFromList: false
 })
 
 const notificationsForm = reactive({
@@ -123,6 +124,7 @@ function populateForms() {
   privacyForm.hideSocials = !!p.hideSocials
   privacyForm.hideDetails = !!p.hideDetails
   privacyForm.hideLineups = !!p.hideLineups
+  privacyForm.hideFromList = !!p.hideFromList
 
   const n = u.notifications || {}
   notificationsForm.emailLineups = !!n.emailLineups
@@ -547,6 +549,19 @@ async function handleDeleteAccount() {
                   <span class="text-[11px] text-slate-400">Keep your SteamID and profile private from other users</span>
                 </div>
                 <input v-model="privacyForm.hideSteam" type="checkbox" class="w-4 h-4 accent-amber-500 cursor-pointer" />
+              </label>
+
+              <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
+                <div>
+                  <span class="font-bold text-white block">Visible in Direct Messages & User Directory</span>
+                  <span class="text-[11px] text-slate-400">Allow teammates and players to discover your profile and message you (Default: Visible)</span>
+                </div>
+                <input 
+                  type="checkbox" 
+                  :checked="!privacyForm.hideFromList" 
+                  @change="privacyForm.hideFromList = !($event.target as HTMLInputElement).checked"
+                  class="w-4 h-4 accent-amber-500 cursor-pointer" 
+                />
               </label>
 
               <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">

@@ -2,6 +2,7 @@
 import { onMounted, watch } from 'vue'
 import Navbar from './components/layout/Navbar.vue'
 import AuthModal from './components/auth/AuthModal.vue'
+import GlobalConfirmModal from './components/common/GlobalConfirmModal.vue'
 import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
 
@@ -72,5 +73,8 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
 
     <!-- GLOBAL AUTH MODAL -->
     <AuthModal />
+
+    <!-- GLOBAL CENTERED CONFIRMATION MODAL -->
+    <GlobalConfirmModal />
   </div>
 </template>
