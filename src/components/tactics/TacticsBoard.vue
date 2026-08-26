@@ -37,7 +37,9 @@ import {
   Users,
   Ghost,
   Gamepad2,
-  RefreshCw
+  RefreshCw,
+  Save,
+  AlertTriangle
 } from 'lucide-vue-next'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
 import CS2ServerConnectModal from '../lineups/CS2ServerConnectModal.vue'
@@ -49,6 +51,44 @@ const authStore = useAuthStore()
 const { confirmAction } = useConfirmDialog()
 
 const isCs2ServerModalOpen = ref(false)
+const isMapSwitchWarnModalOpen = ref(false)
+const pendingTargetMapId = ref<string | null>(null)
+const tempSaveToast = ref('')
+
+function handleTempSaveCurrentBoard() {
+  stratStore.tempSaveBoard(mapStore.currentMapId)
+  tempSaveToast.value = `Board temp-saved for ${mapStore.currentMap?.name || mapStore.currentMapId}!`
+  setTimeout(() => { tempSaveToast.value = '' }, 2500)
+}
+
+function handleRestoreTempSavedBoard() {
+  stratStore.restoreTempBoard(mapStore.currentMapId)
+  tempSaveToast.value = `Restored saved board!`
+  setTimeout(() => { tempSaveToast.value = '' }, 2500)
+}
+
+function handleMapSelect(targetMapId: string) {
+  if (!targetMapId || targetMapId === mapStore.currentMapId) return
+
+  if (stratStore.boardElements.length > 0) {
+    pendingTargetMapId.value = targetMapId
+    isMapSwitchWarnModalOpen.value = true
+    return
+  }
+
+  executeMapSwitch(targetMapId, false)
+}
+
+function executeMapSwitch(targetMapId: string, shouldTempSaveCurrent: boolean) {
+  if (shouldTempSaveCurrent) {
+    stratStore.tempSaveBoard(mapStore.currentMapId)
+  }
+  stratStore.clearBoard()
+  mapStore.setMap(targetMapId)
+  gameRoomStore.switchMap(targetMapId, [])
+  isMapSwitchWarnModalOpen.value = false
+  pendingTargetMapId.value = null
+}
 const svgRef = ref<SVGSVGElement | null>(null)
 const isDrawing = ref(false)
 const currentStroke = ref<{ x: number; y: number }[]>([])
@@ -682,22 +722,6 @@ function executeClearBoard() {
   isClearConfirmModalOpen.value = false
 }
 
-function handleMapSelect(mapId: string) {
-  if (!mapId) return
-  stratStore.saveCurrentMapElements(mapStore.currentMapId)
-  mapStore.setMap(mapId)
-  stratStore.loadMapElements(mapId)
-  gameRoomStore.switchMap(mapId, stratStore.getElementsForMap(mapId))
-}
-
-watch(() => mapStore.currentMapId, (newMapId, oldMapId) => {
-  if (oldMapId && newMapId && newMapId !== oldMapId) {
-    stratStore.saveCurrentMapElements(oldMapId)
-    stratStore.loadMapElements(newMapId)
-    gameRoomStore.switchMap(newMapId, stratStore.getElementsForMap(newMapId))
-  }
-})
-
 function getSvgPath(points: { x: number; y: number }[]): string {
   if (!points || points.length === 0) return ''
   return points.reduce((acc, pt, idx) => {
@@ -842,8 +866,33 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
         </span>
       </div>
 
-      <!-- MAP SELECTOR & CUSTOMIZE TOOLBAR BUTTON -->
-      <div class="flex items-center gap-2.5">
+      <!-- TEMP SAVE, RESTORE, CUSTOMIZE & MAP SELECTOR -->
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- TEMP SAVE BUTTON -->
+        <button
+          @click="handleTempSaveCurrentBoard"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 border border-slate-800 hover:border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+          title="Temporarily snapshot and save current drawings for this map"
+        >
+          <Save class="w-3.5 h-3.5" />
+          <span>Temp Save</span>
+        </button>
+
+        <!-- RESTORE TEMP SAVED BOARD -->
+        <button
+          v-if="stratStore.tempSavedBoards[mapStore.currentMapId]"
+          @click="handleRestoreTempSavedBoard"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/50 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+          :title="`Restore temp-saved board (${stratStore.tempSavedBoards[mapStore.currentMapId]?.savedAt})`"
+        >
+          <RotateCcw class="w-3.5 h-3.5" />
+          <span>Restore Save</span>
+        </button>
+
+        <span v-if="tempSaveToast" class="text-xs font-bold text-amber-400 animate-fade-in px-1">
+          {{ tempSaveToast }}
+        </span>
+
         <button
           @click="isCustomizeToolbarOpen = true"
           class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-amber-400 border border-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
@@ -1065,10 +1114,11 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
             <stop offset="100%" stop-color="#ef4444" stop-opacity="0" />
           </radialGradient>
 
-          <!-- VISION CONE GRADIENT -->
+          <!-- VISION CONE GRADIENT (TRANSLUCENT SEE-THROUGH OVERLAY) -->
           <radialGradient id="visionGradient" cx="0%" cy="0%" r="100%">
-            <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.4" />
-            <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.05" />
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.22" />
+            <stop offset="70%" stop-color="#0284c7" stop-opacity="0.08" />
+            <stop offset="100%" stop-color="#0369a1" stop-opacity="0.02" />
           </radialGradient>
         </defs>
 
@@ -1139,15 +1189,16 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
               />
             </g>
 
-            <!-- 4. VISION FOV CONE (REAL-TIME RAYCAST WALL OBSTRUCTION) -->
-            <g v-else-if="el.type === 'vision_cone' && el.points.length >= 2">
+            <!-- 4. VISION FOV CONE (REAL-TIME RAYCAST WALL OBSTRUCTION - SEE-THROUGH) -->
+            <g v-else-if="el.type === 'vision_cone' && el.points.length >= 2" class="pointer-events-none">
               <!-- Field of View Cone Polygon stopping at walls -->
               <path
                 :d="getVisionMesh(el.points[0], el.points[1]).path"
                 fill="url(#visionGradient)"
-                :stroke="el.color || '#0ea5e9'"
+                :stroke="el.color || '#38bdf8'"
                 stroke-width="1.5"
                 stroke-dasharray="4 3"
+                stroke-opacity="0.8"
               />
               <!-- Center Sightline Ray (clamped to wall collision hit) -->
               <line
@@ -1155,12 +1206,12 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
                 :y1="el.points[0].y * 10"
                 :x2="getVisionMesh(el.points[0], el.points[1]).centerRayHit.x"
                 :y2="getVisionMesh(el.points[0], el.points[1]).centerRayHit.y"
-                :stroke="el.color || '#0ea5e9'"
+                :stroke="el.color || '#38bdf8'"
                 stroke-width="1.2"
                 stroke-dasharray="3 2"
                 stroke-opacity="0.75"
               />
-              <!-- Blocked Sight Impact Barrier Lines on Walls -->
+              <!-- Blocked Sight Impact Barrier Lines on Walls (High Contrast Obstruction) -->
               <line
                 v-for="(edge, eIdx) in getVisionMesh(el.points[0], el.points[1]).blockedEdges"
                 :key="`b-edge-${eIdx}`"
@@ -1168,17 +1219,17 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
                 :y1="edge.y1"
                 :x2="edge.x2"
                 :y2="edge.y2"
-                stroke="#ef4444"
-                stroke-width="3.5"
+                stroke="#f43f5e"
+                stroke-width="4"
                 stroke-linecap="round"
-                class="filter drop-shadow-[0_0_4px_rgba(239,68,68,0.9)]"
+                class="filter drop-shadow-[0_0_6px_rgba(244,63,94,1)]"
               />
               <!-- Player Eye Origin Dot -->
               <circle
                 :cx="el.points[0].x * 10"
                 :cy="el.points[0].y * 10"
                 r="3.5"
-                :fill="el.color || '#0ea5e9'"
+                :fill="el.color || '#38bdf8'"
                 stroke="#0f172a"
                 stroke-width="1.5"
               />
@@ -1355,21 +1406,22 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
             stroke-linecap="round"
           />
 
-          <!-- VISION CONE PREVIEW (REAL-TIME RAYCAST WALL OBSTRUCTION) -->
-          <g v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'vision_cone'">
+          <!-- VISION CONE PREVIEW (REAL-TIME RAYCAST WALL OBSTRUCTION - SEE-THROUGH) -->
+          <g v-else-if="isDrawing && currentStroke.length === 2 && stratStore.activeTool === 'vision_cone'" class="pointer-events-none">
             <path
               :d="getVisionMesh(currentStroke[0], currentStroke[1]).path"
               fill="url(#visionGradient)"
-              :stroke="stratStore.activeColor || '#0ea5e9'"
+              :stroke="stratStore.activeColor || '#38bdf8'"
               stroke-width="1.5"
               stroke-dasharray="4 3"
+              stroke-opacity="0.8"
             />
             <line
               :x1="currentStroke[0].x * 10"
               :y1="currentStroke[0].y * 10"
               :x2="getVisionMesh(currentStroke[0], currentStroke[1]).centerRayHit.x"
               :y2="getVisionMesh(currentStroke[0], currentStroke[1]).centerRayHit.y"
-              :stroke="stratStore.activeColor || '#0ea5e9'"
+              :stroke="stratStore.activeColor || '#38bdf8'"
               stroke-width="1.2"
               stroke-dasharray="3 2"
               stroke-opacity="0.75"
@@ -1381,16 +1433,16 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
               :y1="edge.y1"
               :x2="edge.x2"
               :y2="edge.y2"
-              stroke="#ef4444"
-              stroke-width="3.5"
+              stroke="#f43f5e"
+              stroke-width="4"
               stroke-linecap="round"
-              class="filter drop-shadow-[0_0_4px_rgba(239,68,68,0.9)]"
+              class="filter drop-shadow-[0_0_6px_rgba(244,63,94,1)]"
             />
             <circle
               :cx="currentStroke[0].x * 10"
               :cy="currentStroke[0].y * 10"
               r="3.5"
-              :fill="stratStore.activeColor || '#0ea5e9'"
+              :fill="stratStore.activeColor || '#38bdf8'"
               stroke="#0f172a"
               stroke-width="1.5"
             />
@@ -1724,5 +1776,60 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
       :is-open="isCs2ServerModalOpen"
       @close="isCs2ServerModalOpen = false"
     />
+
+    <!-- MODAL 5: CENTERED MAP SWITCH & BOARD WIPE WARNING -->
+    <Teleport to="body">
+      <div
+        v-if="isMapSwitchWarnModalOpen"
+        class="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center animate-fade-in"
+        @click.self="isMapSwitchWarnModalOpen = false"
+      >
+        <div class="relative w-full max-w-md bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl flex flex-col gap-5 text-center items-center">
+          <div class="p-3.5 bg-amber-500/15 border border-amber-500/30 text-amber-400 rounded-2xl shadow-inner">
+            <AlertTriangle class="w-8 h-8 stroke-[2.5]" />
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <h3 class="text-base font-black uppercase text-white tracking-wide">
+              Switch Map & Start Fresh Board?
+            </h3>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              You have <strong class="text-amber-400">{{ stratStore.boardElements.length }} active markings/pins</strong> on
+              <strong class="text-white uppercase">{{ mapStore.currentMap?.name || mapStore.currentMapId }}</strong>.
+            </p>
+            <p class="text-xs text-slate-400 leading-relaxed bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+              All tactical boards are temporary unless saved. Changing maps will start a fresh, clean board for
+              <strong class="text-emerald-400 uppercase font-mono">{{ pendingTargetMapId }}</strong>.
+            </p>
+          </div>
+
+          <!-- ACTION BUTTONS -->
+          <div class="flex flex-col gap-2.5 w-full pt-1">
+            <button
+              @click="pendingTargetMapId && executeMapSwitch(pendingTargetMapId, true)"
+              class="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Save class="w-4 h-4" />
+              <span>Temp Save Board & Switch</span>
+            </button>
+
+            <button
+              @click="pendingTargetMapId && executeMapSwitch(pendingTargetMapId, false)"
+              class="w-full py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Trash2 class="w-3.5 h-3.5 text-rose-400" />
+              <span>Discard Markings & Start Fresh</span>
+            </button>
+
+            <button
+              @click="isMapSwitchWarnModalOpen = false; pendingTargetMapId = null"
+              class="w-full py-2 text-slate-400 hover:text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+            >
+              Cancel (Stay on {{ mapStore.currentMap?.name }})
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

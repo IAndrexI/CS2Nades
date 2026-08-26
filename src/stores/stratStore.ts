@@ -39,10 +39,11 @@ export const useStratStore = defineStore('strat', () => {
   const activeRole = ref<'IGL' | 'Entry' | 'Support' | 'Lurker' | 'AWP'>('Entry')
   const boardElements = ref<TacticsElement[]>([])
   const mapElements = ref<Record<string, TacticsElement[]>>({})
+  const tempSavedBoards = ref<Record<string, { elements: TacticsElement[]; savedAt: string }>>({})
   const history = ref<TacticsElement[][]>([])
   const historyIndex = ref<number>(-1)
 
-  const MAP_ELEMENTS_STORAGE_KEY = 'cs2_stratbook_tactics_elements_by_map'
+  const TEMP_BOARDS_STORAGE_KEY = 'cs2_stratbook_temp_saved_boards'
 
   // Storage
   function loadFromStorage() {
@@ -51,49 +52,58 @@ export const useStratStore = defineStore('strat', () => {
       if (stored) {
         customStrats.value = JSON.parse(stored)
       }
-      const storedMapElements = localStorage.getItem(MAP_ELEMENTS_STORAGE_KEY)
-      if (storedMapElements) {
-        mapElements.value = JSON.parse(storedMapElements)
+      const storedTemp = localStorage.getItem(TEMP_BOARDS_STORAGE_KEY)
+      if (storedTemp) {
+        tempSavedBoards.value = JSON.parse(storedTemp)
       }
     } catch (e) {
-      console.error('Failed to load custom strats from storage', e)
+      console.error('Failed to load storage', e)
     }
   }
 
   function saveToStorage() {
     try {
       localStorage.setItem(STRATS_STORAGE_KEY, JSON.stringify(customStrats.value))
-      localStorage.setItem(MAP_ELEMENTS_STORAGE_KEY, JSON.stringify(mapElements.value))
+      localStorage.setItem(TEMP_BOARDS_STORAGE_KEY, JSON.stringify(tempSavedBoards.value))
     } catch (e) {
-      console.error('Failed to save custom strats to storage', e)
+      console.error('Failed to save to storage', e)
     }
   }
 
   loadFromStorage()
 
-  // Initialize elements for current map
-  if (mapElements.value[mapStore.currentMapId]) {
-    boardElements.value = [...mapElements.value[mapStore.currentMapId]]
-  }
-
   watch(customStrats, () => {
     saveToStorage()
   }, { deep: true })
 
-  watch(mapElements, () => {
+  watch(tempSavedBoards, () => {
     saveToStorage()
   }, { deep: true })
 
-  // Synchronize when active map changes in mapStore
-  watch(() => mapStore.currentMapId, (newMapId, oldMapId) => {
-    if (oldMapId) {
-      mapElements.value[oldMapId] = [...boardElements.value]
-    }
-    boardElements.value = mapElements.value[newMapId] ? [...mapElements.value[newMapId]] : []
-    history.value = [[...boardElements.value]]
+  // Synchronize when active map changes in mapStore - FRESH BOARD BY DEFAULT
+  watch(() => mapStore.currentMapId, () => {
+    boardElements.value = []
+    history.value = [[]]
     historyIndex.value = 0
-    saveToStorage()
   })
+
+  function tempSaveBoard(mapId: string) {
+    if (!mapId) return
+    tempSavedBoards.value[mapId] = {
+      elements: JSON.parse(JSON.stringify(boardElements.value)),
+      savedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+    saveToStorage()
+  }
+
+  function restoreTempBoard(mapId: string) {
+    const saved = tempSavedBoards.value[mapId]
+    if (saved && saved.elements) {
+      boardElements.value = JSON.parse(JSON.stringify(saved.elements))
+      history.value = [[...boardElements.value]]
+      historyIndex.value = 0
+    }
+  }
 
   function loadMapElements(mapId: string) {
     boardElements.value = mapElements.value[mapId] ? [...mapElements.value[mapId]] : []
@@ -237,6 +247,7 @@ export const useStratStore = defineStore('strat', () => {
     activeRole,
     boardElements,
     mapElements,
+    tempSavedBoards,
     historyIndex,
     openStrat,
     closeStrat,
@@ -245,6 +256,8 @@ export const useStratStore = defineStore('strat', () => {
     deleteStrat,
     loadMapElements,
     saveCurrentMapElements,
+    tempSaveBoard,
+    restoreTempBoard,
     getElementsForMap,
     addBoardElement,
     removeBoardElement,
