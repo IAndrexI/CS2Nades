@@ -659,6 +659,22 @@ app.get('/api/dm/messages/:targetId', requireAuth, (req, res) => {
   res.json(thread)
 })
 
+// DELETE / CLEAR DM THREAD
+app.delete('/api/dm/thread/:targetId', requireAuth, (req, res) => {
+  db = loadDB()
+  if (!db.dms) db.dms = []
+  const userId = req.user.id
+  const targetId = req.params.targetId
+
+  db.dms = db.dms.filter(m => 
+    !((m.senderId === userId && m.recipientId === targetId) ||
+      (m.senderId === targetId && m.recipientId === userId))
+  )
+  saveDB(db)
+  io.emit(`dm:thread_cleared`, { userId, targetId })
+  res.json({ success: true, message: 'Chat thread deleted' })
+})
+
 app.post('/api/dm/messages/:targetId', requireAuth, async (req, res) => {
   db = loadDB()
   if (!db.dms) db.dms = []
@@ -685,8 +701,10 @@ app.post('/api/dm/messages/:targetId', requireAuth, async (req, res) => {
   db.dms.push(newMsg)
   saveDB(db)
 
-  // Emit real-time DM to recipient if connected
+  // Real-time broadcast for auto updating both recipient and sender on all active clients/windows
   io.emit(`dm:${targetId}`, newMsg)
+  io.emit(`dm:${userId}`, newMsg)
+  io.emit('dm:new', newMsg)
 
   // Discord Webhook DM Forwarding Notification
   if (recipient?.socials?.discordWebhook) {
@@ -723,7 +741,7 @@ app.post('/api/dm/messages/:targetId', requireAuth, async (req, res) => {
 })
 
 // ==========================================
-// SQUAD GROUPS (AUTO-ALLOW MEMBERS)
+// SQUAD GROUPS & GROUP CHATS
 // ==========================================
 app.get('/api/groups', (req, res) => {
   db = loadDB()
@@ -734,29 +752,87 @@ app.post('/api/groups', requireAuth, (req, res) => {
   db = loadDB()
   const { name, description, memberUsernames } = req.body
 
+  const cleanMembers = Array.isArray(memberUsernames) && memberUsernames.length > 0 
+    ? Array.from(new Set([req.user.username, ...memberUsernames]))
+    : [req.user.username]
+
   const newGroup = {
     id: `grp-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    name: name || 'New Squad Group',
-    description: description || '',
-    memberUsernames: Array.isArray(memberUsernames) ? memberUsernames : [req.user.username],
+    creatorId: req.user.id,
+    creatorUsername: req.user.username,
+    name: name?.trim() || 'New Squad Group',
+    description: description?.trim() || '',
+    memberUsernames: cleanMembers,
     createdAt: new Date().toISOString()
   }
 
   if (!db.groups) db.groups = []
   db.groups.push(newGroup)
   saveDB(db)
+  io.emit('group:created', newGroup)
   res.json(newGroup)
 })
 
-app.put('/api/groups/:id', requireAuth, (req, res) => {
+app.delete('/api/groups/:id', requireAuth, (req, res) => {
   db = loadDB()
   const { id } = req.params
-  const index = db.groups.findIndex(g => g.id === id)
+  const index = (db.groups || []).findIndex(g => g.id === id)
   if (index === -1) return res.status(404).json({ error: 'Group not found' })
 
-  db.groups[index] = { ...db.groups[index], ...req.body }
+  const group = db.groups[index]
+  const isCreator = group.creatorId === req.user.id || group.creatorUsername === req.user.username
+  const isAdmin = req.user.role === 'admin'
+
+  if (!isCreator && !isAdmin) {
+    return res.status(403).json({ error: 'Only the group creator or admin can delete this group' })
+  }
+
+  db.groups.splice(index, 1)
+  if (db.groupMessages) {
+    db.groupMessages = db.groupMessages.filter(m => m.groupId !== id)
+  }
   saveDB(db)
-  res.json(db.groups[index])
+  io.emit('group:deleted', { id })
+  res.json({ success: true, message: 'Group chat deleted successfully' })
+})
+
+app.get('/api/groups/:id/messages', requireAuth, (req, res) => {
+  db = loadDB()
+  if (!db.groupMessages) db.groupMessages = []
+  const { id } = req.params
+  const messages = db.groupMessages.filter(m => m.groupId === id)
+  res.json(messages)
+})
+
+app.post('/api/groups/:id/messages', requireAuth, (req, res) => {
+  db = loadDB()
+  if (!db.groupMessages) db.groupMessages = []
+  const { id } = req.params
+  const { text } = req.body
+
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Message cannot be empty' })
+
+  const group = (db.groups || []).find(g => g.id === id)
+  if (!group) return res.status(404).json({ error: 'Group not found' })
+
+  const sender = db.users.find(u => u.id === req.user.id)
+  const newMsg = {
+    id: `gmsg-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    groupId: id,
+    senderId: req.user.id,
+    senderUsername: sender?.username || req.user.username,
+    senderAvatar: sender?.avatar,
+    inGameRole: sender?.inGameRole || 'Player',
+    text: text.trim(),
+    createdAt: new Date().toISOString()
+  }
+
+  db.groupMessages.push(newMsg)
+  saveDB(db)
+
+  io.emit(`group:msg:${id}`, newMsg)
+  io.emit('group:msg', newMsg)
+  res.json(newMsg)
 })
 
 app.delete('/api/groups/:id', requireAdmin, (req, res) => {

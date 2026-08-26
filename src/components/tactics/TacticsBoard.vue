@@ -42,7 +42,8 @@ import {
   AlertTriangle,
   MessageSquare,
   Send,
-  Lock
+  Lock,
+  ChevronDown
 } from 'lucide-vue-next'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
 import CS2ServerConnectModal from '../lineups/CS2ServerConnectModal.vue'
@@ -52,6 +53,16 @@ const stratStore = useStratStore()
 const gameRoomStore = useGameRoomStore()
 const authStore = useAuthStore()
 const { confirmAction } = useConfirmDialog()
+
+const isTacticsMapDropdownOpen = ref(false)
+
+function handleTacticsMapGlobalClick(e: MouseEvent) {
+  const target = e.target as HTMLElement | null
+  if (!target) return
+  if (isTacticsMapDropdownOpen.value && !target.closest('.tactics-map-dropdown-container')) {
+    isTacticsMapDropdownOpen.value = false
+  }
+}
 
 // RIGHT TACTICAL SIDEBAR (ROOM CHAT / PRIVATE CHAT / PLAYER LIST)
 const isRightSidebarVisible = ref(true)
@@ -423,6 +434,7 @@ onMounted(async () => {
   }, 7000)
 
   window.addEventListener('focus', handleWindowFocusSync)
+  window.addEventListener('click', handleTacticsMapGlobalClick)
 })
 
 let autoSyncTimer: any = null
@@ -437,6 +449,7 @@ function handleWindowFocusSync() {
 onUnmounted(() => {
   if (autoSyncTimer) clearInterval(autoSyncTimer)
   window.removeEventListener('focus', handleWindowFocusSync)
+  window.removeEventListener('click', handleTacticsMapGlobalClick)
 })
 
 function toggleToolEnabled(toolId: string) {
@@ -979,16 +992,68 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           <span>Customize Icons</span>
         </button>
 
-        <span class="text-xs text-slate-400 font-bold hidden sm:inline">Map:</span>
-        <select
-          :value="mapStore.currentMapId"
-          @change="handleMapSelect(($event.target as HTMLSelectElement).value)"
-          class="bg-slate-950 border border-slate-800 text-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold uppercase font-mono focus:outline-none focus:border-amber-500 cursor-pointer"
-        >
-          <option v-for="map in mapStore.availableMaps" :key="map.id" :value="map.id">
-            {{ map.name }}
-          </option>
-        </select>
+        <!-- MAP SELECTOR INTERACTIVE DROPDOWN -->
+        <div class="relative tactics-map-dropdown-container">
+          <button
+            @click="isTacticsMapDropdownOpen = !isTacticsMapDropdownOpen"
+            class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
+          >
+            <img 
+              v-if="mapStore.currentMap.icon" 
+              :src="mapStore.currentMap.icon" 
+              :alt="mapStore.currentMap.name" 
+              class="w-4 h-4 object-contain"
+            />
+            <span v-else class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <span class="uppercase tracking-wide font-mono">{{ mapStore.currentMap.name }}</span>
+            <ChevronDown class="w-3.5 h-3.5 text-slate-400 transition-transform duration-200" :class="{ 'rotate-180': isTacticsMapDropdownOpen }" />
+          </button>
+
+          <!-- DROPDOWN LIST -->
+          <div 
+            v-if="isTacticsMapDropdownOpen"
+            class="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in"
+          >
+            <div class="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+              <span>Switch Map</span>
+              <span class="text-[10px] text-amber-400 font-mono">{{ mapStore.availableMaps.length }} Maps</span>
+            </div>
+
+            <div class="max-h-72 overflow-y-auto">
+              <button
+                v-for="map in mapStore.availableMaps"
+                :key="map.id"
+                @click="handleMapSelect(map.id); isTacticsMapDropdownOpen = false"
+                :class="[
+                  'w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-left transition-colors cursor-pointer',
+                  mapStore.currentMapId === map.id 
+                    ? 'bg-amber-500/20 text-amber-400 font-bold' 
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                ]"
+              >
+                <div class="flex items-center gap-2">
+                  <img 
+                    v-if="map.icon" 
+                    :src="map.icon" 
+                    :alt="map.name" 
+                    class="w-4 h-4 object-contain flex-shrink-0"
+                  />
+                  <span>{{ map.name }}</span>
+                </div>
+
+                <span v-if="map.isCustom" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  CUSTOM
+                </span>
+                <span v-else-if="map.activePool" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-black">
+                  PREMIER
+                </span>
+                <span v-else class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-500">
+                  RESERVE
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

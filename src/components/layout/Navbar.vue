@@ -106,9 +106,26 @@ function handleLogout() {
   isUserDropdownOpen.value = false
 }
 
-async function handleSyncLineups() {
-  await lineupStore.syncWithServer()
+import { onMounted, onUnmounted } from 'vue'
+
+function handleGlobalClick(e: MouseEvent) {
+  const target = e.target as HTMLElement | null
+  if (!target) return
+  if (isUserDropdownOpen.value && !target.closest('.user-dropdown-container')) {
+    isUserDropdownOpen.value = false
+  }
+  if (isMapDropdownOpen.value && !target.closest('.map-dropdown-container')) {
+    isMapDropdownOpen.value = false
+  }
 }
+
+onMounted(() => {
+  window.addEventListener('click', handleGlobalClick)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', handleGlobalClick)
+})
 </script>
 
 <template>
@@ -153,7 +170,7 @@ async function handleSyncLineups() {
         </router-link>
 
         <!-- MAP SELECTOR DROPDOWN -->
-        <div class="relative">
+        <div class="relative map-dropdown-container">
           <button
             @click="isMapDropdownOpen = !isMapDropdownOpen"
             class="flex items-center gap-2 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
@@ -272,7 +289,7 @@ async function handleSyncLineups() {
         </button>
 
         <!-- USER PROFILE / LOGIN BUTTON -->
-        <div class="relative">
+        <div class="relative user-dropdown-container">
           <template v-if="authStore.isAuthenticated">
             <button
               @click="isUserDropdownOpen = !isUserDropdownOpen"
