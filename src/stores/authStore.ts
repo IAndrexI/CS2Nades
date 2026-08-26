@@ -26,7 +26,17 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const isAuthenticated = computed(() => !!currentUser.value && !!token.value)
-  const isAdmin = computed(() => currentUser.value?.role === 'admin' || currentUser.value?.username?.toLowerCase() === 'andrex')
+  const isActualAdmin = computed(() => currentUser.value?.role === 'admin' || currentUser.value?.username?.toLowerCase() === 'andrex')
+  const isUserPreviewMode = ref<boolean>(false)
+
+  const isAdmin = computed(() => {
+    if (isUserPreviewMode.value) return false
+    return isActualAdmin.value
+  })
+
+  function toggleUserPreviewMode() {
+    isUserPreviewMode.value = !isUserPreviewMode.value
+  }
 
   // User Real-Time Presence & Online/Away Status
   const userPresenceMap = ref<Record<string, { status: string; lastSeen?: number }>>({
@@ -299,6 +309,9 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     isAuthenticated,
     isAdmin,
+    isActualAdmin,
+    isUserPreviewMode,
+    toggleUserPreviewMode,
     userPresenceMap,
     currentUserStatus,
     fetchPresence,

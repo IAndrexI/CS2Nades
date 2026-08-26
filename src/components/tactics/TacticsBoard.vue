@@ -811,6 +811,22 @@ function getVisionMesh(p1: { x: number; y: number }, p2: { x: number; y: number 
           <span>{{ gameRoomStore.isGhostMode ? 'Ghost: Invisible' : 'Ghost Mode' }}</span>
         </button>
 
+        <!-- USER VIEW MODE TOGGLE (ADMIN ONLY) -->
+        <button
+          v-if="authStore.isActualAdmin"
+          @click="authStore.toggleUserPreviewMode()"
+          :class="[
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-sm',
+            authStore.isUserPreviewMode
+              ? 'bg-purple-500 text-slate-950 border-purple-400 font-black shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+              : 'bg-slate-950 hover:bg-slate-900 text-slate-400 border-slate-800'
+          ]"
+          :title="authStore.isUserPreviewMode ? 'Currently previewing as regular user. Click to return to Admin View' : 'Preview website and room exactly as regular players see it'"
+        >
+          <Eye class="w-3.5 h-3.5" />
+          <span>{{ authStore.isUserPreviewMode ? 'User Mode: Active' : 'User Mode' }}</span>
+        </button>
+
         <!-- CS2 DIRECT SERVER CONNECT -->
         <button
           @click="isCs2ServerModalOpen = true"

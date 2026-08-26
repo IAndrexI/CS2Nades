@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watchEffect } from 'vue'
 import { useMapStore } from '../../stores/mapStore'
 import type { MapInfo } from '../../types'
 import { parseViewBox, pctToSvg } from '../../utils/radarCoords'
+import { setRadarImageData } from '../../utils/mapColliders'
 
 const props = defineProps<{
   mapInfo: MapInfo
@@ -26,6 +27,30 @@ const callouts = computed(() => {
 function siteSvg(site: { x: number; y: number }) {
   return pctToSvg(site, props.mapInfo.viewBox)
 }
+
+watchEffect(() => {
+  const imgUrl = props.mapInfo.radarImage
+  if (!imgUrl) return
+
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = () => {
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = 512
+      canvas.height = 512
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, 512, 512)
+        const imgData = ctx.getImageData(0, 0, 512, 512)
+        setRadarImageData(props.mapInfo.id, imgData)
+      }
+    } catch (e) {
+      console.warn('Could not extract radar image data for raycasting', e)
+    }
+  }
+  img.src = imgUrl
+})
 </script>
 
 <template>

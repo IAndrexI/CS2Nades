@@ -160,6 +160,56 @@ export const MAP_WALL_COLLIDERS: Record<string, WallSegment[]> = {
   ]
 }
 
+// Map-Specific Walkable Corridor & See-Through Colors (per user specification)
+// Everything outside these floor colors is a solid wall / blocked sight!
+export const MAP_PASSABLE_COLORS: Record<string, string[]> = {
+  mirage: ['#1c222e'],
+  dust2: ['#1c222e'],
+  inferno: ['#333a42'],
+  cache: ['#485565'],
+  ancient: ['#3e4f3d'],
+  nuke: ['#3b434d', '#2f333c', '#434c59', '#333a42'],
+  anubis: ['#3d434f', '#323941'],
+  vertigo: ['#333a42', '#282e38', '#1c222e'],
+  overpass: ['#333a42', '#2a323d', '#1c222e'],
+  office: ['#3e444f', '#2e343f', '#1c222e'],
+  italy: ['#3d444e', '#2d333e', '#1c222e']
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const clean = hex.replace('#', '')
+  const num = parseInt(clean, 16)
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255
+  }
+}
+
+// In-memory radar pixel image cache
+const radarImageCache: Record<string, ImageData | null> = {}
+
+export function setRadarImageData(mapId: string, data: ImageData) {
+  const cleanId = (mapId || '').toLowerCase().replace('de_', '').trim()
+  radarImageCache[cleanId] = data
+}
+
+export function isColorPassable(mapId: string, r: number, g: number, b: number, a: number): boolean {
+  if (a < 20) return false // Transparent / void
+  // If close to dark background #090c13 / #090d13 (R: 9, G: 12..13, B: 19), it is solid obstacle/void!
+  if (r <= 16 && g <= 20 && b <= 26) return false
+
+  const cleanId = (mapId || 'mirage').toLowerCase().replace('de_', '').trim()
+  const allowedHexes = MAP_PASSABLE_COLORS[cleanId] || MAP_PASSABLE_COLORS.mirage || ['#1c222e']
+
+  for (const hex of allowedHexes) {
+    const target = hexToRgb(hex)
+    const dist = Math.hypot(r - target.r, g - target.g, b - target.b)
+    if (dist <= 35) return true
+  }
+  return false
+}
+
 function lineIntersection(
   x1: number, y1: number, x2: number, y2: number,
   x3: number, y3: number, x4: number, y4: number
@@ -210,6 +260,7 @@ export function calculateVisionMesh(
     ...(MAP_WALL_COLLIDERS[cleanMapId] || MAP_WALL_COLLIDERS.mirage || []),
     ...MAP_BOUNDS
   ]
+  const imgData = radarImageCache[cleanMapId]
 
   const hitPoints: Array<{ x: number; y: number; isBlocked: boolean; wallIndex: number }> = []
   const blockedEdges: Array<{ x1: number; y1: number; x2: number; y2: number }> = []
@@ -222,12 +273,47 @@ export function calculateVisionMesh(
 
     let closestHit: { x: number; y: number; dist: number; wallIndex: number } | null = null
 
+    // 1. Check geometric colliders
     for (let wIdx = 0; wIdx < colliders.length; wIdx++) {
       const wall = colliders[wIdx]
       const hit = lineIntersection(x1, y1, rayTargetX, rayTargetY, wall.x1, wall.y1, wall.x2, wall.y2)
       if (hit) {
         if (!closestHit || hit.dist < closestHit.dist) {
           closestHit = { ...hit, wallIndex: wIdx }
+        }
+      }
+    }
+
+    // 2. Check pixel radar colors if available
+    if (imgData) {
+      const stepDist = 5
+      const steps = Math.floor(maxDistance / stepDist)
+      const cosA = Math.cos(rayAngle)
+      const sinA = Math.sin(rayAngle)
+
+      // Start testing past origin
+      for (let s = 3; s <= steps; s++) {
+        const curDist = s * stepDist
+        if (closestHit && curDist >= closestHit.dist) break
+
+        const curX = x1 + cosA * curDist
+        const curY = y1 + sinA * curDist
+
+        // Map 0..1000 SVG coordinates to image data coordinates
+        const imgX = Math.floor((curX / 1000) * imgData.width)
+        const imgY = Math.floor((curY / 1000) * imgData.height)
+
+        if (imgX >= 0 && imgX < imgData.width && imgY >= 0 && imgY < imgData.height) {
+          const pixelIdx = (imgY * imgData.width + imgX) * 4
+          const r = imgData.data[pixelIdx]
+          const g = imgData.data[pixelIdx + 1]
+          const b = imgData.data[pixelIdx + 2]
+          const a = imgData.data[pixelIdx + 3]
+
+          if (!isColorPassable(cleanMapId, r, g, b, a)) {
+            closestHit = { x: curX, y: curY, dist: curDist, wallIndex: 9999 }
+            break
+          }
         }
       }
     }
