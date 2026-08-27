@@ -73,11 +73,7 @@ function handleJoinRoomFromPeople(roomCode: string, isGhost = false) {
 }
 
 function handleNavClick(e: MouseEvent, path: string) {
-  if (path === '/tactics' && authStore.isLimitedGuest) {
-    e.preventDefault()
-    authStore.authError = 'Limited Guest Mode: Live Tactics requires an account with Email or Steam.'
-    authStore.isAuthModalOpen = true
-  }
+  // Guests can enter Live Tactics in view-only mode
 }
 
 function handleNewNadeClick() {

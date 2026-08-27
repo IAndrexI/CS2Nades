@@ -624,6 +624,11 @@ function getMapCoords(e: MouseEvent): { x: number; y: number } {
 }
 
 function handleElementMouseDown(e: MouseEvent, el: TacticsElement) {
+  if (authStore.isLimitedGuest) {
+    tempSaveToast.value = '👁️ Guest View-Only Mode: Sign in with Email or Steam to interact'
+    setTimeout(() => { tempSaveToast.value = '' }, 3000)
+    return
+  }
   if (stratStore.activeTool === 'select') {
     e.stopPropagation()
     if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
@@ -690,6 +695,11 @@ function eraseAtCoords(coords: { x: number; y: number }) {
 }
 
 function handleMouseDown(e: MouseEvent) {
+  if (authStore.isLimitedGuest) {
+    tempSaveToast.value = '👁️ Guest View-Only Mode: Sign in with Email or Steam to draw & place pins'
+    setTimeout(() => { tempSaveToast.value = '' }, 3000)
+    return
+  }
   if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
     return
   }
@@ -1020,49 +1030,25 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
 
 <template>
   <div class="tactics-board-container flex flex-col gap-4">
-    <!-- LIMITED GUEST MODE LOCK OVERLAY -->
+    <!-- LIMITED GUEST VIEW-ONLY MODE BANNER -->
     <div 
       v-if="authStore.isLimitedGuest"
-      class="fixed inset-0 z-[9990] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in text-center"
+      class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-lg animate-fade-in"
     >
-      <div 
-        class="max-w-md w-full p-6 sm:p-8 bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl flex flex-col items-center gap-4"
-        :style="{ backgroundColor: themeStore.customModalBgColor }"
-      >
-        <div class="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-          <Lock class="w-8 h-8 stroke-[2.5]" />
-        </div>
+      <div class="flex items-center gap-2.5 text-slate-200">
+        <Eye class="w-4 h-4 text-amber-400 flex-shrink-0 animate-pulse" />
         <div>
-          <h2 class="text-lg font-black uppercase text-white tracking-wide">Live Tactics Locked</h2>
-          <p class="text-xs text-slate-300 mt-2 leading-relaxed">
-            You are currently in <strong class="text-amber-400">Limited Guest Mode</strong>. Real-time collaborative tactical drawing and live squad rooms require an account verified with <strong class="text-white">Email</strong> or <strong class="text-white">Steam</strong>.
-          </p>
-          <div class="mt-3 p-3 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] text-slate-400 text-left flex flex-col gap-1.5">
-            <div class="flex items-center gap-2 text-emerald-400 font-bold">
-              <span>✓</span> <span>Visual Lineup Library & Minimap radar: Available</span>
-            </div>
-            <div class="flex items-center gap-2 text-rose-400 font-bold">
-              <span>✕</span> <span>Live Tactics Board & custom strat saving: Locked</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex flex-col sm:flex-row items-center gap-3 w-full mt-2">
-          <button
-            @click="authStore.isAuthModalOpen = true"
-            class="w-full py-3 px-4 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
-          >
-            <Sparkles class="w-4 h-4" />
-            <span>Sign In / Register</span>
-          </button>
-          <router-link
-            to="/"
-            class="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 font-bold text-xs rounded-xl transition-all text-center"
-          >
-            Explore Lineups
-          </router-link>
+          <strong class="text-amber-400">Guest View-Only Mode:</strong>
+          <span class="text-slate-300 ml-1">You are watching live squad tactics and radar broadcasts in real time. Sign In or Register to draw, place pins, and save strats.</span>
         </div>
       </div>
+      <button
+        @click="authStore.isAuthModalOpen = true"
+        class="px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+      >
+        <Sparkles class="w-3.5 h-3.5" />
+        <span>Sign In for Full Access</span>
+      </button>
     </div>
 
     <!-- TOP BAR: ROOM STATUS, 1-CLICK COPY ID, SHARE LINK & HOST PERMISSIONS -->
@@ -1590,33 +1576,19 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   stroke-width="1.5"
                   stroke-dasharray="4 3"
                 />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="13" fill="#0f172a" stroke="#94a3b8" stroke-width="1.5" />
-                <text
-                  :x="el.points[0].x * 10"
-                  :y="el.points[0].y * 10 + 4"
-                  font-size="12"
-                  text-anchor="middle"
-                  class="select-none pointer-events-none"
-                  style="filter: grayscale(100%) brightness(1.25);"
-                >
-                  ☁️
-                </text>
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="13" fill="#0f172a" stroke="#94a3b8" stroke-width="1.8" />
+                <g :transform="`translate(${el.points[0].x * 10 - 7}, ${el.points[0].y * 10 - 7}) scale(0.58)`">
+                  <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                </g>
               </g>
 
               <!-- 6. FLASH BURST -->
               <g v-else-if="el.type === 'flash_burst'">
                 <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="18" fill="#eab308" fill-opacity="0.25" stroke="#eab308" stroke-width="1.5" stroke-dasharray="3 2" />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="12" fill="#0f172a" stroke="#eab308" stroke-width="1.5" />
-                <text
-                  :x="el.points[0].x * 10"
-                  :y="el.points[0].y * 10 + 4"
-                  font-size="12"
-                  text-anchor="middle"
-                  class="select-none pointer-events-none"
-                  style="filter: grayscale(100%) brightness(1.25);"
-                >
-                  ⚡
-                </text>
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="13" fill="#0f172a" stroke="#eab308" stroke-width="1.8" />
+                <g :transform="`translate(${el.points[0].x * 10 - 7}, ${el.points[0].y * 10 - 7}) scale(0.58)`">
+                  <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" fill="none" stroke="#eab308" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                </g>
               </g>
 
               <!-- 7. MOLOTOV FIRE -->
@@ -1630,63 +1602,46 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   stroke-width="1.5"
                   stroke-dasharray="4 3"
                 />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="13" fill="#0f172a" stroke="#f97316" stroke-width="1.5" />
-                <text
-                  :x="el.points[0].x * 10"
-                  :y="el.points[0].y * 10 + 4"
-                  font-size="12"
-                  text-anchor="middle"
-                  class="select-none pointer-events-none"
-                  style="filter: grayscale(100%) brightness(1.25);"
-                >
-                  🔥
-                </text>
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="13" fill="#0f172a" stroke="#f97316" stroke-width="1.8" />
+                <g :transform="`translate(${el.points[0].x * 10 - 7}, ${el.points[0].y * 10 - 7}) scale(0.58)`">
+                  <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" fill="none" stroke="#f97316" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                </g>
               </g>
 
               <!-- 8. HE GRENADE BLAST -->
               <g v-else-if="el.type === 'he_blast'">
                 <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="20" fill="#22c55e" fill-opacity="0.2" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="3 2" />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="12" fill="#0f172a" stroke="#22c55e" stroke-width="1.5" />
-                <text
-                  :x="el.points[0].x * 10"
-                  :y="el.points[0].y * 10 + 4"
-                  font-size="12"
-                  text-anchor="middle"
-                  class="select-none pointer-events-none"
-                  style="filter: grayscale(100%) brightness(1.25);"
-                >
-                  🎯
-                </text>
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="13" fill="#0f172a" stroke="#22c55e" stroke-width="1.8" />
+                <g :transform="`translate(${el.points[0].x * 10 - 7}, ${el.points[0].y * 10 - 7}) scale(0.58)`">
+                  <circle cx="12" cy="12" r="10" fill="none" stroke="#22c55e" stroke-width="2.5" />
+                  <line x1="22" x2="18" y1="12" y2="12" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" />
+                  <line x1="6" x2="2" y1="12" y2="12" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" />
+                  <line x1="12" x2="12" y1="6" y2="2" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" />
+                  <line x1="12" x2="12" y1="22" y2="18" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" />
+                </g>
               </g>
 
               <!-- 9. C4 BOMB (WITH USER BADGE) -->
               <g v-else-if="el.type === 'c4_bomb' || el.type === 'plant_a' || el.type === 'plant_b'">
                 <!-- Main Bomb Base -->
-                <rect
-                  :x="el.points[0].x * 10 - 14"
-                  :y="el.points[0].y * 10 - 14"
-                  width="28"
-                  height="28"
-                  rx="6"
-                  fill="#7f1d1d"
-                  stroke="#ef4444"
+                <circle
+                  :cx="el.points[0].x * 10"
+                  :cy="el.points[0].y * 10"
+                  r="15"
+                  fill="#0f172a"
+                  stroke="var(--app-accent, #de9b35)"
                   stroke-width="2"
                   class="shadow-xl"
                 />
-                <text
-                  :x="el.points[0].x * 10"
-                  :y="el.points[0].y * 10 + 4.5"
-                  font-size="14"
-                  text-anchor="middle"
-                  class="select-none pointer-events-none"
-                  style="filter: grayscale(100%) brightness(1.25);"
-                >
-                  💣
-                </text>
+                <g :transform="`translate(${el.points[0].x * 10 - 8}, ${el.points[0].y * 10 - 8}) scale(0.68)`">
+                  <circle cx="11" cy="13" r="9" fill="none" stroke="var(--app-accent, #de9b35)" stroke-width="2.5" />
+                  <path d="M14.35 4.65 16.3 2.7a2.41 2.41 0 0 1 3.4 0l1.6 1.6a2.4 2.4 0 0 1 0 3.4l-1.95 1.95" fill="none" stroke="var(--app-accent, #de9b35)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="m22 2-1.5 1.5" stroke="var(--app-accent, #de9b35)" stroke-width="2.5" stroke-linecap="round" />
+                </g>
 
                 <!-- Small Player Badge on Top-Right Corner of Bomb -->
                 <g :transform="`translate(${el.points[0].x * 10 + 9}, ${el.points[0].y * 10 - 9})`">
-                  <circle cx="0" cy="0" r="7" fill="#0f172a" stroke="#de9b35" stroke-width="1.5" />
+                  <circle cx="0" cy="0" r="7" fill="#0f172a" stroke="var(--app-accent, #de9b35)" stroke-width="1.5" />
                   <image
                     v-if="el.authorAvatar"
                     :href="el.authorAvatar"
@@ -1700,7 +1655,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                     v-else
                     x="0"
                     y="3"
-                    fill="#de9b35"
+                    fill="var(--app-accent, #de9b35)"
                     font-size="7"
                     font-weight="900"
                     text-anchor="middle"

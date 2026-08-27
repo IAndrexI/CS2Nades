@@ -946,6 +946,8 @@ app.post('/api/groups/:id/messages', requireAuth, (req, res) => {
 // ==========================================
 // ADMIN USER MANAGEMENT
 // ==========================================
+const activeGuestSessions = new Map() // socketId -> { id, username, connectedAt, lastSeen }
+
 app.get('/api/admin/users', requireAdmin, (req, res) => {
   db = loadDB()
   const usersSafe = (db.users || []).map(({ passwordHash, ...u }) => {
@@ -973,7 +975,24 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
       lineupsCount: (db.lineups || []).filter(l => l.userId === u.id).length
     }
   })
-  res.json(usersSafe)
+
+  // Append currently active online guest visitors
+  const guestsList = Array.from(activeGuestSessions.values()).map(g => ({
+    id: g.id,
+    username: g.username || `Guest_${g.id.slice(-4)}`,
+    email: '',
+    role: 'guest',
+    inGameRole: 'Guest Viewer',
+    avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${g.username || g.id}`,
+    status: 'online',
+    lastSeen: g.lastSeen || Date.now(),
+    isGuest: true,
+    hasFullAccess: false,
+    lineupsCount: 0,
+    createdAt: new Date(g.connectedAt).toISOString()
+  }))
+
+  res.json([...usersSafe, ...guestsList])
 })
 
 app.put('/api/admin/users/:id', requireAdmin, (req, res) => {
@@ -1501,9 +1520,18 @@ io.on('connection', (socket) => {
   let currentUserInfo = null
   let isGhostMode = false
 
+  // Register connected guest session by default until authenticated
+  activeGuestSessions.set(socket.id, {
+    id: `guest-${socket.id.slice(0, 6)}`,
+    username: `Guest_${socket.id.slice(-4)}`,
+    connectedAt: Date.now(),
+    lastSeen: Date.now()
+  })
+
   socket.on('user:set_status', ({ username, status }) => {
     const uname = username || currentUserInfo?.username
     if (uname) {
+      activeGuestSessions.delete(socket.id)
       const s = status === 'away' ? 'away' : 'online'
       userPresence.set(uname.toLowerCase(), { status: s, lastSeen: Date.now() })
       io.emit('user:presence_update', { username: uname, status: s, lastSeen: Date.now() })
@@ -1767,6 +1795,7 @@ io.on('connection', (socket) => {
 
   // Disconnect handler
   socket.on('disconnect', () => {
+    activeGuestSessions.delete(socket.id)
     if (currentUserInfo?.username) {
       userPresence.set(currentUserInfo.username.toLowerCase(), { status: 'away', lastSeen: Date.now() })
       io.emit('user:presence_update', { username: currentUserInfo.username, status: 'away', lastSeen: Date.now() })

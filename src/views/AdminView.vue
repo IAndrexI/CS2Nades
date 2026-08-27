@@ -418,7 +418,7 @@ async function handleAddSquadGroup() {
         </div>
 
         <!-- STATS BAR & FILTERS -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
           <div class="p-3 bg-slate-950 border border-slate-800 rounded-xl flex flex-col gap-1">
             <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Accounts</span>
             <span class="text-lg font-black text-white font-mono">{{ adminStore.usersList.length }}</span>
@@ -430,6 +430,15 @@ async function handleAddSquadGroup() {
             </span>
             <span class="text-lg font-black text-emerald-400 font-mono">
               {{ adminStore.usersList.filter((u: any) => (u.status || authStore.getUserStatus(u.username)) === 'online').length }}
+            </span>
+          </div>
+          <div class="p-3 bg-slate-950 border border-cyan-900/40 rounded-xl flex flex-col gap-1">
+            <span class="text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+              Guests Online
+            </span>
+            <span class="text-lg font-black text-cyan-400 font-mono">
+              {{ adminStore.usersList.filter((u: any) => u.isGuest && (u.status || authStore.getUserStatus(u.username)) === 'online').length }}
             </span>
           </div>
           <div class="p-3 bg-slate-950 border border-amber-900/40 rounded-xl flex flex-col gap-1">
@@ -472,7 +481,17 @@ async function handleAddSquadGroup() {
               ]"
             >
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-              <span>Online</span>
+              <span>Online ({{ adminStore.usersList.filter((u: any) => (u.status || authStore.getUserStatus(u.username)) === 'online').length }})</span>
+            </button>
+            <button
+              @click="userStatusFilter = 'guest'"
+              :class="[
+                'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                userStatusFilter === 'guest' ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-400 hover:text-cyan-400'
+              ]"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+              <span>Guests ({{ adminStore.usersList.filter((u: any) => u.isGuest).length }})</span>
             </button>
             <button
               @click="userStatusFilter = 'offline'"
