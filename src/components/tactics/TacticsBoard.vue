@@ -44,7 +44,8 @@ import {
   MessageSquare,
   Send,
   Lock,
-  ChevronDown
+  ChevronDown,
+  UserX
 } from 'lucide-vue-next'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
 import CS2ServerConnectModal from '../lineups/CS2ServerConnectModal.vue'
@@ -1145,6 +1146,22 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           <span>{{ authStore.isUserPreviewMode ? 'User Mode: Active' : 'User Mode' }}</span>
         </button>
 
+        <!-- GUEST VIEW MODE TOGGLE (ADMIN ONLY) -->
+        <button
+          v-if="authStore.isActualAdmin"
+          @click="authStore.toggleGuestPreviewMode()"
+          :class="[
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-sm',
+            authStore.isGuestPreviewMode
+              ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-[0_0_10px_rgba(245,158,11,0.4)]'
+              : 'bg-slate-950 hover:bg-slate-900 text-slate-400 border-slate-800'
+          ]"
+          :title="authStore.isGuestPreviewMode ? 'Currently previewing as unverified guest. Click to return to Admin View' : 'Preview website and room exactly as unverified guest visitors see it'"
+        >
+          <UserX class="w-3.5 h-3.5" />
+          <span>{{ authStore.isGuestPreviewMode ? 'Guest Mode: Active' : 'Guest Mode' }}</span>
+        </button>
+
         <!-- DIRECT SERVER CONNECT -->
         <button
           @click="isCs2ServerModalOpen = true"
@@ -1672,20 +1689,26 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
               <!-- 9. C4 BOMB (WITH USER BADGE) -->
               <g v-else-if="el.type === 'c4_bomb' || el.type === 'plant_a' || el.type === 'plant_b'">
                 <!-- Main Bomb Base -->
-                <circle
-                  :cx="el.points[0].x * 10"
-                  :cy="el.points[0].y * 10"
-                  r="15"
-                  fill="#0f172a"
-                  stroke="var(--app-accent, #de9b35)"
+                <rect
+                  :x="el.points[0].x * 10 - 14"
+                  :y="el.points[0].y * 10 - 14"
+                  width="28"
+                  height="28"
+                  rx="6"
+                  fill="#7f1d1d"
+                  stroke="#ef4444"
                   stroke-width="2"
                   class="shadow-xl"
                 />
-                <g :transform="`translate(${el.points[0].x * 10 - 8}, ${el.points[0].y * 10 - 8}) scale(0.68)`">
-                  <circle cx="11" cy="13" r="9" fill="none" stroke="var(--app-accent, #de9b35)" stroke-width="2.5" />
-                  <path d="M14.35 4.65 16.3 2.7a2.41 2.41 0 0 1 3.4 0l1.6 1.6a2.4 2.4 0 0 1 0 3.4l-1.95 1.95" fill="none" stroke="var(--app-accent, #de9b35)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-                  <path d="m22 2-1.5 1.5" stroke="var(--app-accent, #de9b35)" stroke-width="2.5" stroke-linecap="round" />
-                </g>
+                <text
+                  :x="el.points[0].x * 10"
+                  :y="el.points[0].y * 10 + 4.5"
+                  font-size="14"
+                  text-anchor="middle"
+                  class="select-none pointer-events-none"
+                >
+                  💣
+                </text>
 
                 <!-- Small Player Badge on Top-Right Corner of Bomb -->
                 <g :transform="`translate(${el.points[0].x * 10 + 9}, ${el.points[0].y * 10 - 9})`">

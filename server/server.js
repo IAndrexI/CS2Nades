@@ -1056,6 +1056,55 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
   res.json({ success: true, message: 'User and all associated chat logs wiped' })
 })
 
+// CREATE TEMP ACCOUNTS FOR ADMIN TESTING (GUEST OR VERIFIED USER)
+app.post('/api/admin/create-temp-user', requireAdmin, (req, res) => {
+  db = loadDB()
+  const { type, customUsername } = req.body // type: 'guest' | 'verified_user'
+  const id = `temp-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`
+  const username = (customUsername && customUsername.trim()) 
+    ? customUsername.trim() 
+    : (type === 'guest' ? `TempGuest_${Math.floor(1000 + Math.random() * 9000)}` : `TestUser_${Math.floor(1000 + Math.random() * 9000)}`)
+
+  if (type === 'guest') {
+    const guestUser = {
+      id,
+      username,
+      email: '',
+      role: 'guest',
+      inGameRole: 'Guest Tester',
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`,
+      createdAt: new Date().toISOString(),
+      isTemp: true,
+      hasFullAccess: false
+    }
+    const token = jwt.sign({ id, username, role: 'guest', isGuest: true }, JWT_SECRET, { expiresIn: '7d' })
+    res.json({ success: true, user: guestUser, token, isGuest: true })
+  } else {
+    const password = 'TestUser123!'
+    const salt = bcrypt.genSaltSync(10)
+    const passwordHash = bcrypt.hashSync(password, salt)
+    const verifiedUser = {
+      id,
+      username,
+      email: `${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@cs2test.internal`,
+      role: 'player',
+      inGameRole: 'Entry Fragger',
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`,
+      passwordHash,
+      createdAt: new Date().toISOString(),
+      isTemp: true,
+      hasFullAccess: true,
+      emailVerified: true
+    }
+    db.users = db.users || []
+    db.users.push(verifiedUser)
+    saveDB(db)
+    const token = jwt.sign({ id, username, role: 'player' }, JWT_SECRET, { expiresIn: '7d' })
+    const { passwordHash: _, ...userSafe } = verifiedUser
+    res.json({ success: true, user: userSafe, token, defaultPassword: password, isGuest: false })
+  }
+})
+
 // ==========================================
 // SERVER HEALTH & DOMAIN DISCOVERY (CLOUDFLARE TUNNEL / REVERSE PROXY)
 // ==========================================

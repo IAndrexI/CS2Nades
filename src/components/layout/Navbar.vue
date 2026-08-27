@@ -41,7 +41,8 @@ import {
   X,
   PenTool,
   Check,
-  Eye
+  Eye,
+  UserX
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -161,24 +162,60 @@ onUnmounted(() => {
 
 <template>
   <header class="navbar-wrapper w-full bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 sticky top-0 z-40">
-    <!-- PREVIEW MODE BANNER (ACTIVE WHEN ADMIN TOGGLES USER VIEW) -->
+    <!-- GUEST PREVIEW MODE BANNER (ACTIVE WHEN ADMIN TOGGLES GUEST VIEW) -->
+    <div
+      v-if="authStore.isGuestPreviewMode"
+      class="bg-gradient-to-r from-amber-950 via-amber-900 to-yellow-950 border-b border-amber-500/40 text-amber-200 px-4 py-1.5 text-xs font-bold flex flex-wrap items-center justify-between gap-2 shadow-lg"
+    >
+      <div class="flex items-center gap-2">
+        <UserX class="w-4 h-4 text-amber-400 animate-pulse flex-shrink-0" />
+        <span>
+          <strong class="text-white uppercase tracking-wider">Guest Mode (Admin Testing):</strong>
+          Previewing website as an unverified guest (limited access, view-only tactics, save restrictions).
+        </span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          @click="authStore.toggleUserPreviewMode()"
+          class="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-lg text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow hover:scale-105"
+        >
+          Switch to User Mode
+        </button>
+        <button
+          @click="authStore.resetPreviewModes()"
+          class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow hover:scale-105"
+        >
+          Exit to Admin Mode
+        </button>
+      </div>
+    </div>
+
+    <!-- USER PREVIEW MODE BANNER (ACTIVE WHEN ADMIN TOGGLES USER VIEW) -->
     <div
       v-if="authStore.isUserPreviewMode"
-      class="bg-gradient-to-r from-purple-950 via-purple-900 to-indigo-950 border-b border-purple-500/40 text-purple-200 px-4 py-1.5 text-xs font-bold flex items-center justify-between shadow-lg"
+      class="bg-gradient-to-r from-purple-950 via-purple-900 to-indigo-950 border-b border-purple-500/40 text-purple-200 px-4 py-1.5 text-xs font-bold flex flex-wrap items-center justify-between gap-2 shadow-lg"
     >
       <div class="flex items-center gap-2">
         <Eye class="w-4 h-4 text-purple-400 animate-pulse flex-shrink-0" />
         <span>
-          <strong class="text-white uppercase tracking-wider">User View Mode (Preview Active):</strong>
-          You are seeing the app and tactical board exactly as normal players see it.
+          <strong class="text-white uppercase tracking-wider">User View Mode (Admin Testing):</strong>
+          Previewing website and live board as a standard verified player.
         </span>
       </div>
-      <button
-        @click="authStore.toggleUserPreviewMode()"
-        class="px-2.5 py-1 bg-purple-500 hover:bg-purple-400 text-slate-950 font-black rounded-lg text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow hover:scale-105"
-      >
-        Exit to Admin Mode
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          @click="authStore.toggleGuestPreviewMode()"
+          class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-slate-950 font-black rounded-lg text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow hover:scale-105"
+        >
+          Switch to Guest Mode
+        </button>
+        <button
+          @click="authStore.resetPreviewModes()"
+          class="px-2.5 py-1 bg-purple-500 hover:bg-purple-400 text-slate-950 font-black rounded-lg text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow hover:scale-105"
+        >
+          Exit to Admin Mode
+        </button>
+      </div>
     </div>
 
     <div class="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
@@ -451,21 +488,36 @@ onUnmounted(() => {
                 <span>Admin Dashboard</span>
               </router-link>
 
-              <!-- ADMIN VIEW TOGGLE: USER MODE / ADMIN VIEW -->
-              <button
-                v-if="authStore.isActualAdmin"
-                @click="authStore.toggleUserPreviewMode()"
-                class="flex items-center justify-between px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors w-full text-left border-t border-slate-800/80 cursor-pointer"
-                title="Toggle simulated user mode to see exactly what normal players see"
-              >
-                <div class="flex items-center gap-2">
-                  <Eye class="w-4 h-4 text-purple-400" />
-                  <span>Preview User View</span>
-                </div>
-                <span :class="['px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase tracking-wider', authStore.isUserPreviewMode ? 'bg-purple-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400']">
-                  {{ authStore.isUserPreviewMode ? 'ACTIVE' : 'OFF' }}
-                </span>
-              </button>
+              <!-- ADMIN VIEW TOGGLES: USER MODE & GUEST MODE -->
+              <div v-if="authStore.isActualAdmin" class="flex flex-col border-t border-slate-800/80 bg-slate-950/40">
+                <button
+                  @click="authStore.toggleUserPreviewMode()"
+                  class="flex items-center justify-between px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors w-full text-left cursor-pointer"
+                  title="Preview as normal registered user"
+                >
+                  <div class="flex items-center gap-2">
+                    <Eye class="w-4 h-4 text-purple-400" />
+                    <span>Preview User Mode</span>
+                  </div>
+                  <span :class="['px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase tracking-wider', authStore.isUserPreviewMode ? 'bg-purple-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400']">
+                    {{ authStore.isUserPreviewMode ? 'ACTIVE' : 'OFF' }}
+                  </span>
+                </button>
+
+                <button
+                  @click="authStore.toggleGuestPreviewMode()"
+                  class="flex items-center justify-between px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors w-full text-left cursor-pointer border-t border-slate-900"
+                  title="Preview as unverified guest with spectator mode & limits"
+                >
+                  <div class="flex items-center gap-2">
+                    <UserX class="w-4 h-4 text-amber-400" />
+                    <span>Preview Guest Mode</span>
+                  </div>
+                  <span :class="['px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase tracking-wider', authStore.isGuestPreviewMode ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400']">
+                    {{ authStore.isGuestPreviewMode ? 'ACTIVE' : 'OFF' }}
+                  </span>
+                </button>
+              </div>
 
               <button
                 @click="handleLogout"

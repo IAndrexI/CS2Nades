@@ -22,7 +22,13 @@ import {
   AlertCircle,
   Radio,
   Ghost,
-  RefreshCw
+  RefreshCw,
+  UserPlus,
+  UserX,
+  Eye,
+  LogIn,
+  Copy,
+  X
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -132,6 +138,34 @@ function formatLastSeen(lastSeen?: number | null, status?: string): string {
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
   return `${Math.floor(diffSec / 86400)}d ago`
+}
+
+// Temp Account Creation State for Admin Testing
+const isTempAccountModalOpen = ref(false)
+const tempAccountType = ref<'guest' | 'verified_user'>('guest')
+const tempCustomUsername = ref('')
+const isCreatingTemp = ref(false)
+const createdTempResult = ref<any | null>(null)
+const tempCopiedToast = ref('')
+
+async function handleCreateTempAccount() {
+  isCreatingTemp.value = true
+  try {
+    const data = await authStore.createTempAccount(tempAccountType.value, tempCustomUsername.value.trim() || undefined)
+    createdTempResult.value = data
+    await adminStore.fetchUsers()
+  } catch (e: any) {
+    alert(e.response?.data?.error || 'Failed to generate test account')
+  } finally {
+    isCreatingTemp.value = false
+  }
+}
+
+function handleLoginAsTempNow() {
+  if (!createdTempResult.value) return
+  authStore.loginAsTemp(createdTempResult.value.token, createdTempResult.value.user)
+  isTempAccountModalOpen.value = false
+  router.push('/')
 }
 
 onMounted(async () => {
@@ -408,13 +442,23 @@ async function handleAddSquadGroup() {
             </p>
           </div>
 
-          <button
-            @click="adminStore.fetchUsers()"
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow"
-          >
-            <RefreshCw class="w-3.5 h-3.5 text-amber-400" />
-            <span>Refresh User Directory</span>
-          </button>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              @click="isTempAccountModalOpen = true; createdTempResult = null"
+              class="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg hover:scale-105"
+            >
+              <UserPlus class="w-3.5 h-3.5" />
+              <span>Create Temp Test Account</span>
+            </button>
+
+            <button
+              @click="adminStore.fetchUsers()"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow"
+            >
+              <RefreshCw class="w-3.5 h-3.5 text-amber-400" />
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
 
         <!-- STATS BAR & FILTERS -->
@@ -853,5 +897,151 @@ async function handleAddSquadGroup() {
         </div>
       </div>
     </template>
+
+    <!-- TEMP TEST ACCOUNT CREATION MODAL FOR ADMIN -->
+    <div
+      v-if="isTempAccountModalOpen"
+      class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in"
+      @click.self="isTempAccountModalOpen = false"
+    >
+      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-lg shadow-2xl flex flex-col gap-5">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              <UserPlus class="w-5 h-5" />
+            </div>
+            <div>
+              <h3 class="font-black uppercase tracking-wider text-white text-sm">Create Temp Testing Account</h3>
+              <p class="text-xs text-slate-400">Generate instant test credentials as a Guest or Verified Player.</p>
+            </div>
+          </div>
+          <button
+            @click="isTempAccountModalOpen = false"
+            class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+
+        <!-- STAGE 1: CREATION FORM -->
+        <div v-if="!createdTempResult" class="flex flex-col gap-4">
+          <!-- ACCOUNT TYPE PICKER -->
+          <div class="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              @click="tempAccountType = 'guest'"
+              :class="[
+                'p-4 rounded-2xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer',
+                tempAccountType === 'guest'
+                  ? 'bg-amber-950/40 border-amber-500 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+              ]"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-black text-xs uppercase tracking-wider text-white flex items-center gap-1.5">
+                  <UserX class="w-4 h-4 text-amber-400" />
+                  Temp Guest
+                </span>
+                <span v-if="tempAccountType === 'guest'" class="w-2 h-2 rounded-full bg-amber-400"></span>
+              </div>
+              <p class="text-[11px] text-slate-400">
+                Tests unverified guest limits: read-only live tactics, spectator mode, no lineup saves.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              @click="tempAccountType = 'verified_user'"
+              :class="[
+                'p-4 rounded-2xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer',
+                tempAccountType === 'verified_user'
+                  ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+              ]"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-black text-xs uppercase tracking-wider text-white flex items-center gap-1.5">
+                  <ShieldCheck class="w-4 h-4 text-emerald-400" />
+                  Temp Verified User
+                </span>
+                <span v-if="tempAccountType === 'verified_user'" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              </div>
+              <p class="text-[11px] text-slate-400">
+                Tests full platform access: custom lineups, drawing tools, live squad room interactions.
+              </p>
+            </button>
+          </div>
+
+          <!-- CUSTOM USERNAME (OPTIONAL) -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-bold text-slate-300">Custom Test Username (Optional)</label>
+            <input
+              v-model="tempCustomUsername"
+              type="text"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs font-mono focus:border-amber-500 focus:outline-none"
+              :placeholder="tempAccountType === 'guest' ? 'e.g. TestGuest_Alpha (or leave empty for auto-generated)' : 'e.g. TestPlayer_Beta (or leave empty for auto-generated)'"
+            />
+          </div>
+
+          <button
+            @click="handleCreateTempAccount"
+            :disabled="isCreatingTemp"
+            class="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2 mt-1 disabled:opacity-50"
+          >
+            <Sparkles class="w-4 h-4" />
+            <span>{{ isCreatingTemp ? 'Generating Test Account...' : 'Generate & Activate Account' }}</span>
+          </button>
+        </div>
+
+        <!-- STAGE 2: ACCOUNT GENERATED SUCCESS -->
+        <div v-else class="flex flex-col gap-4 animate-fade-in">
+          <div class="p-4 bg-emerald-950/50 border border-emerald-500/50 rounded-2xl flex flex-col gap-3">
+            <div class="flex items-center gap-2 text-emerald-300 font-black text-xs uppercase">
+              <Check class="w-4 h-4 text-emerald-400" />
+              <span>Temp Account Created Successfully!</span>
+            </div>
+
+            <div class="flex flex-col gap-2 bg-slate-950/80 p-3 rounded-xl border border-slate-800 text-xs font-mono">
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400 font-sans">Account Type:</span>
+                <span :class="createdTempResult.isGuest ? 'text-amber-400' : 'text-emerald-400 font-bold'">
+                  {{ createdTempResult.isGuest ? 'Guest Tester (Limited Access)' : 'Verified Player (Full Access)' }}
+                </span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400 font-sans">Username:</span>
+                <span class="text-white font-bold">{{ createdTempResult.user.username }}</span>
+              </div>
+              <div v-if="!createdTempResult.isGuest" class="flex items-center justify-between">
+                <span class="text-slate-400 font-sans">Default Password:</span>
+                <span class="text-amber-400 font-bold">{{ createdTempResult.defaultPassword }}</span>
+              </div>
+              <div v-if="!createdTempResult.isGuest" class="flex items-center justify-between">
+                <span class="text-slate-400 font-sans">Email:</span>
+                <span class="text-slate-300 text-[11px]">{{ createdTempResult.user.email }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ACTIONS: LOGIN NOW OR CLOSE -->
+          <div class="flex flex-col sm:flex-row items-center gap-2 pt-1">
+            <button
+              @click="handleLoginAsTempNow"
+              class="w-full sm:flex-1 py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2"
+            >
+              <LogIn class="w-4 h-4" />
+              <span>Login & Test As This User Now</span>
+            </button>
+
+            <button
+              @click="isTempAccountModalOpen = false; createdTempResult = null"
+              class="w-full sm:w-auto px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

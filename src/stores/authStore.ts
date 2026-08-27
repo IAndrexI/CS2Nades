@@ -28,15 +28,20 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!currentUser.value && !!token.value)
   const isActualAdmin = computed(() => currentUser.value?.role === 'admin' || currentUser.value?.username?.toLowerCase() === 'andrex')
   const isUserPreviewMode = ref<boolean>(false)
+  const isGuestPreviewMode = ref<boolean>(false)
 
   const isAdmin = computed(() => {
-    if (isUserPreviewMode.value) return false
+    if (isUserPreviewMode.value || isGuestPreviewMode.value) return false
     return isActualAdmin.value
   })
 
   const isLimitedGuest = computed(() => {
+    if (isGuestPreviewMode.value) return true
     if (!currentUser.value) return true
-    if (currentUser.value.role === 'admin' || currentUser.value.username?.toLowerCase() === 'andrex') return false
+    if (currentUser.value.role === 'admin' || currentUser.value.username?.toLowerCase() === 'andrex') {
+      if (isUserPreviewMode.value) return false
+      return false
+    }
     if (currentUser.value.role === 'guest') return true
     // Full access requires Steam login or verified email address
     if (currentUser.value.steamId) return false
@@ -48,6 +53,17 @@ export const useAuthStore = defineStore('auth', () => {
 
   function toggleUserPreviewMode() {
     isUserPreviewMode.value = !isUserPreviewMode.value
+    if (isUserPreviewMode.value) isGuestPreviewMode.value = false
+  }
+
+  function toggleGuestPreviewMode() {
+    isGuestPreviewMode.value = !isGuestPreviewMode.value
+    if (isGuestPreviewMode.value) isUserPreviewMode.value = false
+  }
+
+  function resetPreviewModes() {
+    isUserPreviewMode.value = false
+    isGuestPreviewMode.value = false
   }
 
   // User Real-Time Presence & Online/Away Status
@@ -334,6 +350,21 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthModalOpen.value = false
   }
 
+  async function createTempAccount(type: 'guest' | 'verified_user', customUsername?: string) {
+    if (!token.value) throw new Error('Not authenticated')
+    const res = await axios.post('/api/admin/create-temp-user', { type, customUsername }, {
+      headers: { Authorization: `Bearer ${token.value}` }
+    })
+    return res.data
+  }
+
+  function loginAsTemp(tempToken: string, user: UserProfile) {
+    setAuthToken(tempToken)
+    currentUser.value = user
+    localStorage.setItem(USER_KEY, JSON.stringify(user))
+    resetPreviewModes()
+  }
+
   return {
     currentUser,
     token,
@@ -343,7 +374,12 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     isActualAdmin,
     isUserPreviewMode,
+    isGuestPreviewMode,
     toggleUserPreviewMode,
+    toggleGuestPreviewMode,
+    resetPreviewModes,
+    createTempAccount,
+    loginAsTemp,
     userPresenceMap,
     currentUserStatus,
     fetchPresence,

@@ -619,52 +619,6 @@ async function handleExportZipData() {
                   </button>
                 </div>
               </div>
-
-              <!-- 4. LIVE INTERACTIVE SAMPLE MODAL PREVIEW -->
-              <div class="flex flex-col gap-2 p-4 bg-slate-950/80 border border-slate-800 rounded-2xl">
-                <span class="font-bold text-white text-xs flex items-center gap-1.5">
-                  <Layout class="w-3.5 h-3.5 text-amber-400" />
-                  Live Sample Modal & Component Preview
-                </span>
-                
-                <div 
-                  class="p-4 rounded-2xl border border-slate-700/60 shadow-xl flex flex-col gap-3 transition-colors"
-                  :style="{ backgroundColor: themeStore.customModalBgColor }"
-                >
-                  <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
-                    <div class="flex items-center gap-2">
-                      <Sparkles class="w-4 h-4" :style="{ color: themeStore.customAccentColor }" />
-                      <span class="font-black text-white text-xs">Sample Modal Dialog</span>
-                    </div>
-                    <span 
-                      class="px-2 py-0.5 rounded text-[10px] font-black text-slate-950 uppercase"
-                      :style="{ backgroundColor: themeStore.customAccentColor }"
-                    >
-                      Active Accent
-                    </span>
-                  </div>
-
-                  <p class="text-slate-300 text-xs">
-                    This is how your customized popup modal looks with your selected colors.
-                  </p>
-
-                  <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-700/40">
-                    <button
-                      type="button"
-                      class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs"
-                    >
-                      Secondary
-                    </button>
-                    <button
-                      type="button"
-                      class="px-4 py-1.5 font-black text-slate-950 rounded-lg text-xs shadow"
-                      :style="{ backgroundColor: themeStore.customAccentColor }"
-                    >
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
 
             <!-- TAB 3: LINKED SOCIALS -->
