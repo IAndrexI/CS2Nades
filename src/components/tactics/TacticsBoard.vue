@@ -97,13 +97,10 @@ function handleMapSelect(newMapId: string) {
     return
   }
 
-  executeMapSwitch(newMapId, false)
+  executeMapSwitch(newMapId)
 }
 
-function executeMapSwitch(targetMapId: string, shouldTempSaveCurrent: boolean) {
-  if (shouldTempSaveCurrent) {
-    stratStore.tempSaveBoard(mapStore.currentMapId)
-  }
+function executeMapSwitch(targetMapId: string) {
   stratStore.saveCurrentMapElements(mapStore.currentMapId)
   mapStore.setMap(targetMapId)
   stratStore.loadMapElements(targetMapId)
@@ -212,19 +209,8 @@ async function sendPrivateMessage() {
 }
 
 const isCs2ServerModalOpen = ref(false)
-const tempSaveToast = ref('')
-
-function handleTempSaveCurrentBoard() {
-  stratStore.tempSaveBoard(mapStore.currentMapId)
-  tempSaveToast.value = `Board temp-saved for ${mapStore.currentMap?.name || mapStore.currentMapId}!`
-  setTimeout(() => { tempSaveToast.value = '' }, 2500)
-}
-
-function handleRestoreTempSavedBoard() {
-  stratStore.restoreTempBoard(mapStore.currentMapId)
-  tempSaveToast.value = `Restored saved board!`
-  setTimeout(() => { tempSaveToast.value = '' }, 2500)
-}
+const actionStatusToast = ref('')
+const tempSaveToast = actionStatusToast
 
 // LOCAL EXPORT & IMPORT (JSON FILES)
 const importFileInputRef = ref<HTMLInputElement | null>(null)
@@ -246,8 +232,40 @@ function handleExportTacticsLocal() {
   a.download = `cs2_tactics_${mapStore.currentMapId}_${Date.now()}.json`
   a.click()
   URL.revokeObjectURL(url)
-  tempSaveToast.value = 'Tactics JSON Exported Locally!'
-  setTimeout(() => { tempSaveToast.value = '' }, 3000)
+  actionStatusToast.value = 'Tactics JSON Exported Locally!'
+  setTimeout(() => { actionStatusToast.value = '' }, 3000)
+}
+
+function handleSaveToFileAndSwitch() {
+  handleExportTacticsLocal()
+  if (pendingTargetMapId.value) {
+    executeMapSwitch(pendingTargetMapId.value)
+  }
+}
+
+async function handleSaveToServerAndSwitch() {
+  if (!pendingTargetMapId.value) return
+  if (!authStore.token) {
+    authStore.isAuthModalOpen = true
+    return
+  }
+  isSavingToServer.value = true
+  try {
+    await axios.post('/api/tactics/save-server', {
+      title: `${mapStore.currentMap?.name || mapStore.currentMapId} Strategy ${new Date().toLocaleDateString()}`,
+      mapId: mapStore.currentMapId,
+      elements: stratStore.boardElements
+    }, {
+      headers: { Authorization: `Bearer ${authStore.token}` }
+    })
+    actionStatusToast.value = 'Saved to Cloud / Server!'
+    setTimeout(() => { actionStatusToast.value = '' }, 3000)
+    executeMapSwitch(pendingTargetMapId.value)
+  } catch (e: any) {
+    alert(e.response?.data?.error || 'Failed to save to server')
+  } finally {
+    isSavingToServer.value = false
+  }
 }
 
 function triggerImportFileDialog() {
@@ -1520,29 +1538,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           <span>Cloud / Server</span>
         </button>
 
-        <!-- TEMP SAVE BUTTON -->
-        <button
-          @click="handleTempSaveCurrentBoard"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 border border-slate-800 hover:border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-          title="Temporarily snapshot and save current drawings for this map"
-        >
-          <Save class="w-3.5 h-3.5" />
-          <span>Temp Save</span>
-        </button>
-
-        <!-- RESTORE TEMP SAVED BOARD -->
-        <button
-          v-if="stratStore.tempSavedBoards[mapStore.currentMapId]"
-          @click="handleRestoreTempSavedBoard"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/50 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-          :title="`Restore temp-saved board (${stratStore.tempSavedBoards[mapStore.currentMapId]?.savedAt})`"
-        >
-          <RotateCcw class="w-3.5 h-3.5" />
-          <span>Restore Save</span>
-        </button>
-
-        <span v-if="tempSaveToast" class="text-xs font-bold text-amber-400 animate-fade-in px-1">
-          {{ tempSaveToast }}
+        <span v-if="actionStatusToast" class="text-xs font-bold text-amber-400 animate-fade-in px-1">
+          {{ actionStatusToast }}
         </span>
 
         <button
@@ -2690,11 +2687,11 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
       @close="isCs2ServerModalOpen = false"
     />
 
-    <!-- MODAL 5: CENTERED MAP SWITCH & BOARD WIPE WARNING -->
+    <!-- MODAL 5: CENTERED MAP SWITCH & OPTIONS DIALOG -->
     <Teleport to="body">
       <div
         v-if="isMapSwitchWarnModalOpen"
-        class="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center animate-fade-in"
+        class="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center animate-fade-in"
         @click.self="isMapSwitchWarnModalOpen = false"
       >
         <div class="relative w-full max-w-md bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl flex flex-col gap-5 text-center items-center">
@@ -2704,37 +2701,49 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
 
           <div class="flex flex-col gap-2">
             <h3 class="text-base font-black uppercase text-white tracking-wide">
-              Switch Map & Start Fresh Board?
+              Switch Map Options
             </h3>
             <p class="text-xs text-slate-300 leading-relaxed">
               You have <strong class="text-amber-400">{{ stratStore.boardElements.length }} active markings/pins</strong> on
               <strong class="text-white uppercase">{{ mapStore.currentMap?.name || mapStore.currentMapId }}</strong>.
             </p>
             <p class="text-xs text-slate-400 leading-relaxed bg-slate-950/80 p-3 rounded-xl border border-slate-800">
-              All tactical boards are temporary unless saved. Changing maps will start a fresh, clean board for
-              <strong class="text-emerald-400 uppercase font-mono">{{ pendingTargetMapId }}</strong>.
+              Choose an action for your current markings before switching to
+              <strong class="text-emerald-400 uppercase font-mono">{{ pendingTargetMapId }}</strong>:
             </p>
           </div>
 
           <!-- ACTION BUTTONS -->
           <div class="flex flex-col gap-2.5 w-full pt-1">
+            <!-- OPTION 1: CLEAR BOARD & SWITCH -->
             <button
-              @click="pendingTargetMapId && executeMapSwitch(pendingTargetMapId, true)"
+              @click="pendingTargetMapId && executeMapSwitch(pendingTargetMapId)"
               class="w-full py-3 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2 hover:opacity-90"
               :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
             >
-              <Save class="w-4 h-4" />
-              <span>Temp Save Board & Switch</span>
+              <Trash2 class="w-4 h-4" />
+              <span>Clear Board & Switch</span>
             </button>
 
+            <!-- OPTION 2: SAVE TO FILE & SWITCH -->
             <button
-              @click="pendingTargetMapId && executeMapSwitch(pendingTargetMapId, false)"
+              @click="handleSaveToFileAndSwitch"
               class="w-full py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
             >
-              <Trash2 class="w-3.5 h-3.5 text-rose-400" />
-              <span>Discard Markings & Start Fresh</span>
+              <Download class="w-3.5 h-3.5 text-cyan-400" />
+              <span>Save to File (Export JSON) & Switch</span>
             </button>
 
+            <!-- OPTION 3: SAVE TO SERVER & SWITCH -->
+            <button
+              @click="handleSaveToServerAndSwitch"
+              class="w-full py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+            >
+              <CloudUpload class="w-3.5 h-3.5 text-amber-400" />
+              <span>{{ isSavingToServer ? 'Saving to Server...' : 'Save to Server & Switch' }}</span>
+            </button>
+
+            <!-- OPTION 4: CANCEL -->
             <button
               @click="isMapSwitchWarnModalOpen = false; pendingTargetMapId = null"
               class="w-full py-2 text-slate-400 hover:text-slate-200 text-xs font-bold transition-colors cursor-pointer"
