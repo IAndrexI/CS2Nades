@@ -66,6 +66,46 @@ function handleTacticsMapGlobalClick(e: MouseEvent) {
   }
 }
 
+const isMapSwitchWarnModalOpen = ref(false)
+const pendingTargetMapId = ref<string | null>(null)
+
+function handleMapSelect(newMapId: string) {
+  if (!newMapId || newMapId === mapStore.currentMapId) {
+    isTacticsMapDropdownOpen.value = false
+    return
+  }
+  executeMapSwitch(newMapId, false)
+}
+
+function executeMapSwitch(targetMapId: string, shouldTempSaveCurrent: boolean) {
+  if (shouldTempSaveCurrent) {
+    stratStore.tempSaveBoard(mapStore.currentMapId)
+  }
+  stratStore.saveCurrentMapElements(mapStore.currentMapId)
+  mapStore.setMap(targetMapId)
+  stratStore.loadMapElements(targetMapId)
+  isTacticsMapDropdownOpen.value = false
+  isMapSwitchWarnModalOpen.value = false
+  pendingTargetMapId.value = null
+
+  // Broadcast to all squad members in the room so the map switches for EVERYONE
+  const socket = gameRoomStore.getSocket()
+  if (socket && socket.connected) {
+    socket.emit('room:switch_map', {
+      mapId: targetMapId,
+      elements: stratStore.boardElements
+    })
+  }
+}
+
+function canUserDraw(): boolean {
+  if (gameRoomStore.isHost) return true
+  if (authStore.isLimitedGuest) {
+    return gameRoomStore.allowGuestsToDraw
+  }
+  return gameRoomStore.allowSignedUsersToDraw
+}
+
 // RIGHT TACTICAL SIDEBAR (ROOM CHAT / PRIVATE CHAT / PLAYER LIST)
 const isRightSidebarVisible = ref(true)
 const rightSidebarTab = ref<'public_chat' | 'private_chat' | 'players'>('public_chat')
@@ -149,8 +189,6 @@ async function sendPrivateMessage() {
 }
 
 const isCs2ServerModalOpen = ref(false)
-const isMapSwitchWarnModalOpen = ref(false)
-const pendingTargetMapId = ref<string | null>(null)
 const tempSaveToast = ref('')
 
 function handleTempSaveCurrentBoard() {
@@ -165,28 +203,7 @@ function handleRestoreTempSavedBoard() {
   setTimeout(() => { tempSaveToast.value = '' }, 2500)
 }
 
-function handleMapSelect(targetMapId: string) {
-  if (!targetMapId || targetMapId === mapStore.currentMapId) return
 
-  if (stratStore.boardElements.length > 0) {
-    pendingTargetMapId.value = targetMapId
-    isMapSwitchWarnModalOpen.value = true
-    return
-  }
-
-  executeMapSwitch(targetMapId, false)
-}
-
-function executeMapSwitch(targetMapId: string, shouldTempSaveCurrent: boolean) {
-  if (shouldTempSaveCurrent) {
-    stratStore.tempSaveBoard(mapStore.currentMapId)
-  }
-  stratStore.clearBoard()
-  mapStore.setMap(targetMapId)
-  gameRoomStore.switchMap(targetMapId, [])
-  isMapSwitchWarnModalOpen.value = false
-  pendingTargetMapId.value = null
-}
 const svgRef = ref<SVGSVGElement | null>(null)
 const isDrawing = ref(false)
 const currentStroke = ref<{ x: number; y: number }[]>([])
@@ -586,8 +603,11 @@ function handleCopyRoomLink() {
 }
 
 function placeCustomPin(pin: CustomPinDefinition) {
-  if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
-    alert('Host has locked drawing permissions for guests.')
+  if (!canUserDraw()) {
+    tempSaveToast.value = authStore.isLimitedGuest 
+      ? '🔒 Host has not enabled drawing for guests. Sign in or ask host.' 
+      : '🔒 Host has locked drawing for room members.'
+    setTimeout(() => { tempSaveToast.value = '' }, 3000)
     return
   }
   stratStore.addBoardElement({
@@ -624,17 +644,15 @@ function getMapCoords(e: MouseEvent): { x: number; y: number } {
 }
 
 function handleElementMouseDown(e: MouseEvent, el: TacticsElement) {
-  if (authStore.isLimitedGuest) {
-    tempSaveToast.value = '👁️ Guest View-Only Mode: Sign in with Email or Steam to interact'
+  if (!canUserDraw()) {
+    tempSaveToast.value = authStore.isLimitedGuest 
+      ? '🔒 Host has not enabled interaction for guests. Sign in or ask host.' 
+      : '🔒 Host has locked interaction for room members.'
     setTimeout(() => { tempSaveToast.value = '' }, 3000)
     return
   }
   if (stratStore.activeTool === 'select') {
     e.stopPropagation()
-    if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
-      alert('Host has locked tactical board modifications for guests.')
-      return
-    }
     const coords = getMapCoords(e)
     isDraggingElement.value = true
     draggedElementId.value = el.id
@@ -695,12 +713,11 @@ function eraseAtCoords(coords: { x: number; y: number }) {
 }
 
 function handleMouseDown(e: MouseEvent) {
-  if (authStore.isLimitedGuest) {
-    tempSaveToast.value = '👁️ Guest View-Only Mode: Sign in with Email or Steam to draw & place pins'
+  if (!canUserDraw()) {
+    tempSaveToast.value = authStore.isLimitedGuest 
+      ? '🔒 Host has not enabled drawing for guests. Sign in or ask host.' 
+      : '🔒 Host has locked drawing for room members.'
     setTimeout(() => { tempSaveToast.value = '' }, 3000)
-    return
-  }
-  if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
     return
   }
   const tool = stratStore.activeTool
@@ -1161,22 +1178,53 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           </button>
         </div>
 
-        <!-- HOST LOCK / GUEST PERMISSION TOGGLE -->
-        <div v-if="gameRoomStore.isHost" class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
-          <span class="font-bold text-slate-400">Guests Can Draw:</span>
+        <!-- HOST LOCK / GUEST PERMISSION CONTROLS (2 DISTINCT OPTIONS) -->
+        <div v-if="gameRoomStore.isHost" class="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+          <span class="text-[10px] font-black text-amber-400 uppercase tracking-wider pl-1 pr-0.5 flex items-center gap-1">
+            <Crown class="w-3 h-3 text-amber-400" /> Host:
+          </span>
+
+          <!-- OPTION 1: SIGNED USERS -->
           <button
-            @click="gameRoomStore.setRoomLock(!gameRoomStore.allowGuestsToDraw)"
+            @click="gameRoomStore.updateRoomPermissions(!gameRoomStore.allowSignedUsersToDraw, gameRoomStore.allowGuestsToDraw)"
             :class="[
-              'px-2 py-0.5 rounded text-[10px] font-black uppercase transition-colors cursor-pointer',
-              gameRoomStore.allowGuestsToDraw ? 'bg-emerald-500 text-slate-950' : 'bg-rose-600 text-white'
+              'flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all cursor-pointer border',
+              gameRoomStore.allowSignedUsersToDraw
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900'
+                : 'bg-rose-950/80 text-rose-300 border-rose-500/50 hover:bg-rose-900'
             ]"
+            title="Toggle drawing permissions for verified / signed-in accounts"
           >
-            {{ gameRoomStore.allowGuestsToDraw ? 'ON' : 'LOCKED' }}
+            <span class="w-1.5 h-1.5 rounded-full" :class="gameRoomStore.allowSignedUsersToDraw ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+            <span>Signed Users: {{ gameRoomStore.allowSignedUsersToDraw ? 'Allowed' : 'Locked' }}</span>
+          </button>
+
+          <!-- OPTION 2: GUESTS -->
+          <button
+            @click="gameRoomStore.updateRoomPermissions(gameRoomStore.allowSignedUsersToDraw, !gameRoomStore.allowGuestsToDraw)"
+            :class="[
+              'flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all cursor-pointer border',
+              gameRoomStore.allowGuestsToDraw
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900'
+                : 'bg-rose-950/80 text-rose-300 border-rose-500/50 hover:bg-rose-900'
+            ]"
+            title="Toggle drawing permissions for unverified guest visitors"
+          >
+            <span class="w-1.5 h-1.5 rounded-full" :class="gameRoomStore.allowGuestsToDraw ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+            <span>Guests: {{ gameRoomStore.allowGuestsToDraw ? 'Allowed' : 'Locked' }}</span>
           </button>
         </div>
-        <div v-else class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px]">
-          <span :class="gameRoomStore.allowGuestsToDraw ? 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse' : 'w-2 h-2 rounded-full bg-rose-500'"></span>
-          <span class="text-slate-400 font-bold">{{ gameRoomStore.allowGuestsToDraw ? 'Guest (Drawing Active)' : 'Guest (Board Locked by Host)' }}</span>
+
+        <div v-else class="flex items-center gap-2 px-2.5 py-1 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px]">
+          <div class="flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full" :class="gameRoomStore.allowSignedUsersToDraw ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+            <span class="text-slate-400">Signed: <strong :class="gameRoomStore.allowSignedUsersToDraw ? 'text-emerald-400' : 'text-rose-400'">{{ gameRoomStore.allowSignedUsersToDraw ? 'Allowed' : 'Locked' }}</strong></span>
+          </div>
+          <span class="text-slate-700">|</span>
+          <div class="flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full" :class="gameRoomStore.allowGuestsToDraw ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+            <span class="text-slate-400">Guests: <strong :class="gameRoomStore.allowGuestsToDraw ? 'text-emerald-400' : 'text-rose-400'">{{ gameRoomStore.allowGuestsToDraw ? 'Allowed' : 'Locked' }}</strong></span>
+          </div>
         </div>
 
         <span v-if="copySuccessToast" class="text-xs font-bold text-emerald-400 animate-fade-in">
@@ -1185,7 +1233,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
       </div>
 
       <!-- TEMP SAVE, RESTORE, CUSTOMIZE & MAP SELECTOR -->
-      <div class="flex flex-wrap items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2 relative z-40">
         <!-- TEMP SAVE BUTTON -->
         <button
           @click="handleTempSaveCurrentBoard"
@@ -1221,7 +1269,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
         </button>
 
         <!-- MAP SELECTOR INTERACTIVE DROPDOWN -->
-        <div class="relative tactics-map-dropdown-container">
+        <div class="relative tactics-map-dropdown-container z-50">
           <button
             @click="isTacticsMapDropdownOpen = !isTacticsMapDropdownOpen"
             class="flex items-center gap-2 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
@@ -1240,7 +1288,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           <!-- DROPDOWN LIST -->
           <div 
             v-if="isTacticsMapDropdownOpen"
-            class="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in"
+            class="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-[999] flex flex-col py-1 animate-fade-in"
           >
             <div class="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
               <span>Switch Map</span>

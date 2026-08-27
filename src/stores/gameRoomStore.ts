@@ -62,7 +62,19 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     return hostUsername.value.toLowerCase() === username.toLowerCase()
   })
 
-  const allowGuestsToDraw = ref<boolean>(true)
+  const allowSignedUsersToDraw = ref<boolean>(true)
+  const allowGuestsToDraw = ref<boolean>(false)
+
+  function updateRoomPermissions(signedUsers: boolean, guests: boolean) {
+    allowSignedUsersToDraw.value = signedUsers
+    allowGuestsToDraw.value = guests
+    if (socket.value && socket.value.connected) {
+      socket.value.emit('room:update_permissions', {
+        allowSignedUsersToDraw: signedUsers,
+        allowGuestsToDraw: guests
+      })
+    }
+  }
 
   function getSocket(): Socket {
     if (!socket.value) {
@@ -75,6 +87,10 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
 
       socket.value.on('connect', () => {
         isConnected.value = true
+        if (currentRoomCode.value) {
+          const u = localStorage.getItem('cs2_stratbook_user') ? JSON.parse(localStorage.getItem('cs2_stratbook_user') || '{}') : null
+          socket.value.emit('room:join', { roomCode: currentRoomCode.value, user: u })
+        }
       })
 
       socket.value.on('disconnect', () => {
@@ -88,6 +104,7 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
         members.value = state.members
         liveDrawings.value = state.drawings || []
         activeBroadcastLineups.value = state.activeLineups || []
+        if (state.allowSignedUsersToDraw !== undefined) allowSignedUsersToDraw.value = state.allowSignedUsersToDraw
         if (state.allowGuestsToDraw !== undefined) allowGuestsToDraw.value = state.allowGuestsToDraw
       })
 
@@ -96,12 +113,17 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
         members.value = data.members
       })
 
-      socket.value.on('room:lock_updated', (data: { allowGuestsToDraw: boolean }) => {
-        allowGuestsToDraw.value = data.allowGuestsToDraw
+      socket.value.on('room:permissions_updated', (data: { allowSignedUsersToDraw: boolean; allowGuestsToDraw: boolean }) => {
+        if (data.allowSignedUsersToDraw !== undefined) allowSignedUsersToDraw.value = data.allowSignedUsersToDraw
+        if (data.allowGuestsToDraw !== undefined) allowGuestsToDraw.value = data.allowGuestsToDraw
         announcements.value.push({
-          text: data.allowGuestsToDraw ? '🔓 Host unlocked tactical drawing for all guests' : '🔒 Host locked tactical drawing (Read-Only Mode)',
+          text: `🔒 Host updated drawing permissions: Signed Users (${data.allowSignedUsersToDraw ? 'Allowed' : 'Locked'}), Guests (${data.allowGuestsToDraw ? 'Allowed' : 'Locked'})`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         })
+      })
+
+      socket.value.on('room:lock_updated', (data: { allowGuestsToDraw: boolean }) => {
+        allowGuestsToDraw.value = data.allowGuestsToDraw
       })
 
       socket.value.on('room:members', (updatedMembers: RoomMember[]) => {
@@ -255,7 +277,9 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     currentRoomCode,
     hostUsername,
     isHost,
+    allowSignedUsersToDraw,
     allowGuestsToDraw,
+    updateRoomPermissions,
     currentMapId,
     members,
     liveDrawings,

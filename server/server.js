@@ -1678,17 +1678,43 @@ io.on('connection', (socket) => {
       members: room.members,
       elements: activeMapElements,
       elementsByMap: room.elementsByMap || {},
-      allowGuestsToDraw: room.allowGuestsToDraw !== false,
+      allowSignedUsersToDraw: room.allowSignedUsersToDraw !== false,
+      allowGuestsToDraw: !!room.allowGuestsToDraw,
       drawings: room.drawings,
       activeLineups: room.activeLineups
     })
   })
 
-  // Host Permission Controls (Allow Guests to Modify or Lock Board)
+  // Host Permission Controls (2 Options: Signed Users & Guests)
+  socket.on('room:update_permissions', (payload) => {
+    if (!currentRoomId || !gameRooms.has(currentRoomId)) return
+    const room = gameRooms.get(currentRoomId)
+    if (room.host && currentUserInfo?.username && room.host.toLowerCase() !== currentUserInfo.username.toLowerCase()) {
+      return // only host can update permissions
+    }
+    if (payload.allowSignedUsersToDraw !== undefined) {
+      room.allowSignedUsersToDraw = payload.allowSignedUsersToDraw
+    }
+    if (payload.allowGuestsToDraw !== undefined) {
+      room.allowGuestsToDraw = payload.allowGuestsToDraw
+    }
+    io.to(currentRoomId).emit('room:permissions_updated', {
+      allowSignedUsersToDraw: room.allowSignedUsersToDraw !== false,
+      allowGuestsToDraw: !!room.allowGuestsToDraw
+    })
+    io.to(currentRoomId).emit('room:lock_updated', {
+      allowGuestsToDraw: !!room.allowGuestsToDraw
+    })
+  })
+
   socket.on('room:set_lock', ({ allowGuestsToDraw }) => {
     if (!currentRoomId || !gameRooms.has(currentRoomId)) return
     const room = gameRooms.get(currentRoomId)
     room.allowGuestsToDraw = allowGuestsToDraw
+    io.to(currentRoomId).emit('room:permissions_updated', {
+      allowSignedUsersToDraw: room.allowSignedUsersToDraw !== false,
+      allowGuestsToDraw: !!room.allowGuestsToDraw
+    })
     io.to(currentRoomId).emit('room:lock_updated', { allowGuestsToDraw })
   })
 
