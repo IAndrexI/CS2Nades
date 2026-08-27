@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useAuthStore } from '../../stores/authStore'
 import { useGameRoomStore } from '../../stores/gameRoomStore'
+import { useThemeStore } from '../../stores/themeStore'
 import { 
   MessageSquare, 
   Send, 
@@ -40,6 +41,7 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore()
 const gameRoomStore = useGameRoomStore()
+const themeStore = useThemeStore()
 const { confirmAction } = useConfirmDialog()
 
 interface Contact {
@@ -587,15 +589,18 @@ watch(() => props.initialTargetUserId, (newId) => {
       class="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fade-in"
       @click.self="emit('close')"
     >
-      <div class="my-auto w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-[88vh] sm:h-[82vh] max-h-[92vh] sm:max-h-[85vh]">
+      <div 
+        class="my-auto w-full max-w-4xl border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-[88vh] sm:h-[82vh] max-h-[92vh] sm:max-h-[85vh]"
+        :style="{ backgroundColor: themeStore.customModalBgColor }"
+      >
         <!-- LEFT SIDEBAR -->
-        <div class="w-full md:w-80 bg-slate-950 p-4 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col justify-between shrink-0 max-h-[35vh] md:max-h-none">
+        <div class="w-full md:w-80 bg-slate-950/80 p-4 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col justify-between shrink-0 max-h-[35vh] md:max-h-none">
           <div class="flex flex-col gap-3 min-h-0 flex-1">
             <!-- SIDEBAR HEADER -->
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <MessageSquare class="w-4 h-4 text-amber-400" />
-                <h3 class="text-sm font-black uppercase text-white tracking-wider">Tactical Chat</h3>
+                <h3 class="text-sm font-black uppercase text-white tracking-wider">Chat</h3>
               </div>
               <button @click="emit('close')" class="md:hidden text-slate-400 hover:text-white p-1 cursor-pointer">
                 <X class="w-4 h-4" />

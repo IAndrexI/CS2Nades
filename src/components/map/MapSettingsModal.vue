@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useMapStore } from '../../stores/mapStore'
+import { useThemeStore } from '../../stores/themeStore'
 import type { MapInfo } from '../../types'
 import { 
   X, 
@@ -25,6 +26,7 @@ const emit = defineEmits<{
 }>()
 
 const mapStore = useMapStore()
+const themeStore = useThemeStore()
 
 const activeTab = ref<'current' | 'add_map'>('current')
 const selectedEditMapId = ref<string>(mapStore.currentMapId)
@@ -145,7 +147,10 @@ onUnmounted(() => {
       class="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in"
       @click.self="emit('close')"
     >
-      <div class="relative w-full max-w-4xl h-[85vh] max-h-[88vh] my-auto bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+      <div 
+        class="relative w-full max-w-4xl h-[85vh] max-h-[88vh] my-auto border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+        :style="{ backgroundColor: themeStore.customModalBgColor }"
+      >
         <!-- HEADER -->
         <div class="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md shrink-0">
           <div class="flex items-center gap-3">

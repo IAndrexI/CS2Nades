@@ -266,7 +266,7 @@ const allToolsCatalogue = [
   { id: 'flash', label: 'Flash Burst', icon: Zap, category: 'Utility' },
   { id: 'molotov', label: 'Molotov Fire', icon: Flame, category: 'Utility' },
   { id: 'he_blast', label: 'HE Grenade', icon: Crosshair, category: 'Utility' },
-  { id: 'c4_bomb', label: 'C4 Bomb (Plant Zone Only)', icon: Bomb, category: 'Objectives' },
+  { id: 'c4_bomb', label: 'C4 Bomb', icon: Bomb, category: 'Objectives' },
   { id: 'player_t', label: 'T Player Pin', icon: User, category: 'Players' },
   { id: 'player_ct', label: 'CT Player Pin', icon: User, category: 'Players' },
   { id: 'eraser', label: 'Eraser', icon: Eraser, category: 'General' }
@@ -595,10 +595,11 @@ function eraseAtCoords(coords: { x: number; y: number }) {
   const currentUserId = authStore.currentUser?.id || authStore.currentUser?.username
   const s = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
   const toRemoveIds: string[] = []
+  const eraseRadius = 7.0
 
   stratStore.boardElements.forEach(el => {
     if (el.type === 'pen') {
-      const remaining = el.points.filter(pt => Math.hypot(pt.x - coords.x, pt.y - coords.y) > 3.2)
+      const remaining = el.points.filter(pt => Math.hypot(pt.x - coords.x, pt.y - coords.y) > eraseRadius)
       if (remaining.length < el.points.length) {
         if (remaining.length < 2) {
           toRemoveIds.push(el.id)
@@ -609,12 +610,12 @@ function eraseAtCoords(coords: { x: number; y: number }) {
     } else if (el.type === 'line' || el.type === 'arrow') {
       if (el.points.length >= 2) {
         const d = distToSegment(coords, el.points[0], el.points[1])
-        if (d <= 3.2) {
+        if (d <= eraseRadius) {
           toRemoveIds.push(el.id)
         }
       }
     } else if (el.points.length > 0) {
-      if (Math.hypot(el.points[0].x - coords.x, el.points[0].y - coords.y) <= 3.8) {
+      if (Math.hypot(el.points[0].x - coords.x, el.points[0].y - coords.y) <= (eraseRadius + 1.0)) {
         toRemoveIds.push(el.id)
       }
     }
@@ -1510,29 +1511,31 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   stroke-width="1.5"
                   stroke-dasharray="4 3"
                 />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="12" fill="#0f172a" stroke="#94a3b8" stroke-width="1.5" />
-                <image
-                  href="/icons/smoke.png"
-                  :x="el.points[0].x * 10 - 8"
-                  :y="el.points[0].y * 10 - 8"
-                  width="16"
-                  height="16"
-                  preserveAspectRatio="xMidYMid meet"
-                />
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="13" fill="#0f172a" stroke="#94a3b8" stroke-width="1.5" />
+                <text
+                  :x="el.points[0].x * 10"
+                  :y="el.points[0].y * 10 + 4"
+                  font-size="12"
+                  text-anchor="middle"
+                  class="select-none pointer-events-none"
+                >
+                  ☁️
+                </text>
               </g>
 
               <!-- 6. FLASH BURST -->
               <g v-else-if="el.type === 'flash_burst'">
                 <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="18" fill="#eab308" fill-opacity="0.25" stroke="#eab308" stroke-width="1.5" stroke-dasharray="3 2" />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="11" fill="#0f172a" stroke="#eab308" stroke-width="1.5" />
-                <image
-                  href="/icons/flash.png"
-                  :x="el.points[0].x * 10 - 7"
-                  :y="el.points[0].y * 10 - 7"
-                  width="14"
-                  height="14"
-                  preserveAspectRatio="xMidYMid meet"
-                />
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="12" fill="#0f172a" stroke="#eab308" stroke-width="1.5" />
+                <text
+                  :x="el.points[0].x * 10"
+                  :y="el.points[0].y * 10 + 4"
+                  font-size="12"
+                  text-anchor="middle"
+                  class="select-none pointer-events-none"
+                >
+                  ⚡
+                </text>
               </g>
 
               <!-- 7. MOLOTOV FIRE -->
@@ -1546,29 +1549,31 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   stroke-width="1.5"
                   stroke-dasharray="4 3"
                 />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="12" fill="#0f172a" stroke="#f97316" stroke-width="1.5" />
-                <image
-                  href="/icons/molotov.png"
-                  :x="el.points[0].x * 10 - 8"
-                  :y="el.points[0].y * 10 - 8"
-                  width="16"
-                  height="16"
-                  preserveAspectRatio="xMidYMid meet"
-                />
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="13" fill="#0f172a" stroke="#f97316" stroke-width="1.5" />
+                <text
+                  :x="el.points[0].x * 10"
+                  :y="el.points[0].y * 10 + 4"
+                  font-size="12"
+                  text-anchor="middle"
+                  class="select-none pointer-events-none"
+                >
+                  🔥
+                </text>
               </g>
 
               <!-- 8. HE GRENADE BLAST -->
               <g v-else-if="el.type === 'he_blast'">
                 <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="20" fill="#22c55e" fill-opacity="0.2" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="3 2" />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="11" fill="#0f172a" stroke="#22c55e" stroke-width="1.5" />
-                <image
-                  href="/icons/grenade.png"
-                  :x="el.points[0].x * 10 - 7"
-                  :y="el.points[0].y * 10 - 7"
-                  width="14"
-                  height="14"
-                  preserveAspectRatio="xMidYMid meet"
-                />
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="12" fill="#0f172a" stroke="#22c55e" stroke-width="1.5" />
+                <text
+                  :x="el.points[0].x * 10"
+                  :y="el.points[0].y * 10 + 4"
+                  font-size="12"
+                  text-anchor="middle"
+                  class="select-none pointer-events-none"
+                >
+                  🎯
+                </text>
               </g>
 
               <!-- 9. C4 BOMB (PLANT ZONE ONLY, WITH USER BADGE) -->
@@ -1585,14 +1590,15 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   stroke-width="2"
                   class="shadow-xl"
                 />
-                <image
-                  href="/icons/c4.png"
-                  :x="el.points[0].x * 10 - 10"
-                  :y="el.points[0].y * 10 - 10"
-                  width="20"
-                  height="20"
-                  preserveAspectRatio="xMidYMid meet"
-                />
+                <text
+                  :x="el.points[0].x * 10"
+                  :y="el.points[0].y * 10 + 4.5"
+                  font-size="14"
+                  text-anchor="middle"
+                  class="select-none pointer-events-none"
+                >
+                  💣
+                </text>
 
                 <!-- Small Player Badge on Top-Right Corner of Bomb -->
                 <g :transform="`translate(${el.points[0].x * 10 + 9}, ${el.points[0].y * 10 - 9})`">
@@ -1750,8 +1756,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                 rightSidebarTab === 'private_chat' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
               ]"
             >
-              <Lock class="w-3.5 h-3.5" />
-              <span>Private</span>
+              <MessageSquare class="w-3.5 h-3.5" />
+              <span>Messages</span>
             </button>
 
             <button
@@ -1817,12 +1823,12 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           </form>
         </div>
 
-        <!-- TAB 2: ENCRYPTED PRIVATE CHAT -->
+        <!-- TAB 2: MESSAGES -->
         <div v-else-if="rightSidebarTab === 'private_chat'" class="flex-1 flex flex-col justify-between overflow-hidden">
           <div v-if="!selectedPrivateRecipientId" class="flex-1 p-4 flex flex-col items-center justify-center text-center gap-3 text-xs">
-            <Lock class="w-8 h-8 text-emerald-400/70" />
-            <span class="font-bold text-slate-200">Encrypted Private Messages</span>
-            <span class="text-[11px] text-slate-400">Select a player from the Players tab to start an encrypted direct message.</span>
+            <MessageSquare class="w-8 h-8 text-amber-400/70" />
+            <span class="font-bold text-slate-200">Direct Messages</span>
+            <span class="text-[11px] text-slate-400">Select a player from the Players tab to start a direct message.</span>
             <button
               @click="rightSidebarTab = 'players'"
               class="px-4 py-2 bg-amber-500 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow"

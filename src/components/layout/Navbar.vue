@@ -305,7 +305,7 @@ onUnmounted(() => {
         >
           <Users class="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
           <span 
-            v-if="unreadMessageCount > 0" 
+            v-if="themeStore.showUnreadNotificationBadge && unreadMessageCount > 0" 
             class="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white shadow-lg animate-pulse"
           >
             {{ unreadMessageCount > 9 ? '9+' : unreadMessageCount }}
@@ -477,7 +477,8 @@ onUnmounted(() => {
         <!-- NEW NADE BUTTON -->
         <button
           @click="lineupStore.isAddModalOpen = true"
-          class="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+          class="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 font-black text-slate-950 text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+          :style="{ backgroundColor: themeStore.customAccentColor }"
         >
           <Plus class="w-3.5 h-3.5 stroke-[3]" />
           <span>New Nade</span>

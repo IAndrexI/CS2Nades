@@ -10,7 +10,6 @@ import {
   User, 
   Settings, 
   Palette, 
-  Image, 
   Link as LinkIcon, 
   Lock, 
   Bell, 
@@ -25,7 +24,10 @@ import {
   FolderDown,
   Sparkles,
   AlertTriangle,
-  Upload
+  Upload,
+  RotateCcw,
+  Layout,
+  MessageSquare
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -42,12 +44,13 @@ const lineupStore = useLineupStore()
 const stratStore = useStratStore()
 const mapStore = useMapStore()
 
-const activeTab = ref<'profile' | 'appearance' | 'banners' | 'socials' | 'backup' | 'privacy' | 'security'>('profile')
+const activeTab = ref<'profile' | 'appearance' | 'socials' | 'backup' | 'privacy' | 'security'>('profile')
 const isSaving = ref(false)
 const saveSuccess = ref(false)
 const errorMessage = ref('')
 const isExportingZip = ref(false)
 const exportSuccess = ref(false)
+const avatarUploadError = ref('')
 
 const profileForm = reactive({
   inGameRole: '',
@@ -92,44 +95,6 @@ const securityForm = reactive({
 const deleteConfirmInput = ref('')
 const isDeleteModalOpen = ref(false)
 
-const bannerPresets = [
-  { id: 'mirage', name: 'Mirage', url: '/radar/mirage.png' },
-  { id: 'dust2', name: 'Dust II', url: '/radar/dust2.png' },
-  { id: 'inferno', name: 'Inferno', url: '/radar/inferno.png' },
-  { id: 'nuke', name: 'Nuke', url: '/radar/nuke.png' },
-  { id: 'anubis', name: 'Anubis', url: '/radar/anubis.png' },
-  { id: 'ancient', name: 'Ancient', url: '/radar/ancient.png' },
-  { id: 'vertigo', name: 'Vertigo', url: '/radar/vertigo.png' },
-  { id: 'overpass', name: 'Overpass', url: '/radar/overpass.png' },
-  { id: 'office', name: 'Office', url: '/radar/office.png' },
-  { id: 'italy', name: 'Italy', url: '/radar/italy.png' },
-  { id: 'cache', name: 'Cache', url: '/radar/cache.png' }
-]
-
-const selectedBanner = ref('')
-const customBannerUrl = ref('')
-
-const presetAccentColors = [
-  { hex: '#de9b35', name: 'CS2 Gold (Default)' },
-  { hex: '#f97316', name: 'T Orange' },
-  { hex: '#0ea5e9', name: 'CT Blue' },
-  { hex: '#ef4444', name: 'Danger Red' },
-  { hex: '#10b981', name: 'Emerald Green' },
-  { hex: '#a855f7', name: 'Amethyst Purple' },
-  { hex: '#06b6d4', name: 'Cyber Cyan' },
-  { hex: '#eab308', name: 'Flash Yellow' }
-]
-
-const presetBgColors = [
-  { hex: '#090d13', name: 'Midnight Navy (Default)' },
-  { hex: '#0b0e14', name: 'Carbon Black' },
-  { hex: '#0f172a', name: 'Deep Slate' },
-  { hex: '#000000', name: 'Pitch Black' },
-  { hex: '#071811', name: 'Dark Emerald' },
-  { hex: '#190a0a', name: 'Dark Crimson' },
-  { hex: '#110a1f', name: 'Deep Violet' }
-]
-
 function populateForms() {
   const u = authStore.currentUser
   if (!u) return
@@ -139,8 +104,6 @@ function populateForms() {
   profileForm.gender = u.gender || ''
   profileForm.birthday = u.birthday || ''
   profileForm.avatar = u.avatar || ''
-
-  selectedBanner.value = u.banner || bannerPresets[0].url
 
   const s = u.socials || {}
   socialsForm.steamUrl = s.steamUrl || ''
@@ -172,12 +135,57 @@ watch(() => props.isOpen, (open) => {
     populateForms()
     saveSuccess.value = false
     errorMessage.value = ''
+    avatarUploadError.value = ''
   }
 })
 
 onMounted(() => {
   if (props.isOpen) populateForms()
 })
+
+function handleAvatarFileUpload(e: Event) {
+  avatarUploadError.value = ''
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  // Strict image & GIF verification
+  const validTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml']
+  if (!validTypes.includes(file.type) && !file.name.match(/\.(png|jpe?g|webp|gif|svg)$/i)) {
+    avatarUploadError.value = 'Only image files (PNG, JPG, WebP, GIF, SVG) are accepted.'
+    return
+  }
+
+  const reader = new FileReader()
+  reader.onload = (loadEvent) => {
+    const dataUrl = loadEvent.target?.result as string
+    if (dataUrl) {
+      profileForm.avatar = dataUrl
+    }
+  }
+  reader.readAsDataURL(file)
+}
+
+function resetProfileDefaults() {
+  profileForm.inGameRole = 'Entry Fragger'
+  profileForm.bio = ''
+  profileForm.gender = ''
+  profileForm.birthday = ''
+  profileForm.avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=${authStore.currentUser?.username || 'player'}`
+}
+
+function resetAppearanceDefaults() {
+  themeStore.resetThemeDefaults()
+}
+
+function resetPrivacyDefaults() {
+  privacyForm.hideSteam = false
+  privacyForm.hideSocials = false
+  privacyForm.hideDetails = false
+  privacyForm.hideLineups = false
+  privacyForm.hideFromList = false
+  themeStore.toggleUnreadNotificationBadge(true)
+}
 
 async function handleSaveSettings() {
   isSaving.value = true
@@ -191,13 +199,13 @@ async function handleSaveSettings() {
       gender: profileForm.gender,
       birthday: profileForm.birthday,
       avatar: profileForm.avatar,
-      banner: selectedBanner.value,
       socials: { ...socialsForm },
       privacy: { ...privacyForm },
       notifications: { ...notificationsForm },
       themeSettings: {
         bg: themeStore.customBgColor,
-        accent: themeStore.customAccentColor
+        accent: themeStore.customAccentColor,
+        modalBg: themeStore.customModalBgColor
       }
     }
 
@@ -246,6 +254,7 @@ async function handleExportZipData() {
       theme: {
         bgColor: themeStore.customBgColor,
         accentColor: themeStore.customAccentColor,
+        modalBgColor: themeStore.customModalBgColor,
         themeMode: themeStore.theme
       }
     }
@@ -278,32 +287,6 @@ async function handleExportZipData() {
     isExportingZip.value = false
   }
 }
-
-const bannerUploadError = ref('')
-
-function handleBannerFileUpload(e: Event) {
-  bannerUploadError.value = ''
-  const target = e.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
-
-  // Strict image format verification
-  const validTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml']
-  if (!validTypes.includes(file.type) && !file.name.match(/\.(png|jpe?g|webp|gif|svg)$/i)) {
-    bannerUploadError.value = 'Only image files (PNG, JPG, WebP, GIF, SVG) are accepted.'
-    return
-  }
-
-  const reader = new FileReader()
-  reader.onload = (loadEvent) => {
-    const dataUrl = loadEvent.target?.result as string
-    if (dataUrl) {
-      selectedBanner.value = dataUrl
-      customBannerUrl.value = ''
-    }
-  }
-  reader.readAsDataURL(file)
-}
 </script>
 
 <template>
@@ -313,16 +296,19 @@ function handleBannerFileUpload(e: Event) {
       class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-fade-in"
       @click.self="emit('close')"
     >
-      <div class="relative w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[92vh] sm:max-h-[85vh]">
+      <div 
+        class="relative w-full max-w-4xl border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[92vh] sm:max-h-[85vh]"
+        :style="{ backgroundColor: themeStore.customModalBgColor }"
+      >
         <!-- LEFT TABS SIDEBAR -->
-        <div class="w-full md:w-60 bg-slate-950 border-b md:border-b-0 md:border-r border-slate-800 p-4 flex flex-col justify-between shrink-0">
+        <div class="w-full md:w-60 bg-slate-950/80 border-b md:border-b-0 md:border-r border-slate-800 p-4 flex flex-col justify-between shrink-0">
           <div class="flex flex-col gap-3">
             <!-- USER BADGE -->
             <div class="flex items-center gap-3 p-2 bg-slate-900/60 rounded-2xl border border-slate-800">
               <div class="w-10 h-10 rounded-xl overflow-hidden bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">
                 <img
-                  v-if="authStore.currentUser?.avatar"
-                  :src="authStore.currentUser.avatar"
+                  v-if="profileForm.avatar || authStore.currentUser?.avatar"
+                  :src="profileForm.avatar || authStore.currentUser?.avatar"
                   class="w-full h-full object-cover"
                 />
                 <span v-else class="font-black text-sm text-amber-400 font-mono">
@@ -331,7 +317,7 @@ function handleBannerFileUpload(e: Event) {
               </div>
               <div class="flex flex-col min-w-0">
                 <span class="font-bold text-white text-xs truncate">{{ authStore.currentUser?.username }}</span>
-                <span class="text-[10px] text-amber-400 font-mono">{{ authStore.currentUser?.inGameRole || 'Player' }}</span>
+                <span class="text-[10px] text-amber-400 font-mono">{{ profileForm.inGameRole || authStore.currentUser?.inGameRole || 'Player' }}</span>
               </div>
             </div>
 
@@ -351,14 +337,6 @@ function handleBannerFileUpload(e: Event) {
               >
                 <Palette class="w-4 h-4 shrink-0" />
                 <span>Theme & Colors</span>
-              </button>
-
-              <button
-                @click="activeTab = 'banners'"
-                :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'banners' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
-              >
-                <Image class="w-4 h-4 shrink-0" />
-                <span>CS2 Map Banners</span>
               </button>
 
               <button
@@ -382,7 +360,7 @@ function handleBannerFileUpload(e: Event) {
                 :class="['flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer whitespace-nowrap shrink-0', activeTab === 'privacy' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white hover:bg-slate-900']"
               >
                 <Shield class="w-4 h-4 shrink-0" />
-                <span>Privacy</span>
+                <span>Privacy & Alerts</span>
               </button>
 
               <button
@@ -400,15 +378,15 @@ function handleBannerFileUpload(e: Event) {
             class="hidden md:flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-white text-xs font-bold transition-colors cursor-pointer"
           >
             <X class="w-4 h-4" />
-            <span>Close Settings</span>
+            <span>Close</span>
           </button>
         </div>
 
         <!-- RIGHT TAB CONTENT -->
-        <div class="flex-1 flex flex-col justify-between min-h-0 bg-slate-900 overflow-hidden">
+        <div class="flex-1 flex flex-col justify-between min-h-0 overflow-hidden">
           <!-- TOP DESKTOP HEADER -->
           <div class="hidden md:flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/40">
-            <span class="text-xs font-black uppercase tracking-wider text-amber-400">User Settings</span>
+            <span class="text-xs font-black uppercase tracking-wider text-amber-400">Settings</span>
             <button
               @click="emit('close')"
               class="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
@@ -418,10 +396,57 @@ function handleBannerFileUpload(e: Event) {
           </div>
 
           <!-- SCROLLABLE BODY -->
-          <div class="flex-1 p-5 sm:p-6 overflow-y-auto flex flex-col gap-6">
+          <div class="flex-1 p-5 sm:p-6 overflow-y-auto flex flex-col gap-6 scrollbar-thin">
             <!-- TAB 1: PROFILE & BIO -->
-            <div v-if="activeTab === 'profile'" class="flex flex-col gap-4 text-xs">
-              <h3 class="text-sm font-black uppercase text-white tracking-wide">Profile Information</h3>
+            <div v-if="activeTab === 'profile'" class="flex flex-col gap-5 text-xs">
+              <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h3 class="text-sm font-black uppercase text-white tracking-wide">Profile Information</h3>
+                <button
+                  type="button"
+                  @click="resetProfileDefaults"
+                  class="flex items-center gap-1 px-2.5 py-1 text-slate-400 hover:text-amber-400 hover:bg-slate-800/80 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                  title="Reset profile fields to default"
+                >
+                  <RotateCcw class="w-3 h-3" />
+                  <span>Reset Section</span>
+                </button>
+              </div>
+
+              <!-- AVATAR UPLOAD (WITH GIF SUPPORT) -->
+              <div class="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl flex flex-col gap-3">
+                <label class="font-bold text-slate-200">Profile Icon / Avatar (GIF or Image)</label>
+                <div class="flex items-center gap-4">
+                  <div class="w-16 h-16 rounded-2xl overflow-hidden bg-slate-900 border-2 border-amber-500/50 flex items-center justify-center shrink-0 shadow-md">
+                    <img
+                      v-if="profileForm.avatar"
+                      :src="profileForm.avatar"
+                      class="w-full h-full object-cover"
+                      alt="Avatar Preview"
+                    />
+                    <span v-else class="text-slate-500 font-bold text-xs">No Icon</span>
+                  </div>
+
+                  <div class="flex-1 flex flex-col gap-2">
+                    <label class="flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-slate-700 hover:border-amber-500 rounded-xl bg-slate-900/60 cursor-pointer transition-all group">
+                      <Upload class="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                      <span class="font-bold text-slate-200 text-xs">Upload Avatar / Animated GIF</span>
+                      <input 
+                        type="file" 
+                        accept="image/png, image/jpeg, image/webp, image/gif, image/svg+xml" 
+                        class="hidden" 
+                        @change="handleAvatarFileUpload" 
+                      />
+                    </label>
+                    <span v-if="avatarUploadError" class="text-rose-400 font-bold text-[11px]">{{ avatarUploadError }}</span>
+                    <input
+                      v-model="profileForm.avatar"
+                      type="text"
+                      placeholder="Or paste image URL (https://...)"
+                      class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="flex flex-col gap-1.5">
@@ -438,16 +463,6 @@ function handleBannerFileUpload(e: Event) {
                     <option value="Coach / Analyst">Coach / Analyst</option>
                   </select>
                 </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <label class="font-bold text-slate-300">Custom Avatar URL</label>
-                  <input
-                    v-model="profileForm.avatar"
-                    type="text"
-                    placeholder="https://... image link"
-                    class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                  />
-                </div>
               </div>
 
               <div class="flex flex-col gap-1.5">
@@ -461,14 +476,27 @@ function handleBannerFileUpload(e: Event) {
               </div>
             </div>
 
-            <!-- TAB 2: THEME & COLOR WHEEL / HEX CUSTOMIZER -->
-            <div v-if="activeTab === 'appearance'" class="flex flex-col gap-6 text-xs">
-              <!-- ACCENT COLOR CUSTOMIZER -->
-              <div class="flex flex-col gap-3 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
+            <!-- TAB 2: THEME & POPUP GUI CUSTOMIZER WITH INTERACTIVE PREVIEW -->
+            <div v-if="activeTab === 'appearance'" class="flex flex-col gap-5 text-xs">
+              <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h3 class="text-sm font-black uppercase text-white tracking-wide">Theme & Popup GUI Styling</h3>
+                <button
+                  type="button"
+                  @click="resetAppearanceDefaults"
+                  class="flex items-center gap-1 px-2.5 py-1 text-slate-400 hover:text-amber-400 hover:bg-slate-800/80 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                  title="Reset theme and colors to default"
+                >
+                  <RotateCcw class="w-3 h-3" />
+                  <span>Reset Section</span>
+                </button>
+              </div>
+
+              <!-- 1. ACCENT COLOR CUSTOMIZER -->
+              <div class="flex flex-col gap-3 p-4 bg-slate-950/60 border border-slate-800 rounded-2xl">
                 <div class="flex items-center justify-between">
                   <div>
-                    <h3 class="text-sm font-black uppercase text-white tracking-wide">Website Accent Color</h3>
-                    <p class="text-slate-400 text-[11px]">Choose your personalized accent glow using the color wheel or custom hex code.</p>
+                    <h4 class="font-black uppercase text-white text-xs">Website Accent Glow Color</h4>
+                    <p class="text-slate-400 text-[11px]">Controls button highlights, badges, and tactical pins.</p>
                   </div>
                   <div class="flex items-center gap-2">
                     <input
@@ -488,29 +516,30 @@ function handleBannerFileUpload(e: Event) {
                   </div>
                 </div>
 
-                <!-- PRESET ACCENTS -->
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+                <!-- DYNAMIC PREVIOUSLY CHOSEN ACCENT CHIPS -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span class="text-[10px] text-slate-500 uppercase font-mono mr-1">Previously Chosen:</span>
                   <button
-                    v-for="color in presetAccentColors"
-                    :key="color.hex"
-                    @click="themeStore.setCustomAccentColor(color.hex)"
+                    v-for="hex in themeStore.recentAccentColors"
+                    :key="hex"
+                    @click="themeStore.setCustomAccentColor(hex)"
                     :class="[
-                      'flex items-center gap-2 p-2.5 rounded-xl border transition-all cursor-pointer text-left',
-                      themeStore.customAccentColor.toLowerCase() === color.hex.toLowerCase() ? 'bg-slate-800 border-white shadow' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                      'flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-mono cursor-pointer transition-all',
+                      themeStore.customAccentColor.toLowerCase() === hex.toLowerCase() ? 'bg-slate-800 border-white shadow' : 'bg-slate-900 border-slate-800 hover:border-slate-700'
                     ]"
                   >
-                    <div class="w-4 h-4 rounded-full border border-slate-700 shrink-0 shadow" :style="{ backgroundColor: color.hex }" />
-                    <span class="font-bold text-slate-200 text-[11px] truncate">{{ color.name }}</span>
+                    <div class="w-3 h-3 rounded-full border border-slate-700 shrink-0" :style="{ backgroundColor: hex }" />
+                    <span class="text-slate-200">{{ hex }}</span>
                   </button>
                 </div>
               </div>
 
-              <!-- BACKGROUND COLOR CUSTOMIZER -->
-              <div class="flex flex-col gap-3 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
+              <!-- 2. BACKGROUND CANVAS COLOR CUSTOMIZER -->
+              <div class="flex flex-col gap-3 p-4 bg-slate-950/60 border border-slate-800 rounded-2xl">
                 <div class="flex items-center justify-between">
                   <div>
-                    <h3 class="text-sm font-black uppercase text-white tracking-wide">Website Background Color</h3>
-                    <p class="text-slate-400 text-[11px]">Customize the entire website canvas background color for yourself.</p>
+                    <h4 class="font-black uppercase text-white text-xs">Website Canvas Background Color</h4>
+                    <p class="text-slate-400 text-[11px]">Controls the overall application workspace backdrop.</p>
                   </div>
                   <div class="flex items-center gap-2">
                     <input
@@ -530,79 +559,115 @@ function handleBannerFileUpload(e: Event) {
                   </div>
                 </div>
 
-                <!-- PRESET BACKGROUNDS -->
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+                <!-- DYNAMIC PREVIOUSLY CHOSEN BG CHIPS -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span class="text-[10px] text-slate-500 uppercase font-mono mr-1">Previously Chosen:</span>
                   <button
-                    v-for="color in presetBgColors"
-                    :key="color.hex"
-                    @click="themeStore.setCustomBgColor(color.hex)"
+                    v-for="hex in themeStore.recentBgColors"
+                    :key="hex"
+                    @click="themeStore.setCustomBgColor(hex)"
                     :class="[
-                      'flex items-center gap-2 p-2.5 rounded-xl border transition-all cursor-pointer text-left',
-                      themeStore.customBgColor.toLowerCase() === color.hex.toLowerCase() ? 'bg-slate-800 border-white shadow' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                      'flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-mono cursor-pointer transition-all',
+                      themeStore.customBgColor.toLowerCase() === hex.toLowerCase() ? 'bg-slate-800 border-white shadow' : 'bg-slate-900 border-slate-800 hover:border-slate-700'
                     ]"
                   >
-                    <div class="w-4 h-4 rounded-full border border-slate-700 shrink-0 shadow" :style="{ backgroundColor: color.hex }" />
-                    <span class="font-bold text-slate-200 text-[11px] truncate">{{ color.name }}</span>
+                    <div class="w-3 h-3 rounded-full border border-slate-700 shrink-0" :style="{ backgroundColor: hex }" />
+                    <span class="text-slate-200">{{ hex }}</span>
                   </button>
                 </div>
               </div>
-            </div>
 
-            <!-- TAB 3: CS2 MAP BANNERS -->
-            <div v-if="activeTab === 'banners'" class="flex flex-col gap-4 text-xs">
-              <h3 class="text-sm font-black uppercase text-white tracking-wide">CS2 Map Profile Banners</h3>
-              <p class="text-slate-400">Select a CS2 map banner to display on your public profile header when other players view your card.</p>
+              <!-- 3. POPUP GUI / MODAL BACKGROUND COLOR CUSTOMIZER -->
+              <div class="flex flex-col gap-3 p-4 bg-slate-950/60 border border-slate-800 rounded-2xl">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h4 class="font-black uppercase text-white text-xs">Popup GUI / Modal Background Color</h4>
+                    <p class="text-slate-400 text-[11px]">Controls the background color of dialog modals and popup panels.</p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="color"
+                      :value="themeStore.customModalBgColor"
+                      @input="themeStore.setCustomModalBgColor(($event.target as HTMLInputElement).value)"
+                      class="w-8 h-8 rounded-xl bg-transparent border-0 cursor-pointer p-0"
+                      title="Open Color Wheel"
+                    />
+                    <input
+                      type="text"
+                      :value="themeStore.customModalBgColor"
+                      @input="themeStore.setCustomModalBgColor(($event.target as HTMLInputElement).value)"
+                      class="w-24 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-white font-mono text-center text-xs uppercase"
+                      placeholder="#0f172a"
+                    />
+                  </div>
+                </div>
 
-              <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div
-                  v-for="banner in bannerPresets"
-                  :key="banner.id"
-                  @click="selectedBanner = banner.url"
-                  :class="[
-                    'relative h-24 rounded-2xl overflow-hidden border-2 transition-all cursor-pointer group bg-slate-950',
-                    selectedBanner === banner.url ? 'border-amber-500 shadow-xl' : 'border-slate-800 opacity-70 hover:opacity-100'
-                  ]"
-                >
-                  <img :src="banner.url" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                  <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex items-end p-2">
-                    <span class="text-[10px] font-black text-white uppercase font-mono tracking-wider">{{ banner.name }}</span>
-                  </div>
-                  <div v-if="selectedBanner === banner.url" class="absolute top-2 right-2 p-1 bg-amber-500 text-slate-950 rounded-full shadow">
-                    <Check class="w-3 h-3 stroke-[3]" />
-                  </div>
+                <!-- DYNAMIC PREVIOUSLY CHOSEN MODAL CHIPS -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span class="text-[10px] text-slate-500 uppercase font-mono mr-1">Previously Chosen:</span>
+                  <button
+                    v-for="hex in themeStore.recentModalColors"
+                    :key="hex"
+                    @click="themeStore.setCustomModalBgColor(hex)"
+                    :class="[
+                      'flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-mono cursor-pointer transition-all',
+                      themeStore.customModalBgColor.toLowerCase() === hex.toLowerCase() ? 'bg-slate-800 border-white shadow' : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+                    ]"
+                  >
+                    <div class="w-3 h-3 rounded-full border border-slate-700 shrink-0" :style="{ backgroundColor: hex }" />
+                    <span class="text-slate-200">{{ hex }}</span>
+                  </button>
                 </div>
               </div>
 
-              <!-- CUSTOM BANNER URL INPUT -->
-              <div class="flex flex-col gap-1.5 mt-2">
-                <label class="font-bold text-slate-300">Or Paste Custom Banner Image URL</label>
-                <input
-                  v-model="customBannerUrl"
-                  @input="selectedBanner = customBannerUrl"
-                  type="text"
-                  placeholder="https://... custom wide banner image"
-                  class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                />
-              </div>
+              <!-- 4. LIVE INTERACTIVE SAMPLE MODAL PREVIEW -->
+              <div class="flex flex-col gap-2 p-4 bg-slate-950/80 border border-slate-800 rounded-2xl">
+                <span class="font-bold text-white text-xs flex items-center gap-1.5">
+                  <Layout class="w-3.5 h-3.5 text-amber-400" />
+                  Live Sample Modal & Component Preview
+                </span>
+                
+                <div 
+                  class="p-4 rounded-2xl border border-slate-700/60 shadow-xl flex flex-col gap-3 transition-colors"
+                  :style="{ backgroundColor: themeStore.customModalBgColor }"
+                >
+                  <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
+                    <div class="flex items-center gap-2">
+                      <Sparkles class="w-4 h-4" :style="{ color: themeStore.customAccentColor }" />
+                      <span class="font-black text-white text-xs">Sample Modal Dialog</span>
+                    </div>
+                    <span 
+                      class="px-2 py-0.5 rounded text-[10px] font-black text-slate-950 uppercase"
+                      :style="{ backgroundColor: themeStore.customAccentColor }"
+                    >
+                      Active Accent
+                    </span>
+                  </div>
 
-              <!-- UPLOAD LOCAL BANNER FILE (IMAGES ONLY) -->
-              <div class="flex flex-col gap-1.5 mt-1">
-                <label class="font-bold text-slate-300">Or Upload Your Own Banner File (Images Only)</label>
-                <label class="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-slate-700 hover:border-amber-500 rounded-2xl bg-slate-950/60 cursor-pointer transition-all group">
-                  <Upload class="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                  <span class="font-bold text-slate-200 text-xs">Choose Banner Image File (PNG, JPG, WebP, GIF)</span>
-                  <input 
-                    type="file" 
-                    accept="image/png, image/jpeg, image/webp, image/gif, image/svg+xml" 
-                    class="hidden" 
-                    @change="handleBannerFileUpload" 
-                  />
-                </label>
-                <span v-if="bannerUploadError" class="text-rose-400 font-bold text-[11px]">{{ bannerUploadError }}</span>
+                  <p class="text-slate-300 text-xs">
+                    This is how your customized popup modal looks with your selected colors.
+                  </p>
+
+                  <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-700/40">
+                    <button
+                      type="button"
+                      class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs"
+                    >
+                      Secondary
+                    </button>
+                    <button
+                      type="button"
+                      class="px-4 py-1.5 font-black text-slate-950 rounded-lg text-xs shadow"
+                      :style="{ backgroundColor: themeStore.customAccentColor }"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- TAB 4: SOCIALS & DISCORD DM NOTIFICATIONS -->
+            <!-- TAB 3: LINKED SOCIALS -->
             <div v-if="activeTab === 'socials'" class="flex flex-col gap-4 text-xs">
               <h3 class="text-sm font-black uppercase text-white tracking-wide">Link Social Media Accounts</h3>
               <p class="text-slate-400">Connect your profiles so teammates and friends can find your channels and Steam profile.</p>
@@ -638,9 +703,9 @@ function handleBannerFileUpload(e: Event) {
                 <div class="flex flex-col gap-1.5 sm:col-span-2 p-3 bg-slate-950 border border-slate-800 rounded-xl">
                   <label class="font-bold text-slate-200 flex items-center gap-2">
                     <Bell class="w-4 h-4 text-[#5865F2]" />
-                    <span>Discord Private DM Forwarding Webhook</span>
+                    <span>Discord DM Forwarding Webhook</span>
                   </label>
-                  <span class="text-[11px] text-slate-400">Receive an automated Discord ping whenever someone sends you a private DM.</span>
+                  <span class="text-[11px] text-slate-400">Receive an automated Discord ping whenever someone sends you a message.</span>
                   <input
                     v-model="socialsForm.discordWebhook"
                     type="text"
@@ -651,7 +716,7 @@ function handleBannerFileUpload(e: Event) {
               </div>
             </div>
 
-            <!-- TAB 5: DATA BACKUP & LOCAL ZIP EXPORT -->
+            <!-- TAB 4: DATA BACKUP & LOCAL ZIP EXPORT -->
             <div v-if="activeTab === 'backup'" class="flex flex-col gap-4 text-xs">
               <h3 class="text-sm font-black uppercase text-white tracking-wide">Data Backup & Local ZIP Export</h3>
               <p class="text-slate-400">
@@ -671,7 +736,7 @@ function handleBannerFileUpload(e: Event) {
                     class="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
                   >
                     <Download class="w-4 h-4" />
-                    <span>{{ isExportingZip ? 'Packaging ZIP...' : 'Download ZIP Backup' }}</span>
+                    <span>{{ isExportingZip ? 'Packaging ZIP...' : 'Download ZIP' }}</span>
                   </button>
                 </div>
 
@@ -682,14 +747,45 @@ function handleBannerFileUpload(e: Event) {
               </div>
             </div>
 
-            <!-- TAB 6: PRIVACY -->
+            <!-- TAB 5: PRIVACY & NOTIFICATION ALERTS -->
             <div v-if="activeTab === 'privacy'" class="flex flex-col gap-4 text-xs">
-              <h3 class="text-sm font-black uppercase text-white tracking-wide">Privacy & Visibility Settings</h3>
+              <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h3 class="text-sm font-black uppercase text-white tracking-wide">Privacy & Notification Settings</h3>
+                <button
+                  type="button"
+                  @click="resetPrivacyDefaults"
+                  class="flex items-center gap-1 px-2.5 py-1 text-slate-400 hover:text-amber-400 hover:bg-slate-800/80 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                  title="Reset privacy and notification options to default"
+                >
+                  <RotateCcw class="w-3 h-3" />
+                  <span>Reset Section</span>
+                </button>
+              </div>
+
               <div class="flex flex-col gap-2.5">
-                <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
+                <!-- UNREAD MESSAGE NOTIFICATION BADGE TOGGLE -->
+                <label class="flex items-center justify-between p-3.5 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                      <MessageSquare class="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span class="font-bold text-white block">Unread Message Notification Icon</span>
+                      <span class="text-[11px] text-slate-400">Show glowing notification count badge on top navigation when messages arrive</span>
+                    </div>
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    :checked="themeStore.showUnreadNotificationBadge" 
+                    @change="themeStore.toggleUnreadNotificationBadge(($event.target as HTMLInputElement).checked)"
+                    class="w-4 h-4 accent-amber-500 cursor-pointer" 
+                  />
+                </label>
+
+                <label class="flex items-center justify-between p-3.5 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
                   <div>
-                    <span class="font-bold text-white block">Visible in Direct Messages & User Directory</span>
-                    <span class="text-[11px] text-slate-400">Allow teammates to find your profile in People & Squads</span>
+                    <span class="font-bold text-white block">Visible in Messages & Directory</span>
+                    <span class="text-[11px] text-slate-400">Allow teammates to find your profile in the player directory</span>
                   </div>
                   <input 
                     type="checkbox" 
@@ -699,7 +795,7 @@ function handleBannerFileUpload(e: Event) {
                   />
                 </label>
 
-                <label class="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
+                <label class="flex items-center justify-between p-3.5 bg-slate-950 border border-slate-800 rounded-2xl cursor-pointer">
                   <div>
                     <span class="font-bold text-white block">Hide Linked Socials</span>
                     <span class="text-[11px] text-slate-400">Do not display social profile links on your card</span>
@@ -709,7 +805,7 @@ function handleBannerFileUpload(e: Event) {
               </div>
             </div>
 
-            <!-- TAB 7: SECURITY & CLEAN DELETE -->
+            <!-- TAB 6: SECURITY & CLEAN DELETE -->
             <div v-if="activeTab === 'security'" class="flex flex-col gap-6 text-xs">
               <div class="flex flex-col gap-3">
                 <h3 class="text-sm font-black uppercase text-white tracking-wide">Account Security</h3>
@@ -762,9 +858,10 @@ function handleBannerFileUpload(e: Event) {
               <button
                 @click="handleSaveSettings"
                 :disabled="isSaving"
-                class="px-6 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow-lg disabled:opacity-50"
+                class="px-6 py-2.5 font-black text-slate-950 rounded-xl text-xs cursor-pointer shadow-lg disabled:opacity-50 transition-all"
+                :style="{ backgroundColor: themeStore.customAccentColor }"
               >
-                {{ isSaving ? 'Saving...' : 'Save Changes' }}
+                {{ isSaving ? 'Saving...' : 'Save' }}
               </button>
             </div>
           </div>
