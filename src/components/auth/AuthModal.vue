@@ -70,7 +70,8 @@ async function handleQuickGuest() {
   <Teleport to="body">
     <div 
       v-if="authStore.isAuthModalOpen"
-      class="fixed inset-0 z-[9999] overflow-y-auto bg-black/90 backdrop-blur-md flex min-h-full items-center justify-center p-4 sm:p-6 text-center animate-fade-in"
+      class="fixed inset-0 overflow-y-auto bg-black/90 backdrop-blur-md flex min-h-full items-center justify-center p-4 sm:p-6 text-center animate-fade-in"
+      style="z-index: 9999999 !important;"
       @click.self="authStore.isAuthenticated ? (authStore.isAuthModalOpen = false) : null"
     >
       <div class="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden my-auto text-left flex flex-col">

@@ -293,7 +293,8 @@ async function handleExportZipData() {
   <Teleport to="body">
     <div
       v-if="isOpen"
-      class="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-fade-in"
+      class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-fade-in"
+      style="z-index: 9999999 !important;"
       @click.self="emit('close')"
     >
       <div 

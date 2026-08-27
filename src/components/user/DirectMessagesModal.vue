@@ -656,7 +656,8 @@ watch(() => props.initialTargetUserId, (newId) => {
   <Teleport to="body">
     <div
       v-if="isOpen"
-      class="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fade-in"
+      class="fixed inset-0 bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fade-in"
+      style="z-index: 9999999 !important;"
       @click.self="emit('close')"
     >
       <div 

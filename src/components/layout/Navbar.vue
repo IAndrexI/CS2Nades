@@ -161,7 +161,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <header class="navbar-wrapper w-full bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 sticky top-0 z-[100]">
+  <header 
+    class="navbar-wrapper w-full bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 sticky top-0"
+    style="z-index: 999999 !important; position: sticky;"
+  >
     <!-- GUEST PREVIEW MODE BANNER (ACTIVE WHEN ADMIN TOGGLES GUEST VIEW) -->
     <div
       v-if="authStore.isGuestPreviewMode"
@@ -364,7 +367,7 @@ onUnmounted(() => {
         </button>
 
         <!-- USER PROFILE / LOGIN BUTTON -->
-        <div class="relative user-dropdown-container z-50">
+        <div class="relative user-dropdown-container" style="z-index: 999999 !important;">
           <template v-if="authStore.isAuthenticated">
             <button
               @click="isUserDropdownOpen = !isUserDropdownOpen"
@@ -391,7 +394,8 @@ onUnmounted(() => {
             <!-- USER DROPDOWN -->
             <div 
               v-if="isUserDropdownOpen"
-              class="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-[9999] flex flex-col py-1 animate-fade-in text-xs"
+              class="absolute top-full right-0 mt-2 w-64 bg-slate-900/98 backdrop-blur-2xl border border-slate-700 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col py-1 animate-fade-in text-xs"
+              style="z-index: 9999999 !important;"
             >
               <div class="p-3 border-b border-slate-800 flex flex-col gap-1 bg-slate-950/60">
                 <div class="flex items-center justify-between">

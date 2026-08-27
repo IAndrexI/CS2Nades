@@ -47,7 +47,8 @@ watch(() => props.isOpen, (open) => {
   <Teleport to="body">
     <div
       v-if="isOpen && profile"
-      class="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex justify-center items-start sm:items-center animate-fade-in"
+      class="fixed inset-0 bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex justify-center items-start sm:items-center animate-fade-in"
+      style="z-index: 9999999 !important;"
       @click.self="emit('close')"
     >
       <div class="my-auto w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh]">
