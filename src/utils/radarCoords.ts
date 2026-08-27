@@ -39,8 +39,8 @@ export function clientToPct(
   const y = ((mapped.y - vb.y) / vb.height) * 100
 
   return {
-    x: Math.round(Math.min(Math.max(x, 3), 97) * 10) / 10,
-    y: Math.round(Math.min(Math.max(y, 3), 97) * 10) / 10
+    x: Math.round(Math.min(Math.max(x, 0.1), 99.9) * 10) / 10,
+    y: Math.round(Math.min(Math.max(y, 0.1), 99.9) * 10) / 10
   }
 }
 

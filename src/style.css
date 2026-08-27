@@ -120,18 +120,80 @@ html.phone-mode-active .app-root {
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #de9b35;
+  background: var(--app-accent, #de9b35);
+}
+
+/* ── CS2 GLOBAL DYNAMIC ACCENT OVERRIDES ──────────────────────── */
+.text-amber-400,
+.text-amber-500,
+.text-amber-300,
+.text-yellow-400,
+.text-cs-gold,
+.hover\:text-amber-400:hover,
+.hover\:text-amber-300:hover,
+.group-hover\:text-amber-400:hover,
+.group-hover\:text-amber-300:hover {
+  color: var(--app-accent, #de9b35) !important;
+}
+
+.bg-amber-500,
+.bg-amber-600,
+.bg-cs-gold,
+.hover\:bg-amber-500:hover,
+.hover\:bg-amber-400:hover {
+  background-color: var(--app-accent, #de9b35) !important;
+}
+
+.border-amber-400,
+.border-amber-500,
+.border-cs-gold,
+.hover\:border-amber-500:hover,
+.hover\:border-amber-500\/40:hover,
+.hover\:border-amber-500\/50:hover,
+.focus\:border-amber-500:focus {
+  border-color: var(--app-accent, #de9b35) !important;
+}
+
+.bg-amber-500\/10,
+.bg-amber-500\/20,
+.bg-amber-500\/30,
+.bg-amber-500\/40 {
+  background-color: rgba(var(--app-accent-rgb, 222, 155, 53), 0.18) !important;
+}
+
+.border-amber-500\/20,
+.border-amber-500\/30,
+.border-amber-500\/40,
+.border-amber-500\/50 {
+  border-color: rgba(var(--app-accent-rgb, 222, 155, 53), 0.4) !important;
+}
+
+input[type="range"].accent-amber-500,
+.accent-amber-500 {
+  accent-color: var(--app-accent, #de9b35) !important;
+}
+
+.from-amber-600,
+.from-amber-500 {
+  --tw-gradient-from: var(--app-accent, #de9b35) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(var(--app-accent-rgb, 222, 155, 53), 0.8) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.to-amber-500,
+.to-amber-400 {
+  --tw-gradient-to: var(--app-accent, #de9b35) var(--tw-gradient-to-position) !important;
 }
 
 /* CS2 Tactical Animations */
 @keyframes pulseGlow {
   0%, 100% {
     opacity: 0.8;
-    filter: drop-shadow(0 0 6px rgba(222, 155, 53, 0.6));
+    filter: drop-shadow(0 0 6px rgba(var(--app-accent-rgb, 222, 155, 53), 0.6));
   }
   50% {
     opacity: 1;
-    filter: drop-shadow(0 0 14px rgba(222, 155, 53, 0.9));
+    filter: drop-shadow(0 0 14px rgba(var(--app-accent-rgb, 222, 155, 53), 0.9));
   }
 }
 

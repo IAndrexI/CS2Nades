@@ -217,7 +217,7 @@ onUnmounted(() => {
               class="w-4 h-4 object-contain"
             />
             <span v-else class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-            <span class="uppercase tracking-wide font-mono">{{ mapStore.currentMap.name }}</span>
+            <span class="uppercase tracking-wide font-mono" :style="{ color: themeStore.customAccentColor }">{{ mapStore.currentMap.name }}</span>
             <ChevronDown class="w-3.5 h-3.5 text-slate-400" />
           </button>
 

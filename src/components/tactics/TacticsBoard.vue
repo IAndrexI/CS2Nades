@@ -602,10 +602,25 @@ function placeCustomPin(pin: CustomPinDefinition) {
 
 function getMapCoords(e: MouseEvent): { x: number; y: number } {
   if (!svgRef.value) return { x: 50, y: 50 }
-  const rect = svgRef.value.getBoundingClientRect()
+  const svg = svgRef.value
+  const ctm = svg.getScreenCTM()
+  if (ctm) {
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const mapped = pt.matrixTransform(ctm.inverse())
+    const vb = svg.viewBox?.baseVal?.width ? svg.viewBox.baseVal : { x: 0, y: 0, width: 1000, height: 1000 }
+    const x = ((mapped.x - vb.x) / vb.width) * 100
+    const y = ((mapped.y - vb.y) / vb.height) * 100
+    return {
+      x: Math.round(Math.min(Math.max(x, 0.5), 99.5) * 10) / 10,
+      y: Math.round(Math.min(Math.max(y, 0.5), 99.5) * 10) / 10
+    }
+  }
+  const rect = svg.getBoundingClientRect()
   const x = Math.round((((e.clientX - rect.left) / rect.width) * 100) * 10) / 10
   const y = Math.round((((e.clientY - rect.top) / rect.height) * 100) * 10) / 10
-  return { x: Math.max(3, Math.min(97, x)), y: Math.max(3, Math.min(97, y)) }
+  return { x: Math.max(0.5, Math.min(99.5, x)), y: Math.max(0.5, Math.min(99.5, y)) }
 }
 
 function handleElementMouseDown(e: MouseEvent, el: TacticsElement) {
@@ -749,21 +764,6 @@ function handleMouseDown(e: MouseEvent) {
   }
 
   if (tool === 'c4_bomb') {
-    // Check if clicked inside Site A or Site B plant zones (red box)
-    const siteA = mapStore.currentMap.sites?.a
-    const siteB = mapStore.currentMap.sites?.b
-
-    const distA = siteA ? Math.hypot(coords.x - siteA.x, coords.y - siteA.y) : 999
-    const distB = siteB ? Math.hypot(coords.x - siteB.x, coords.y - siteB.y) : 999
-
-    const isInsideSite = distA <= 7.5 || distB <= 7.5
-
-    if (!isInsideSite) {
-      tempSaveToast.value = '⚠️ C4 can ONLY be placed inside Site A or Site B plant box!'
-      setTimeout(() => { tempSaveToast.value = '' }, 3500)
-      return
-    }
-
     const myUserId = authStore.currentUser?.id || 'guest'
     const myUsername = authStore.currentUser?.username || 'Player'
 
@@ -825,19 +825,8 @@ function handleMouseMove(e: MouseEvent) {
     const el = stratStore.boardElements.find(item => item.id === draggedElementId.value)
     if (el) {
       const coords = getMapCoords(e)
-      // If dragging C4 bomb, maintain plant zone constraint
-      if (el.type === 'c4_bomb') {
-        const siteA = mapStore.currentMap.sites?.a
-        const siteB = mapStore.currentMap.sites?.b
-        const distA = siteA ? Math.hypot(coords.x - siteA.x, coords.y - siteA.y) : 999
-        const distB = siteB ? Math.hypot(coords.x - siteB.x, coords.y - siteB.y) : 999
-        if (distA > 8 && distB > 8) {
-          return // do not drag outside plant zones
-        }
-      }
-
-      const targetX = Math.round(Math.max(3, Math.min(97, coords.x - dragOffset.value.x)) * 10) / 10
-      const targetY = Math.round(Math.max(3, Math.min(97, coords.y - dragOffset.value.y)) * 10) / 10
+      const targetX = Math.round(Math.max(0.5, Math.min(99.5, coords.x - dragOffset.value.x)) * 10) / 10
+      const targetY = Math.round(Math.max(0.5, Math.min(99.5, coords.y - dragOffset.value.y)) * 10) / 10
 
       if (el.points.length === 1) {
         el.points[0] = { x: targetX, y: targetY }
@@ -845,8 +834,8 @@ function handleMouseMove(e: MouseEvent) {
         const dx = targetX - el.points[0].x
         const dy = targetY - el.points[0].y
         el.points = el.points.map(pt => ({
-          x: Math.round(Math.max(3, Math.min(97, pt.x + dx)) * 10) / 10,
-          y: Math.round(Math.max(3, Math.min(97, pt.y + dy)) * 10) / 10
+          x: Math.round(Math.max(0.5, Math.min(99.5, pt.x + dx)) * 10) / 10,
+          y: Math.round(Math.max(0.5, Math.min(99.5, pt.y + dy)) * 10) / 10
         }))
       }
     }
@@ -1608,6 +1597,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   font-size="12"
                   text-anchor="middle"
                   class="select-none pointer-events-none"
+                  style="filter: grayscale(100%) brightness(1.25);"
                 >
                   ☁️
                 </text>
@@ -1623,6 +1613,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   font-size="12"
                   text-anchor="middle"
                   class="select-none pointer-events-none"
+                  style="filter: grayscale(100%) brightness(1.25);"
                 >
                   ⚡
                 </text>
@@ -1646,6 +1637,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   font-size="12"
                   text-anchor="middle"
                   class="select-none pointer-events-none"
+                  style="filter: grayscale(100%) brightness(1.25);"
                 >
                   🔥
                 </text>
@@ -1661,12 +1653,13 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   font-size="12"
                   text-anchor="middle"
                   class="select-none pointer-events-none"
+                  style="filter: grayscale(100%) brightness(1.25);"
                 >
                   🎯
                 </text>
               </g>
 
-              <!-- 9. C4 BOMB (PLANT ZONE ONLY, WITH USER BADGE) -->
+              <!-- 9. C4 BOMB (WITH USER BADGE) -->
               <g v-else-if="el.type === 'c4_bomb' || el.type === 'plant_a' || el.type === 'plant_b'">
                 <!-- Main Bomb Base -->
                 <rect
@@ -1686,6 +1679,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   font-size="14"
                   text-anchor="middle"
                   class="select-none pointer-events-none"
+                  style="filter: grayscale(100%) brightness(1.25);"
                 >
                   💣
                 </text>
