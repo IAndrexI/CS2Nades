@@ -1288,7 +1288,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
       </div>
       <button
         @click="authStore.isAuthModalOpen = true"
-        class="px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+        class="px-3.5 py-1.5 font-black text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 hover:opacity-90"
+        :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
       >
         <Sparkles class="w-3.5 h-3.5" />
         <span>Sign In for Full Access</span>
@@ -2171,8 +2172,9 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
               @click="rightSidebarTab = 'public_chat'"
               :class="[
                 'flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
-                rightSidebarTab === 'public_chat' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+                rightSidebarTab === 'public_chat' ? 'font-black shadow' : 'text-slate-400 hover:text-white'
               ]"
+              :style="rightSidebarTab === 'public_chat' ? { backgroundColor: themeStore.customAccentColor, color: '#020617' } : {}"
             >
               <MessageSquare class="w-3.5 h-3.5" />
               <span>Room Chat</span>
@@ -2182,8 +2184,9 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
               @click="rightSidebarTab = 'private_chat'"
               :class="[
                 'flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
-                rightSidebarTab === 'private_chat' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+                rightSidebarTab === 'private_chat' ? 'font-black shadow' : 'text-slate-400 hover:text-white'
               ]"
+              :style="rightSidebarTab === 'private_chat' ? { backgroundColor: themeStore.customAccentColor, color: '#020617' } : {}"
             >
               <MessageSquare class="w-3.5 h-3.5" />
               <span>Messages</span>
@@ -2193,8 +2196,9 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
               @click="rightSidebarTab = 'players'"
               :class="[
                 'flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
-                rightSidebarTab === 'players' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+                rightSidebarTab === 'players' ? 'font-black shadow' : 'text-slate-400 hover:text-white'
               ]"
+              :style="rightSidebarTab === 'players' ? { backgroundColor: themeStore.customAccentColor, color: '#020617' } : {}"
             >
               <Users class="w-3.5 h-3.5" />
               <span>Players ({{ gameRoomStore.members.length }})</span>
@@ -2245,7 +2249,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
             <button
               type="submit"
               :disabled="!roomChatInput.trim()"
-              class="p-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-30 text-slate-950 font-black rounded-xl cursor-pointer"
+              class="p-2 disabled:opacity-30 font-black rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
+              :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
             >
               <Send class="w-4 h-4" />
             </button>
@@ -2260,7 +2265,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
             <span class="text-[11px] text-slate-400">Select a player from the Players tab to start a direct message.</span>
             <button
               @click="rightSidebarTab = 'players'"
-              class="px-4 py-2 bg-amber-500 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow"
+              class="px-4 py-2 font-black rounded-xl text-xs cursor-pointer shadow hover:opacity-90 transition-opacity"
+              :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
             >
               Choose Player
             </button>
@@ -2317,7 +2323,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
               <button
                 type="submit"
                 :disabled="!privateChatInput.trim()"
-                class="p-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-30 text-slate-950 font-black rounded-xl cursor-pointer"
+                class="p-2 disabled:opacity-30 font-black rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
+                :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
               >
                 <Send class="w-4 h-4" />
               </button>
@@ -2436,7 +2443,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
               />
               <button
                 @click="handleAddCustomPin"
-                class="px-3 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl cursor-pointer flex items-center justify-center gap-1.5 shadow"
+                class="px-3 py-2 font-black rounded-xl cursor-pointer flex items-center justify-center gap-1.5 shadow hover:opacity-90 transition-opacity"
+                :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
               >
                 <Plus class="w-4 h-4" />
                 <span>Add Pin</span>
@@ -2467,7 +2475,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
         <div class="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-end">
           <button
             @click="isCustomizeToolbarOpen = false"
-            class="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow"
+            class="px-5 py-2 font-black rounded-xl text-xs cursor-pointer shadow hover:opacity-90 transition-opacity"
+            :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
           >
             Save & Close
           </button>
@@ -2498,7 +2507,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
               v-for="s in [10, 12, 14, 16]"
               :key="s"
               @click="customFontSize = s"
-              :class="['px-2 py-0.5 rounded text-[10px] font-bold', customFontSize === s ? 'bg-amber-500 text-slate-950' : 'bg-slate-950 text-slate-400']"
+              :class="['px-2 py-0.5 rounded text-[10px] font-bold', customFontSize === s ? 'text-slate-950' : 'bg-slate-950 text-slate-400']"
+              :style="customFontSize === s ? { backgroundColor: themeStore.customAccentColor, color: '#020617' } : {}"
             >
               {{ s }}px
             </button>
@@ -2513,7 +2523,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           </button>
           <button
             @click="handleConfirmText"
-            class="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-xs cursor-pointer shadow"
+            class="px-4 py-1.5 font-black rounded-lg text-xs cursor-pointer shadow hover:opacity-90 transition-opacity"
+            :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
           >
             Place Note
           </button>
@@ -2561,7 +2572,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           <button
             @click="joinTacticalRoom(newRoomInput)"
             :disabled="!newRoomInput.trim()"
-            class="px-5 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 disabled:opacity-40 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow-lg"
+            class="px-5 py-2 disabled:opacity-40 font-black rounded-xl text-xs cursor-pointer shadow-lg hover:opacity-90 transition-opacity"
+            :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
           >
             Connect Room
           </button>

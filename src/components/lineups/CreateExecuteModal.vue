@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useMapStore } from '../../stores/mapStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useThemeStore } from '../../stores/themeStore'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { TeamSide } from '../../types'
 import { 
@@ -18,6 +19,7 @@ import {
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
 
 const formData = reactive({
   title: '',
@@ -249,7 +251,8 @@ function handleSave() {
 
         <button
           @click="handleSave"
-          class="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer flex items-center gap-2"
+          class="px-5 py-2.5 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer flex items-center gap-2 hover:opacity-90"
+          :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
         >
           <Sparkles class="w-4 h-4" />
           <span>Save &amp; View Execute</span>

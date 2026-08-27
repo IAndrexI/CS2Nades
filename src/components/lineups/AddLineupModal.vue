@@ -3,6 +3,7 @@ import { ref, reactive, watch } from 'vue'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useMapStore } from '../../stores/mapStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useThemeStore } from '../../stores/themeStore'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { GrenadeType, TeamSide, ThrowType, TickrateType } from '../../types'
 import { 
@@ -21,6 +22,7 @@ import {
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
 
 const formData = reactive({
   title: '',
@@ -411,7 +413,8 @@ function resetForm() {
           <button 
             type="button"
             @click="handleSave"
-            class="flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+            class="flex items-center gap-1.5 px-5 py-2 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer hover:opacity-90"
+            :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
           >
             <Check class="w-4 h-4 stroke-[3]" />
             <span>Save Lineup</span>

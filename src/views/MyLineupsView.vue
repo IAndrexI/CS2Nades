@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useAuthStore } from '../stores/authStore'
 import { useLineupStore } from '../stores/lineupStore'
 import { useMapStore } from '../stores/mapStore'
+import { useThemeStore } from '../stores/themeStore'
 import LineupCard from '../components/lineups/LineupCard.vue'
 import LineupModal from '../components/lineups/LineupModal.vue'
 import AddLineupModal from '../components/lineups/AddLineupModal.vue'
@@ -13,7 +14,7 @@ import {
   Heart, 
   Lock, 
   Share2, 
-  Search,
+  Search, 
   BookMarked,
   Trash2
 } from 'lucide-vue-next'
@@ -21,6 +22,7 @@ import {
 const authStore = useAuthStore()
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
+const themeStore = useThemeStore()
 
 const searchQuery = ref('')
 const selectedMapFilter = ref('all')
@@ -132,7 +134,8 @@ async function handleClearAll() {
 
         <button
           @click="lineupStore.isAddModalOpen = true"
-          class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+          class="flex items-center gap-1.5 px-4 py-2 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer hover:opacity-90"
+          :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
         >
           <Plus class="w-4 h-4 stroke-[3]" />
           <span>Create My Lineup</span>
@@ -256,7 +259,8 @@ async function handleClearAll() {
       </p>
       <button 
         @click="lineupStore.isAddModalOpen = true"
-        class="px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 text-xs font-black rounded-xl shadow-md hover:from-amber-500 cursor-pointer"
+        class="px-4 py-2 font-black rounded-xl shadow-md text-xs cursor-pointer hover:opacity-90 transition-opacity"
+        :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
       >
         Create First Lineup
       </button>

@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useStratStore } from '../stores/stratStore'
 import { useMapStore } from '../stores/mapStore'
+import { useThemeStore } from '../stores/themeStore'
 import StratCard from '../components/strats/StratCard.vue'
 import StratModal from '../components/strats/StratModal.vue'
 import LineupModal from '../components/lineups/LineupModal.vue'
@@ -9,6 +10,7 @@ import { Plus, BookOpen, Shield, Users, Search } from 'lucide-vue-next'
 
 const stratStore = useStratStore()
 const mapStore = useMapStore()
+const themeStore = useThemeStore()
 
 const searchQuery = ref('')
 const selectedSide = ref<'all' | 't' | 'ct'>('all')
@@ -116,7 +118,8 @@ function handleCreateStrat() {
         <!-- NEW STRAT BUTTON -->
         <button
           @click="isCreateModalOpen = true"
-          class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+          class="flex items-center gap-1.5 px-4 py-2 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer hover:opacity-90"
+          :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
         >
           <Plus class="w-4 h-4 stroke-[3]" />
           <span>New Strat</span>
@@ -200,7 +203,8 @@ function handleCreateStrat() {
           </button>
           <button 
             @click="handleCreateStrat" 
-            class="px-5 py-2 bg-amber-500 text-slate-950 rounded-xl font-black hover:bg-amber-400 cursor-pointer"
+            class="px-5 py-2 font-black rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
+            :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
           >
             Create
           </button>
