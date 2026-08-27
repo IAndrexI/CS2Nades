@@ -23,13 +23,19 @@ const filteredMaps = computed(() => {
   return mapStore.availableMaps
 })
 
+const props = defineProps<{
+  customHandler?: boolean
+}>()
+
 const emit = defineEmits<{
   (e: 'select', mapId: string): void
 }>()
 
 function handleSelectMap(mapId: string) {
-  mapStore.setMap(mapId)
   emit('select', mapId)
+  if (!props.customHandler) {
+    mapStore.setMap(mapId)
+  }
 }
 
 const activeCount = computed(() => mapStore.availableMaps.filter(m => m.activePool).length)

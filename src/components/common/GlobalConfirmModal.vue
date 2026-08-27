@@ -1,8 +1,10 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
+import { useThemeStore } from '../../stores/themeStore'
 import { AlertTriangle, Trash2, HelpCircle } from 'lucide-vue-next'
 
 const { isOpen, dialogOptions, handleConfirm, handleCancel } = useConfirmDialog()
+const themeStore = useThemeStore()
 </script>
 
 <template>
@@ -47,8 +49,9 @@ const { isOpen, dialogOptions, handleConfirm, handleCancel } = useConfirmDialog(
               'flex-1 py-2.5 font-black rounded-xl text-xs transition-all shadow-lg cursor-pointer hover:scale-[1.02]',
               dialogOptions.isDestructive
                 ? 'bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white'
-                : 'bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 font-black'
+                : 'text-slate-950 font-black hover:opacity-90'
             ]"
+            :style="!dialogOptions.isDestructive ? { backgroundColor: themeStore.customAccentColor, color: '#020617' } : {}"
           >
             {{ dialogOptions.confirmLabel }}
           </button>

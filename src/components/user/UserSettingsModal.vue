@@ -293,7 +293,7 @@ async function handleExportZipData() {
   <Teleport to="body">
     <div
       v-if="isOpen"
-      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-fade-in"
+      class="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-fade-in"
       @click.self="emit('close')"
     >
       <div 
@@ -826,7 +826,7 @@ async function handleExportZipData() {
     <!-- DELETE CONFIRM MODAL -->
     <div
       v-if="isDeleteModalOpen"
-      class="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+      class="fixed inset-0 z-[999999] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
     >
       <div class="w-full max-w-md bg-slate-900 border border-rose-500/50 rounded-2xl p-6 shadow-2xl flex flex-col gap-4">
         <h3 class="text-base font-black text-rose-400 uppercase">Confirm Delete</h3>

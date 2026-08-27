@@ -2597,7 +2597,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           <div class="flex flex-col gap-2.5 w-full pt-1">
             <button
               @click="pendingTargetMapId && executeMapSwitch(pendingTargetMapId, true)"
-              class="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2"
+              class="w-full py-3 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2 hover:opacity-90"
+              :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
             >
               <Save class="w-4 h-4" />
               <span>Temp Save Board & Switch</span>
@@ -2626,7 +2627,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
     <Teleport to="body">
       <div
         v-if="isServerSaveModalOpen"
-        class="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center animate-fade-in"
+        class="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center animate-fade-in"
         @click.self="isServerSaveModalOpen = false"
       >
         <div class="relative w-full max-w-xl bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl flex flex-col gap-5">
@@ -2670,7 +2671,8 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
               <button
                 @click="handleSaveTacticsToServer"
                 :disabled="isSavingToServer || stratStore.boardElements.length === 0"
-                class="px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap"
+                class="px-4 py-2 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap hover:opacity-90"
+                :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
               >
                 <Save class="w-3.5 h-3.5" />
                 <span>{{ isSavingToServer ? 'Saving...' : 'Save to Cloud' }}</span>

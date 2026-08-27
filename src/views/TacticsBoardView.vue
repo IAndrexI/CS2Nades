@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useMapStore } from '../stores/mapStore'
 import { useStratStore } from '../stores/stratStore'
 import { useGameRoomStore } from '../stores/gameRoomStore'
+import { useThemeStore } from '../stores/themeStore'
 import MapSelectorSidebar from '../components/map/MapSelectorSidebar.vue'
 import TacticsBoard from '../components/tactics/TacticsBoard.vue'
 import MapSettingsModal from '../components/map/MapSettingsModal.vue'
@@ -11,6 +12,7 @@ import { AlertTriangle, Save, Trash2, X, ArrowRight, Sparkles } from 'lucide-vue
 const mapStore = useMapStore()
 const stratStore = useStratStore()
 const gameRoomStore = useGameRoomStore()
+const themeStore = useThemeStore()
 
 const isMapSwitchWarnModalOpen = ref(false)
 const pendingTargetMapId = ref<string | null>(null)
@@ -47,7 +49,7 @@ function executeMapSwitch(targetMapId: string, shouldTempSaveCurrent: boolean) {
   <div class="tactics-view flex flex-col lg:flex-row gap-6 max-w-[1650px] mx-auto px-4 sm:px-6 py-6 animate-fade-in">
     <!-- LEFT SIDE: MAP SELECTION SIDEBAR (MATCHING LINEUPS) -->
     <div class="w-full lg:w-60 xl:w-64 flex-shrink-0">
-      <MapSelectorSidebar @select="handleMapSelect" />
+      <MapSelectorSidebar :custom-handler="true" @select="handleMapSelect" />
     </div>
 
     <!-- RIGHT SIDE / MAIN CONTENT: TACTICS BOARD CANVAS & TOOLBAR -->
@@ -65,7 +67,7 @@ function executeMapSwitch(targetMapId: string, shouldTempSaveCurrent: boolean) {
     <Teleport to="body">
       <div
         v-if="isMapSwitchWarnModalOpen"
-        class="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center animate-fade-in"
+        class="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center animate-fade-in"
         @click.self="isMapSwitchWarnModalOpen = false"
       >
         <div class="relative w-full max-w-md bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl flex flex-col gap-5 text-center items-center">
@@ -92,7 +94,8 @@ function executeMapSwitch(targetMapId: string, shouldTempSaveCurrent: boolean) {
             <!-- OPTION 1: TEMP SAVE & SWITCH -->
             <button
               @click="pendingTargetMapId && executeMapSwitch(pendingTargetMapId, true)"
-              class="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2"
+              class="w-full py-3 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2 hover:opacity-90"
+              :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
             >
               <Save class="w-4 h-4" />
               <span>Temp Save Board & Switch</span>
