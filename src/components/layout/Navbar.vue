@@ -14,7 +14,6 @@ import LineupConflictModal from '../lineups/LineupConflictModal.vue'
 import UserSettingsModal from '../user/UserSettingsModal.vue'
 import DirectMessagesModal from '../user/DirectMessagesModal.vue'
 import PeopleAndGroupsModal from '../user/PeopleAndGroupsModal.vue'
-import CS2ServerConnectModal from '../lineups/CS2ServerConnectModal.vue'
 
 import { 
   Crosshair, 
@@ -61,7 +60,6 @@ const isMobileMenuOpen = ref(false)
 const isUserSettingsOpen = ref(false)
 const isDirectMessagesOpen = ref(false)
 const isPeopleGroupsOpen = ref(false)
-const isCs2ServerOpen = ref(false)
 const directMessageTargetId = ref<string | undefined>(undefined)
 
 function openDirectMessageWith(userId: string) {
@@ -339,18 +337,8 @@ onUnmounted(() => {
         </router-link>
       </nav>
 
-      <!-- RIGHT ACTIONS: CS2 CONNECT, PEOPLE & GROUPS, DISCORD, USER PROFILE, NEW NADE -->
+      <!-- RIGHT ACTIONS: PEOPLE & GROUPS, DISCORD, USER PROFILE, NEW NADE -->
       <div class="flex items-center gap-1.5 sm:gap-2">
-        <!-- DEDICATED SERVER CONNECT -->
-        <button
-          @click="isCs2ServerOpen = true"
-          class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-amber-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-          title="Connect to CS2 Server to directly create lineups"
-        >
-          <Gamepad2 class="w-3.5 h-3.5" />
-          <span class="hidden md:inline">Server</span>
-        </button>
-
         <!-- PEOPLE & SQUAD GROUPS (ICON ONLY WITH UNREAD NOTIFICATION BADGE) -->
         <button
           @click="isPeopleGroupsOpen = true; unreadMessageCount = 0"
@@ -622,10 +610,6 @@ onUnmounted(() => {
       @close="isPeopleGroupsOpen = false"
       @open-dm="openDirectMessageWith"
       @join-room="handleJoinRoomFromPeople"
-    />
-    <CS2ServerConnectModal
-      :is-open="isCs2ServerOpen"
-      @close="isCs2ServerOpen = false"
     />
     <LineupConflictModal />
   </header>

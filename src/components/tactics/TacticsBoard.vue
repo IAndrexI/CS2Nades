@@ -53,7 +53,6 @@ import {
   CloudUpload
 } from 'lucide-vue-next'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
-import CS2ServerConnectModal from '../lineups/CS2ServerConnectModal.vue'
 
 const mapStore = useMapStore()
 const stratStore = useStratStore()
@@ -208,7 +207,6 @@ async function sendPrivateMessage() {
   }
 }
 
-const isCs2ServerModalOpen = ref(false)
 const actionStatusToast = ref('')
 const tempSaveToast = actionStatusToast
 
@@ -1389,16 +1387,6 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
         >
           <UserX class="w-3.5 h-3.5" />
           <span>{{ authStore.isGuestPreviewMode ? 'Guest Mode: Active' : 'Guest Mode' }}</span>
-        </button>
-
-        <!-- DIRECT SERVER CONNECT -->
-        <button
-          @click="isCs2ServerModalOpen = true"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 border border-slate-800 hover:border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
-          title="Connect to CS2 Practice Server via RCON to capture live in-game lineups"
-        >
-          <Gamepad2 class="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
-          <span>Server</span>
         </button>
 
         <!-- AUTO-SYNC STATUS BADGE & FORCE SYNC TRIGGER -->
@@ -2692,12 +2680,6 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
         </div>
       </div>
     </Teleport>
-
-    <!-- CS2 DEDICATED SERVER CONNECT MODAL -->
-    <CS2ServerConnectModal
-      :is-open="isCs2ServerModalOpen"
-      @close="isCs2ServerModalOpen = false"
-    />
 
     <!-- MODAL 5: CENTERED MAP SWITCH & OPTIONS DIALOG -->
     <Teleport to="body">
