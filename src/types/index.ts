@@ -208,6 +208,9 @@ export interface UserProfile {
   steamId?: string
   username: string
   email?: string
+  emailVerified?: boolean
+  isGuest?: boolean
+  hasFullAccess?: boolean
   role: 'admin' | 'coach' | 'player' | 'guest'
   inGameRole?: string
   avatar?: string

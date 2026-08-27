@@ -34,6 +34,18 @@ export const useAuthStore = defineStore('auth', () => {
     return isActualAdmin.value
   })
 
+  const isLimitedGuest = computed(() => {
+    if (!currentUser.value) return true
+    if (currentUser.value.role === 'admin' || currentUser.value.username?.toLowerCase() === 'andrex') return false
+    if (currentUser.value.role === 'guest') return true
+    // Full access requires Steam login or verified email address
+    if (currentUser.value.steamId) return false
+    if (currentUser.value.email && currentUser.value.email.includes('@')) return false
+    return true
+  })
+
+  const hasFullAccess = computed(() => !isLimitedGuest.value)
+
   function toggleUserPreviewMode() {
     isUserPreviewMode.value = !isUserPreviewMode.value
   }
@@ -304,10 +316,30 @@ export const useAuthStore = defineStore('auth', () => {
     return !!currentUser.value?.following?.includes(targetUserId)
   }
 
+  async function continueAsGuest(customName?: string): Promise<void> {
+    const randId = Math.floor(1000 + Math.random() * 9000)
+    const guestUser: UserProfile = {
+      id: `usr-guest-${Date.now()}`,
+      username: customName || `Guest_${randId}`,
+      role: 'guest',
+      inGameRole: 'Guest',
+      isGuest: true,
+      hasFullAccess: false,
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=guest-${randId}`,
+      createdAt: new Date().toISOString()
+    }
+    setAuthToken('guest-token')
+    currentUser.value = guestUser
+    localStorage.setItem(USER_KEY, JSON.stringify(guestUser))
+    isAuthModalOpen.value = false
+  }
+
   return {
     currentUser,
     token,
     isAuthenticated,
+    isLimitedGuest,
+    hasFullAccess,
     isAdmin,
     isActualAdmin,
     isUserPreviewMode,
@@ -324,6 +356,7 @@ export const useAuthStore = defineStore('auth', () => {
     userThemeColor,
     login,
     register,
+    continueAsGuest,
     loginWithSteamProfile,
     loginWithSteamOpenId,
     logout,

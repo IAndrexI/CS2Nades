@@ -72,6 +72,23 @@ function handleJoinRoomFromPeople(roomCode: string, isGhost = false) {
   router.push(`/tactics?room=${roomCode}`)
 }
 
+function handleNavClick(e: MouseEvent, path: string) {
+  if (path === '/tactics' && authStore.isLimitedGuest) {
+    e.preventDefault()
+    authStore.authError = 'Limited Guest Mode: Live Tactics requires an account with Email or Steam.'
+    authStore.isAuthModalOpen = true
+  }
+}
+
+function handleNewNadeClick() {
+  if (authStore.isLimitedGuest) {
+    authStore.authError = 'Limited Guest Mode: Creating and saving custom lineups requires an account with Email or Steam.'
+    authStore.isAuthModalOpen = true
+    return
+  }
+  lineupStore.isAddModalOpen = true
+}
+
 const customRoleInput = ref('')
 
 const navLinks = [
@@ -273,6 +290,7 @@ onUnmounted(() => {
           v-for="link in navLinks"
           :key="link.path"
           :to="link.path"
+          @click="handleNavClick($event, link.path)"
           :class="[
             'flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap',
             route.path === link.path 
@@ -476,7 +494,7 @@ onUnmounted(() => {
 
         <!-- NEW NADE BUTTON -->
         <button
-          @click="lineupStore.isAddModalOpen = true"
+          @click="handleNewNadeClick"
           class="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 font-black text-slate-950 text-xs rounded-xl shadow-lg transition-all cursor-pointer"
           :style="{ backgroundColor: themeStore.customAccentColor }"
         >

@@ -4,6 +4,7 @@ import { useMapStore } from '../../stores/mapStore'
 import { useStratStore } from '../../stores/stratStore'
 import { useGameRoomStore } from '../../stores/gameRoomStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useThemeStore } from '../../stores/themeStore'
 import VectorMapBlueprint from '../map/VectorMapBlueprint.vue'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { TacticsElement, TacticsElementType, DirectMessage } from '../../types'
@@ -52,6 +53,7 @@ const mapStore = useMapStore()
 const stratStore = useStratStore()
 const gameRoomStore = useGameRoomStore()
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
 const { confirmAction } = useConfirmDialog()
 
 const isTacticsMapDropdownOpen = ref(false)
@@ -1029,6 +1031,51 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
 
 <template>
   <div class="tactics-board-container flex flex-col gap-4">
+    <!-- LIMITED GUEST MODE LOCK OVERLAY -->
+    <div 
+      v-if="authStore.isLimitedGuest"
+      class="fixed inset-0 z-[9990] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in text-center"
+    >
+      <div 
+        class="max-w-md w-full p-6 sm:p-8 bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl flex flex-col items-center gap-4"
+        :style="{ backgroundColor: themeStore.customModalBgColor }"
+      >
+        <div class="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+          <Lock class="w-8 h-8 stroke-[2.5]" />
+        </div>
+        <div>
+          <h2 class="text-lg font-black uppercase text-white tracking-wide">Live Tactics Locked</h2>
+          <p class="text-xs text-slate-300 mt-2 leading-relaxed">
+            You are currently in <strong class="text-amber-400">Limited Guest Mode</strong>. Real-time collaborative tactical drawing and live squad rooms require an account verified with <strong class="text-white">Email</strong> or <strong class="text-white">Steam</strong>.
+          </p>
+          <div class="mt-3 p-3 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] text-slate-400 text-left flex flex-col gap-1.5">
+            <div class="flex items-center gap-2 text-emerald-400 font-bold">
+              <span>✓</span> <span>Visual Lineup Library & Minimap radar: Available</span>
+            </div>
+            <div class="flex items-center gap-2 text-rose-400 font-bold">
+              <span>✕</span> <span>Live Tactics Board & custom strat saving: Locked</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center gap-3 w-full mt-2">
+          <button
+            @click="authStore.isAuthModalOpen = true"
+            class="w-full py-3 px-4 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+          >
+            <Sparkles class="w-4 h-4" />
+            <span>Sign In / Register</span>
+          </button>
+          <router-link
+            to="/"
+            class="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 font-bold text-xs rounded-xl transition-all text-center"
+          >
+            Explore Lineups
+          </router-link>
+        </div>
+      </div>
+    </div>
+
     <!-- TOP BAR: ROOM STATUS, 1-CLICK COPY ID, SHARE LINK & HOST PERMISSIONS -->
     <div class="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl">
       <!-- ROOM BADGE & 1-CLICK COPY CODE -->

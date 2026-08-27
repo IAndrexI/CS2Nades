@@ -425,10 +425,32 @@ app.get('/api/auth/steam/callback', async (req, res) => {
 
 app.post('/api/auth/register', (req, res) => {
   db = loadDB()
-  const { username, email, password, inGameRole } = req.body
+  const { username, email, password, inGameRole, isGuestMode } = req.body
+
+  if (isGuestMode) {
+    // Limited guest session
+    const guestUser = {
+      id: `usr-guest-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      username: username || `Guest_${Math.floor(1000 + Math.random() * 9000)}`,
+      email: '',
+      emailVerified: false,
+      role: 'guest',
+      inGameRole: inGameRole || 'Guest',
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=guest-${Date.now()}`,
+      isGuest: true,
+      hasFullAccess: false,
+      createdAt: new Date().toISOString()
+    }
+    const token = jwt.sign({ id: guestUser.id, username: guestUser.username, role: 'guest' }, JWT_SECRET, { expiresIn: '7d' })
+    return res.json({ token, user: guestUser })
+  }
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' })
+  }
+
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'A valid email address is required for registration' })
   }
 
   if (!db.settings.allowRegistration && db.users.length > 0) {
@@ -440,12 +462,20 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(400).json({ error: 'Username is already taken' })
   }
 
+  const existingEmail = db.users.find(u => u.email && u.email.toLowerCase() === email.toLowerCase())
+  if (existingEmail) {
+    return res.status(400).json({ error: 'Email is already registered' })
+  }
+
   const role = db.users.length === 0 ? 'admin' : 'player'
   const salt = bcrypt.genSaltSync(10)
   const newUser = {
     id: `usr-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     username,
-    email: email || '',
+    email: email.trim(),
+    emailVerified: true,
+    hasFullAccess: true,
+    isGuest: false,
     passwordHash: bcrypt.hashSync(password, salt),
     role,
     inGameRole: inGameRole || 'Entry',
@@ -470,20 +500,21 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(400).json({ error: 'Username and password required' })
   }
 
-  const user = db.users.find(u => u.username.toLowerCase() === username.toLowerCase())
+  const user = db.users.find(u => u.username.toLowerCase() === username.toLowerCase() || (u.email && u.email.toLowerCase() === username.toLowerCase()))
   if (!user) {
-    return res.status(401).json({ error: 'Invalid username or password' })
+    return res.status(401).json({ error: 'Invalid username/email or password' })
   }
 
   const validPassword = bcrypt.compareSync(password, user.passwordHash)
   if (!validPassword) {
-    return res.status(401).json({ error: 'Invalid username or password' })
+    return res.status(401).json({ error: 'Invalid username/email or password' })
   }
 
+  const hasFullAccess = user.role === 'admin' || !!user.steamId || !!user.email
   const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '30d' })
   const { passwordHash, ...userSafe } = user
 
-  res.json({ token, user: userSafe })
+  res.json({ token, user: { ...userSafe, hasFullAccess, emailVerified: !!user.email || !!user.steamId || user.role === 'admin' } })
 })
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
@@ -492,8 +523,9 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   if (!user) {
     return res.status(404).json({ error: 'User not found' })
   }
+  const hasFullAccess = user.role === 'admin' || !!user.steamId || !!user.email
   const { passwordHash, ...userSafe } = user
-  res.json({ user: userSafe })
+  res.json({ user: { ...userSafe, hasFullAccess, emailVerified: !!user.email || !!user.steamId || user.role === 'admin' } })
 })
 
 app.put('/api/auth/profile', requireAuth, (req, res) => {
@@ -916,7 +948,31 @@ app.post('/api/groups/:id/messages', requireAuth, (req, res) => {
 // ==========================================
 app.get('/api/admin/users', requireAdmin, (req, res) => {
   db = loadDB()
-  const usersSafe = db.users.map(({ passwordHash, ...u }) => u)
+  const usersSafe = (db.users || []).map(({ passwordHash, ...u }) => {
+    const key = (u.username || '').toLowerCase()
+    const presence = userPresence.get(key)
+    let status = 'offline'
+    let lastSeen = null
+    if (presence) {
+      status = presence.status || 'offline'
+      lastSeen = presence.lastSeen || null
+    }
+    // Andrex and chips default status if active
+    if (status === 'offline' && (key === 'andrex' || key === 'chips')) {
+      status = 'online'
+      lastSeen = Date.now()
+    }
+    const hasFullAccess = u.role === 'admin' || !!u.steamId || !!u.email
+    return {
+      ...u,
+      status,
+      lastSeen,
+      emailVerified: !!u.email || !!u.steamId || u.role === 'admin',
+      hasFullAccess,
+      isGuest: u.role === 'guest' || !hasFullAccess,
+      lineupsCount: (db.lineups || []).filter(l => l.userId === u.id).length
+    }
+  })
   res.json(usersSafe)
 })
 

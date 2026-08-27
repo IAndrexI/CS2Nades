@@ -223,16 +223,23 @@ async function handleQuickGuest() {
           </div>
 
           <div v-if="authStore.authMode === 'register'" class="flex flex-col gap-1.5">
-            <label class="font-bold text-slate-300">Email (Optional)</label>
+            <div class="flex items-center justify-between">
+              <label class="font-bold text-slate-300">Email Address (Required for Verification)</label>
+              <span class="text-[10px] text-amber-400 font-mono">Full Access</span>
+            </div>
             <div class="relative">
               <Mail class="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input 
                 v-model="credentialsForm.email" 
                 type="email" 
+                required
                 placeholder="player@team.com"
                 class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
               />
             </div>
+            <span class="text-[10px] text-slate-400">
+              Entering a valid email gives you Full Access to create and save custom lineups & live tactics.
+            </span>
           </div>
 
           <div class="flex flex-col gap-1.5">
@@ -283,7 +290,7 @@ async function handleQuickGuest() {
           >
             <LogIn v-if="authStore.authMode === 'login'" class="w-4 h-4 stroke-[3]" />
             <UserPlus v-else class="w-4 h-4 stroke-[3]" />
-            <span>{{ authStore.authMode === 'login' ? 'Sign In' : 'Register' }}</span>
+            <span>{{ authStore.authMode === 'login' ? 'Sign In' : 'Register (Full Access)' }}</span>
           </button>
 
           <div class="text-center pt-2 border-t border-slate-800 text-slate-400 text-[11px]">
@@ -307,6 +314,27 @@ async function handleQuickGuest() {
                 Sign In
               </button>
             </span>
+          </div>
+
+          <!-- LIMITED GUEST MODE SEPARATOR & BUTTON -->
+          <div class="flex flex-col gap-2 pt-2 border-t border-slate-800/80">
+            <div class="flex items-center gap-3">
+              <div class="flex-grow h-px bg-slate-800"></div>
+              <span class="text-[9px] uppercase font-mono text-slate-500 font-bold">Or Explore Without Account</span>
+              <div class="flex-grow h-px bg-slate-800"></div>
+            </div>
+
+            <button
+              type="button"
+              @click="authStore.continueAsGuest()"
+              class="w-full py-2 px-3 bg-slate-950 hover:bg-slate-850 text-slate-400 hover:text-white border border-slate-800 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <User class="w-3.5 h-3.5" />
+              <span>Continue as Guest (Limited Access — Visual Only)</span>
+            </button>
+            <p class="text-[10px] text-slate-500 text-center leading-tight">
+              Guest mode allows visual viewing of grenade lineups and minimap radar. Live Tactics and saving are disabled.
+            </p>
           </div>
         </form>
       </div>
