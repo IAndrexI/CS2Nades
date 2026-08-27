@@ -1269,6 +1269,55 @@ app.delete('/api/strats/:id', requireAuth, (req, res) => {
 })
 
 // ==========================================
+// TACTICAL BOARDS SERVER STORAGE & BACKUP
+// ==========================================
+app.get('/api/tactics/server/:mapId', (req, res) => {
+  db = loadDB()
+  const { mapId } = req.params
+  const allTactics = db.tactics || []
+  const filtered = mapId === 'all' ? allTactics : allTactics.filter(t => t.mapId === mapId)
+  res.json(filtered)
+})
+
+app.post('/api/tactics/save-server', requireAuth, (req, res) => {
+  db = loadDB()
+  const { title, mapId, elements, description } = req.body
+  if (!mapId || !elements) return res.status(400).json({ error: 'Missing mapId or elements' })
+
+  const tactic = {
+    id: `tac-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    title: title || `${mapId.toUpperCase()} Strategy ${new Date().toLocaleDateString()}`,
+    description: description || '',
+    mapId,
+    elements,
+    userId: req.user.id,
+    authorName: req.user.username,
+    createdAt: new Date().toISOString()
+  }
+
+  if (!db.tactics) db.tactics = []
+  db.tactics.push(tactic)
+  saveDB(db)
+  res.json(tactic)
+})
+
+app.delete('/api/tactics/server/:id', requireAuth, (req, res) => {
+  db = loadDB()
+  const { id } = req.params
+  if (!db.tactics) db.tactics = []
+  const idx = db.tactics.findIndex(t => t.id === id)
+  if (idx === -1) return res.status(404).json({ error: 'Tactic not found' })
+
+  if (db.tactics[idx].userId !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Permission denied to delete this tactic' })
+  }
+
+  db.tactics.splice(idx, 1)
+  saveDB(db)
+  res.json({ success: true })
+})
+
+// ==========================================
 // CS2 RADAR WORLD-TO-MAP COORDINATES CONVERTER
 // ==========================================
 const CS2_RADAR_CONFIGS = {

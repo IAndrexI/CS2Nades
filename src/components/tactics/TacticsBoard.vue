@@ -45,7 +45,12 @@ import {
   Send,
   Lock,
   ChevronDown,
-  UserX
+  UserX,
+  Download,
+  Upload,
+  HardDrive,
+  FileJson,
+  CloudUpload
 } from 'lucide-vue-next'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
 import CS2ServerConnectModal from '../lineups/CS2ServerConnectModal.vue'
@@ -75,6 +80,15 @@ function handleMapSelect(newMapId: string) {
     isTacticsMapDropdownOpen.value = false
     return
   }
+  isTacticsMapDropdownOpen.value = false
+
+  // If there are active markings or elements, prompt user: Save or Reset/Fresh
+  if (stratStore.boardElements.length > 0) {
+    pendingTargetMapId.value = newMapId
+    isMapSwitchWarnModalOpen.value = true
+    return
+  }
+
   executeMapSwitch(newMapId, false)
 }
 
@@ -202,6 +216,152 @@ function handleRestoreTempSavedBoard() {
   stratStore.restoreTempBoard(mapStore.currentMapId)
   tempSaveToast.value = `Restored saved board!`
   setTimeout(() => { tempSaveToast.value = '' }, 2500)
+}
+
+// LOCAL EXPORT & IMPORT (JSON FILES)
+const importFileInputRef = ref<HTMLInputElement | null>(null)
+
+function handleExportTacticsLocal() {
+  const data = {
+    version: '1.0',
+    app: 'Protutech CS2 Tactics',
+    mapId: mapStore.currentMapId,
+    mapName: mapStore.currentMap?.name || mapStore.currentMapId,
+    exportedAt: new Date().toISOString(),
+    elements: stratStore.boardElements,
+    author: authStore.currentUser?.username || 'Player'
+  }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `cs2_tactics_${mapStore.currentMapId}_${Date.now()}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+  tempSaveToast.value = 'Tactics JSON Exported Locally!'
+  setTimeout(() => { tempSaveToast.value = '' }, 3000)
+}
+
+function triggerImportFileDialog() {
+  if (importFileInputRef.value) {
+    importFileInputRef.value.click()
+  }
+}
+
+function handleImportTacticsLocal(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (!input.files || input.files.length === 0) return
+  const file = input.files[0]
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target?.result as string)
+      const elements = parsed.elements || (Array.isArray(parsed) ? parsed : null)
+      if (elements && Array.isArray(elements)) {
+        if (parsed.mapId && parsed.mapId !== mapStore.currentMapId) {
+          mapStore.setMap(parsed.mapId)
+        }
+        stratStore.boardElements = elements
+        stratStore.mapElements[mapStore.currentMapId] = elements
+        
+        // Broadcast imported board to room
+        const socket = gameRoomStore.getSocket()
+        if (socket && socket.connected) {
+          socket.emit('room:switch_map', {
+            mapId: mapStore.currentMapId,
+            elements: elements
+          })
+        }
+        tempSaveToast.value = `Imported ${elements.length} markings successfully!`
+        setTimeout(() => { tempSaveToast.value = '' }, 3000)
+      } else {
+        alert('Invalid tactics file format')
+      }
+    } catch (err) {
+      alert('Failed to parse tactics JSON file')
+    }
+  }
+  reader.readAsText(file)
+  input.value = ''
+}
+
+// SERVER & CLOUD TACTICS STORAGE
+const isServerSaveModalOpen = ref(false)
+const serverTacticTitle = ref('')
+const isSavingToServer = ref(false)
+const serverSavedTactics = ref<any[]>([])
+const isLoadingServerTactics = ref(false)
+
+async function openServerStorageModal() {
+  isServerSaveModalOpen.value = true
+  await fetchServerTactics()
+}
+
+async function handleSaveTacticsToServer() {
+  if (!authStore.token) {
+    authStore.isAuthModalOpen = true
+    return
+  }
+  if (stratStore.boardElements.length === 0) {
+    alert('The board is empty. Draw or place tactical pins first before saving.')
+    return
+  }
+  isSavingToServer.value = true
+  try {
+    await axios.post('/api/tactics/save-server', {
+      title: serverTacticTitle.value.trim() || `${mapStore.currentMap?.name || mapStore.currentMapId} Strategy ${new Date().toLocaleDateString()}`,
+      mapId: mapStore.currentMapId,
+      elements: stratStore.boardElements
+    }, {
+      headers: { Authorization: `Bearer ${authStore.token}` }
+    })
+    tempSaveToast.value = 'Saved to Cloud / Server!'
+    setTimeout(() => { tempSaveToast.value = '' }, 3000)
+    serverTacticTitle.value = ''
+    await fetchServerTactics()
+  } catch (e: any) {
+    alert(e.response?.data?.error || 'Failed to save tactics to server')
+  } finally {
+    isSavingToServer.value = false
+  }
+}
+
+async function fetchServerTactics() {
+  isLoadingServerTactics.value = true
+  try {
+    const res = await axios.get(`/api/tactics/server/${mapStore.currentMapId}`)
+    serverSavedTactics.value = res.data
+  } catch (e) {
+  } finally {
+    isLoadingServerTactics.value = false
+  }
+}
+
+function handleLoadServerTactic(tactic: any) {
+  if (tactic.elements && Array.isArray(tactic.elements)) {
+    stratStore.boardElements = tactic.elements
+    stratStore.mapElements[mapStore.currentMapId] = tactic.elements
+    const socket = gameRoomStore.getSocket()
+    if (socket && socket.connected) {
+      socket.emit('room:switch_map', {
+        mapId: mapStore.currentMapId,
+        elements: tactic.elements
+      })
+    }
+    tempSaveToast.value = `Loaded "${tactic.title}" from cloud!`
+    setTimeout(() => { tempSaveToast.value = '' }, 3000)
+    isServerSaveModalOpen.value = false
+  }
+}
+
+async function handleDeleteServerTactic(id: string) {
+  if (!authStore.token) return
+  try {
+    await axios.delete(`/api/tactics/server/${id}`, {
+      headers: { Authorization: `Bearer ${authStore.token}` }
+    })
+    await fetchServerTactics()
+  } catch (e) {}
 }
 
 
@@ -1070,7 +1230,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
     </div>
 
     <!-- TOP BAR: ROOM STATUS, 1-CLICK COPY ID, SHARE LINK & HOST PERMISSIONS -->
-    <div class="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl">
+    <div class="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl relative z-40">
       <!-- ROOM BADGE & 1-CLICK COPY CODE -->
       <div class="flex flex-wrap items-center gap-2.5">
         <button
@@ -1249,8 +1409,47 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
         </span>
       </div>
 
-      <!-- TEMP SAVE, RESTORE, CUSTOMIZE & MAP SELECTOR -->
+      <!-- STORAGE, BACKUP, CUSTOMIZE & MAP SELECTOR -->
       <div class="flex flex-wrap items-center gap-2 relative z-40">
+        <!-- HIDDEN FILE INPUT FOR LOCAL JSON IMPORT -->
+        <input
+          ref="importFileInputRef"
+          type="file"
+          accept=".json"
+          class="hidden"
+          @change="handleImportTacticsLocal"
+        />
+
+        <!-- LOCAL EXPORT BUTTON -->
+        <button
+          @click="handleExportTacticsLocal"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+          title="Export current map tactics as a local JSON backup file"
+        >
+          <Download class="w-3.5 h-3.5 text-cyan-400" />
+          <span class="hidden sm:inline">Export JSON</span>
+        </button>
+
+        <!-- LOCAL IMPORT BUTTON -->
+        <button
+          @click="triggerImportFileDialog"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+          title="Import previously saved tactics from a local JSON file"
+        >
+          <Upload class="w-3.5 h-3.5 text-emerald-400" />
+          <span class="hidden sm:inline">Import JSON</span>
+        </button>
+
+        <!-- CLOUD / SERVER SAVE & LOAD MODAL BUTTON -->
+        <button
+          @click="openServerStorageModal"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 border border-slate-800 hover:border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+          title="Save or load strategies to/from the cloud server"
+        >
+          <CloudUpload class="w-3.5 h-3.5 text-amber-400" />
+          <span>Cloud / Server</span>
+        </button>
+
         <!-- TEMP SAVE BUTTON -->
         <button
           @click="handleTempSaveCurrentBoard"
@@ -1302,10 +1501,10 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
             <ChevronDown class="w-3.5 h-3.5 text-slate-400 transition-transform duration-200" :class="{ 'rotate-180': isTacticsMapDropdownOpen }" />
           </button>
 
-          <!-- DROPDOWN LIST -->
+          <!-- DROPDOWN LIST (ALWAYS TOP LAYER WITH Z-[9999]) -->
           <div 
             v-if="isTacticsMapDropdownOpen"
-            class="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-[999] flex flex-col py-1 animate-fade-in"
+            class="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-[9999] flex flex-col py-1 animate-fade-in"
           >
             <div class="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
               <span>Switch Map</span>
@@ -2418,6 +2617,128 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
             >
               Cancel (Stay on {{ mapStore.currentMap?.name }})
             </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- MODAL 6: CLOUD / SERVER TACTICS STORAGE & STRATEGY LIBRARY -->
+    <Teleport to="body">
+      <div
+        v-if="isServerSaveModalOpen"
+        class="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center animate-fade-in"
+        @click.self="isServerSaveModalOpen = false"
+      >
+        <div class="relative w-full max-w-xl bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl flex flex-col gap-5">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2.5">
+              <div class="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                <CloudUpload class="w-5 h-5" />
+              </div>
+              <div>
+                <h3 class="font-black uppercase tracking-wider text-white text-sm">Cloud & Server Tactics</h3>
+                <p class="text-xs text-slate-400">Save current board snapshot to cloud database or load saved strategies.</p>
+              </div>
+            </div>
+            <button
+              @click="isServerSaveModalOpen = false"
+              class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <!-- SECTION 1: SAVE CURRENT BOARD TO CLOUD -->
+          <div class="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-black uppercase text-amber-400 tracking-wide flex items-center gap-1.5">
+                <Save class="w-3.5 h-3.5" />
+                Save Current Board ({{ stratStore.boardElements.length }} Elements)
+              </span>
+              <span class="text-[10px] font-mono uppercase bg-slate-900 px-2 py-0.5 rounded text-slate-300">
+                Map: {{ mapStore.currentMap?.name }}
+              </span>
+            </div>
+
+            <div class="flex gap-2">
+              <input
+                v-model="serverTacticTitle"
+                type="text"
+                class="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                :placeholder="`e.g. ${mapStore.currentMap?.name} A Site Fast Execute`"
+              />
+              <button
+                @click="handleSaveTacticsToServer"
+                :disabled="isSavingToServer || stratStore.boardElements.length === 0"
+                class="px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <Save class="w-3.5 h-3.5" />
+                <span>{{ isSavingToServer ? 'Saving...' : 'Save to Cloud' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- SECTION 2: SERVER STRATEGIES LIST FOR CURRENT MAP -->
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-black uppercase text-slate-300 tracking-wider">
+                Saved Server Strategies ({{ serverSavedTactics.length }})
+              </span>
+              <button
+                @click="fetchServerTactics"
+                class="text-[11px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw :class="['w-3 h-3', isLoadingServerTactics ? 'animate-spin' : '']" />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            <div v-if="isLoadingServerTactics" class="p-6 text-center text-xs text-slate-400">
+              Loading server tactics...
+            </div>
+
+            <div v-else-if="serverSavedTactics.length === 0" class="p-6 text-center text-xs text-slate-500 bg-slate-950/40 rounded-2xl border border-slate-800/80">
+              No saved tactics found for {{ mapStore.currentMap?.name }}. Save your first strategy above!
+            </div>
+
+            <div v-else class="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
+              <div
+                v-for="tactic in serverSavedTactics"
+                :key="tactic.id"
+                class="p-3 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl flex items-center justify-between gap-3 transition-colors"
+              >
+                <div class="flex flex-col min-w-0">
+                  <span class="font-bold text-white text-xs truncate">{{ tactic.title }}</span>
+                  <div class="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                    <span>By {{ tactic.authorName || 'Player' }}</span>
+                    <span>•</span>
+                    <span>{{ tactic.elements?.length || 0 }} elements</span>
+                    <span>•</span>
+                    <span>{{ new Date(tactic.createdAt).toLocaleDateString() }}</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    @click="handleLoadServerTactic(tactic)"
+                    class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    title="Load this strategy onto the board"
+                  >
+                    <Download class="w-3 h-3" />
+                    <span>Load</span>
+                  </button>
+
+                  <button
+                    v-if="authStore.isAdmin || authStore.currentUser?.id === tactic.userId"
+                    @click="handleDeleteServerTactic(tactic.id)"
+                    class="p-1.5 bg-rose-950/50 hover:bg-rose-900 text-rose-400 rounded-lg transition-colors cursor-pointer"
+                    title="Delete strategy"
+                  >
+                    <Trash2 class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

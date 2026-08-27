@@ -34,9 +34,10 @@ function executeMapSwitch(targetMapId: string, shouldTempSaveCurrent: boolean) {
     stratStore.tempSaveBoard(mapStore.currentMapId)
   }
   
-  stratStore.clearBoard()
+  stratStore.saveCurrentMapElements(mapStore.currentMapId)
   mapStore.setMap(targetMapId)
-  gameRoomStore.switchMap(targetMapId, [])
+  stratStore.loadMapElements(targetMapId)
+  gameRoomStore.switchMap(targetMapId, stratStore.boardElements)
   isMapSwitchWarnModalOpen.value = false
   pendingTargetMapId.value = null
 }

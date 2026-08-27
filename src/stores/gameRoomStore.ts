@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import axios from 'axios'
 import type { Lineup } from '../types'
+import { useMapStore } from './mapStore'
+import { useStratStore } from './stratStore'
 
 export interface RoomMember {
   socketId: string
@@ -154,6 +156,23 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
           text: `Tactical map changed to ${mapId.toUpperCase()}`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         })
+
+        // CRITICAL: Synchronize mapStore and stratStore across all clients
+        try {
+          const mapStore = useMapStore()
+          const stratStore = useStratStore()
+          if (mapStore.currentMapId !== mapId) {
+            mapStore.setMap(mapId)
+          }
+          if (data.elements && Array.isArray(data.elements)) {
+            stratStore.boardElements = data.elements
+            stratStore.mapElements[mapId] = data.elements
+          } else {
+            stratStore.loadMapElements(mapId)
+          }
+        } catch (err) {
+          console.error('Error synchronizing map in gameRoomStore', err)
+        }
       })
 
       socket.value.on('room:chat_message', (msg: ChatMessage) => {
