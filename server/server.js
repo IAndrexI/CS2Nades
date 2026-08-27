@@ -1778,12 +1778,13 @@ io.on('connection', (socket) => {
       elementsByMap: room.elementsByMap || {},
       allowSignedUsersToDraw: room.allowSignedUsersToDraw !== false,
       allowGuestsToDraw: !!room.allowGuestsToDraw,
+      onlyHostCanChangeMap: room.onlyHostCanChangeMap !== false,
       drawings: room.drawings,
       activeLineups: room.activeLineups
     })
   })
 
-  // Host Permission Controls (2 Options: Signed Users & Guests)
+  // Host Permission Controls (Signed Users, Guests & Map Control)
   socket.on('room:update_permissions', (payload) => {
     if (!currentRoomId || !gameRooms.has(currentRoomId)) return
     const room = gameRooms.get(currentRoomId)
@@ -1796,9 +1797,13 @@ io.on('connection', (socket) => {
     if (payload.allowGuestsToDraw !== undefined) {
       room.allowGuestsToDraw = payload.allowGuestsToDraw
     }
+    if (payload.onlyHostCanChangeMap !== undefined) {
+      room.onlyHostCanChangeMap = payload.onlyHostCanChangeMap
+    }
     io.to(currentRoomId).emit('room:permissions_updated', {
       allowSignedUsersToDraw: room.allowSignedUsersToDraw !== false,
-      allowGuestsToDraw: !!room.allowGuestsToDraw
+      allowGuestsToDraw: !!room.allowGuestsToDraw,
+      onlyHostCanChangeMap: room.onlyHostCanChangeMap !== false
     })
     io.to(currentRoomId).emit('room:lock_updated', {
       allowGuestsToDraw: !!room.allowGuestsToDraw
@@ -1811,7 +1816,8 @@ io.on('connection', (socket) => {
     room.allowGuestsToDraw = allowGuestsToDraw
     io.to(currentRoomId).emit('room:permissions_updated', {
       allowSignedUsersToDraw: room.allowSignedUsersToDraw !== false,
-      allowGuestsToDraw: !!room.allowGuestsToDraw
+      allowGuestsToDraw: !!room.allowGuestsToDraw,
+      onlyHostCanChangeMap: room.onlyHostCanChangeMap !== false
     })
     io.to(currentRoomId).emit('room:lock_updated', { allowGuestsToDraw })
   })
@@ -1875,6 +1881,13 @@ io.on('connection', (socket) => {
     const incomingElements = payload?.elements
     if (!mapId) return
     
+    // Permission check: only host can switch map if onlyHostCanChangeMap is true
+    const isHost = room.host && currentUserInfo?.username && room.host.toLowerCase() === currentUserInfo.username.toLowerCase()
+    if (!isHost && room.onlyHostCanChangeMap !== false) {
+      socket.emit('room:action_denied', { message: 'Only the Room Host can change tactical maps.' })
+      return
+    }
+
     room.mapId = mapId
     if (!room.elementsByMap) room.elementsByMap = {}
     if (incomingElements && Array.isArray(incomingElements)) {

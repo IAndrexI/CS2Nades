@@ -82,6 +82,14 @@ function handleMapSelect(newMapId: string) {
   }
   isTacticsMapDropdownOpen.value = false
 
+  // Permission check: only host can change map unless setting toggled
+  if (gameRoomStore.currentRoomCode && !gameRoomStore.isHost && gameRoomStore.onlyHostCanChangeMap) {
+    tempSaveToast.value = 'Map switching is locked to Room Host only'
+    setTimeout(() => { tempSaveToast.value = '' }, 3000)
+    alert('Only the Room Host can change maps (Host locked map switching).')
+    return
+  }
+
   // If there are active markings or elements, prompt user: Save or Reset/Fresh
   if (stratStore.boardElements.length > 0) {
     pendingTargetMapId.value = newMapId
@@ -692,6 +700,15 @@ watch(() => stratStore.activeColor, (col) => {
 
 let autoSyncTimer: any = null
 
+function handleForceReSync() {
+  const s = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  if (s && s.connected) {
+    s.emit('room:request_sync', { mapId: mapStore.currentMapId })
+  }
+  tempSaveToast.value = 'Syncing from server...'
+  setTimeout(() => { tempSaveToast.value = '' }, 2000)
+}
+
 function handleWindowFocusSync() {
   const s = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
   if (s && s.connected) {
@@ -842,6 +859,16 @@ function eraseAtCoords(coords: { x: number; y: number }) {
   const eraseRadius = 7.0
 
   stratStore.boardElements.forEach(el => {
+    // Non-hosts can ONLY modify/erase their OWN drawings!
+    // They CANNOT modify or erase the Host's inputs or other teammates' inputs!
+    if (!gameRoomStore.isHost && gameRoomStore.currentRoomCode) {
+      const isMyElement = (el.authorId && authStore.currentUser?.id && el.authorId === authStore.currentUser.id) ||
+                          (el.authorUsername && authStore.currentUser?.username && el.authorUsername.toLowerCase() === authStore.currentUser.username.toLowerCase())
+      if (!isMyElement) {
+        return // Skip erasing host / other user's element!
+      }
+    }
+
     if (el.type === 'pen') {
       const remaining = el.points.filter(pt => Math.hypot(pt.x - coords.x, pt.y - coords.y) > eraseRadius)
       if (remaining.length < el.points.length) {
@@ -1127,6 +1154,17 @@ function handleRedo() {
 
 function handleElementClick(e: MouseEvent, el: TacticsElement) {
   e.stopPropagation()
+  // Non-hosts cannot modify or erase host's inputs
+  if (!gameRoomStore.isHost && gameRoomStore.currentRoomCode) {
+    const isMyElement = (el.authorId && authStore.currentUser?.id && el.authorId === authStore.currentUser.id) ||
+                        (el.authorUsername && authStore.currentUser?.username && el.authorUsername.toLowerCase() === authStore.currentUser.username.toLowerCase())
+    if (!isMyElement && stratStore.activeTool === 'eraser') {
+      tempSaveToast.value = 'You cannot erase drawings made by the Host'
+      setTimeout(() => { tempSaveToast.value = '' }, 2500)
+      return
+    }
+  }
+
   if (stratStore.activeTool === 'eraser') {
     const currentUserId = authStore.currentUser?.id || authStore.currentUser?.username
     stratStore.removeBoardElement(el.id, { userId: currentUserId })
@@ -1159,6 +1197,16 @@ function deleteSelectedElement() {
   }
   if (selectedElementId.value) {
     const id = selectedElementId.value
+    const targetEl = stratStore.boardElements.find(el => el.id === id)
+    if (!gameRoomStore.isHost && gameRoomStore.currentRoomCode && targetEl) {
+      const isMyElement = (targetEl.authorId && authStore.currentUser?.id && targetEl.authorId === authStore.currentUser.id) ||
+                          (targetEl.authorUsername && authStore.currentUser?.username && targetEl.authorUsername.toLowerCase() === authStore.currentUser.username.toLowerCase())
+      if (!isMyElement) {
+        alert('You can only delete your own markings (Host inputs are locked).')
+        return
+      }
+    }
+
     stratStore.removeBoardElement(id)
     const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
     if (socket && socket.connected) socket.emit('room:element_remove', { elementId: id, mapId: mapStore.currentMapId })
@@ -1230,7 +1278,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
     </div>
 
     <!-- TOP BAR: ROOM STATUS, 1-CLICK COPY ID, SHARE LINK & HOST PERMISSIONS -->
-    <div class="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl relative z-40">
+    <div class="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl relative z-20">
       <!-- ROOM BADGE & 1-CLICK COPY CODE -->
       <div class="flex flex-wrap items-center gap-2.5">
         <button
@@ -1255,11 +1303,13 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           <span>{{ isCopied ? 'Link Copied!' : 'Share Invite Link' }}</span>
         </button>
 
-        <!-- SEPARATE JOIN ROOM BUTTON -->
+        <!-- SEPARATE JOIN ROOM BUTTON (PROMINENT & VIBRANT) -->
         <button
           @click="isJoinRoomModalOpen = true"
-          class="flex items-center gap-1 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-slate-300 hover:text-white border border-slate-800 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-cyan-950/90 via-slate-900 to-blue-950/90 hover:from-cyan-900 hover:to-blue-900 text-cyan-300 hover:text-cyan-100 border border-cyan-500/50 hover:border-cyan-400 rounded-xl text-xs font-black transition-all cursor-pointer shadow-[0_0_12px_rgba(6,182,212,0.2)] group"
+          title="Switch or join another tactical room"
         >
+          <LogIn class="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
           <span>Join Another Room</span>
         </button>
 
@@ -1328,42 +1378,42 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 border border-slate-800 hover:border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
           title="Connect to CS2 Practice Server via RCON to capture live in-game lineups"
         >
-          <Gamepad2 class="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+          <Gamepad2 class="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
           <span>Server</span>
         </button>
 
-        <!-- LIVE AUTO-SYNC BADGE & FORCE SYNC OPTION BUTTON -->
-        <div class="flex items-center gap-1.5 p-1 pl-2.5 bg-slate-950/90 rounded-xl border border-slate-800 text-xs shadow-sm">
-          <div class="flex items-center gap-1.5 mr-1" title="Real-time automatic tactical synchronization active">
-            <span class="relative flex h-2 w-2">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span class="text-[11px] font-bold text-slate-300">Auto-Synced</span>
+        <!-- AUTO-SYNC STATUS BADGE & FORCE SYNC TRIGGER -->
+        <div class="flex items-center gap-1">
+          <div 
+            class="flex items-center gap-1 px-2 py-1 bg-slate-950 rounded-xl border border-slate-800 text-[10px] font-bold text-slate-300"
+            title="Real-time WebSockets auto-sync active"
+          >
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Auto-Synced</span>
           </div>
 
           <button
-            @click="handleForceSyncBoard"
-            :class="[
-              'flex items-center gap-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700/60 rounded-lg text-[11px] font-bold transition-all cursor-pointer group',
-              isSyncingBoard ? 'text-amber-400 border-amber-500/50' : 'text-slate-300 hover:text-white'
-            ]"
-            title="Force a manual hard re-sync of all tactical elements with the server"
+            @click="handleForceReSync"
+            class="flex items-center gap-1 px-2 py-1 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-amber-400 border border-slate-800 hover:border-amber-500/30 rounded-xl text-[10px] font-bold transition-colors cursor-pointer"
+            title="Force reload all markings and strokes from live room server"
           >
-            <RefreshCw :class="['w-3 h-3 text-amber-400', isSyncingBoard ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500']" />
-            <span>{{ isSyncingBoard ? 'Syncing...' : 'Force Sync' }}</span>
+            <RefreshCw class="w-2.5 h-2.5" />
+            <span>Force Sync</span>
           </button>
         </div>
 
-        <!-- HOST LOCK / GUEST PERMISSION CONTROLS (2 DISTINCT OPTIONS) -->
-        <div v-if="gameRoomStore.isHost" class="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+        <!-- HOST LOCK / PERMISSIONS CONTROLS (3 OPTIONS: SIGNED USERS, GUESTS & MAP CONTROL) -->
+        <div
+          v-if="gameRoomStore.isHost"
+          class="flex items-center gap-1 px-2.5 py-1 bg-slate-950 rounded-xl border border-amber-500/30 shadow-inner"
+        >
           <span class="text-[10px] font-black text-amber-400 uppercase tracking-wider pl-1 pr-0.5 flex items-center gap-1">
             <Crown class="w-3 h-3 text-amber-400" /> Host:
           </span>
 
           <!-- OPTION 1: SIGNED USERS -->
           <button
-            @click="gameRoomStore.updateRoomPermissions(!gameRoomStore.allowSignedUsersToDraw, gameRoomStore.allowGuestsToDraw)"
+            @click="gameRoomStore.updateRoomPermissions(!gameRoomStore.allowSignedUsersToDraw, gameRoomStore.allowGuestsToDraw, gameRoomStore.onlyHostCanChangeMap)"
             :class="[
               'flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all cursor-pointer border',
               gameRoomStore.allowSignedUsersToDraw
@@ -1378,7 +1428,7 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
 
           <!-- OPTION 2: GUESTS -->
           <button
-            @click="gameRoomStore.updateRoomPermissions(gameRoomStore.allowSignedUsersToDraw, !gameRoomStore.allowGuestsToDraw)"
+            @click="gameRoomStore.updateRoomPermissions(gameRoomStore.allowSignedUsersToDraw, !gameRoomStore.allowGuestsToDraw, gameRoomStore.onlyHostCanChangeMap)"
             :class="[
               'flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all cursor-pointer border',
               gameRoomStore.allowGuestsToDraw
@@ -1389,6 +1439,21 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           >
             <span class="w-1.5 h-1.5 rounded-full" :class="gameRoomStore.allowGuestsToDraw ? 'bg-emerald-400' : 'bg-rose-400'"></span>
             <span>Guests: {{ gameRoomStore.allowGuestsToDraw ? 'Allowed' : 'Locked' }}</span>
+          </button>
+
+          <!-- OPTION 3: MAP CONTROL (ONLY HOST CAN CHANGE MAP UNLESS TOGGLED) -->
+          <button
+            @click="gameRoomStore.updateRoomPermissions(gameRoomStore.allowSignedUsersToDraw, gameRoomStore.allowGuestsToDraw, !gameRoomStore.onlyHostCanChangeMap)"
+            :class="[
+              'flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all cursor-pointer border',
+              gameRoomStore.onlyHostCanChangeMap
+                ? 'bg-amber-950/80 text-amber-300 border-amber-500/50 hover:bg-amber-900'
+                : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900'
+            ]"
+            title="Toggle who is allowed to change maps (Host only or Everyone)"
+          >
+            <span class="w-1.5 h-1.5 rounded-full" :class="gameRoomStore.onlyHostCanChangeMap ? 'bg-amber-400' : 'bg-emerald-400'"></span>
+            <span>Map Switch: {{ gameRoomStore.onlyHostCanChangeMap ? 'Host Only' : 'Everyone' }}</span>
           </button>
         </div>
 
@@ -1401,6 +1466,11 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
           <div class="flex items-center gap-1">
             <span class="w-1.5 h-1.5 rounded-full" :class="gameRoomStore.allowGuestsToDraw ? 'bg-emerald-400' : 'bg-rose-400'"></span>
             <span class="text-slate-400">Guests: <strong :class="gameRoomStore.allowGuestsToDraw ? 'text-emerald-400' : 'text-rose-400'">{{ gameRoomStore.allowGuestsToDraw ? 'Allowed' : 'Locked' }}</strong></span>
+          </div>
+          <span class="text-slate-700">|</span>
+          <div class="flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full" :class="gameRoomStore.onlyHostCanChangeMap ? 'bg-amber-400' : 'bg-emerald-400'"></span>
+            <span class="text-slate-400">Map: <strong :class="gameRoomStore.onlyHostCanChangeMap ? 'text-amber-400' : 'text-emerald-400'">{{ gameRoomStore.onlyHostCanChangeMap ? 'Host Only' : 'Everyone' }}</strong></span>
           </div>
         </div>
 
@@ -1885,52 +1955,105 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                 </g>
               </g>
 
-              <!-- 9. C4 BOMB (WITH USER BADGE) -->
+              <!-- 9. C4 BOMB (REALISTIC CS2 C4 EXPLOSIVE BRICK WITH ELECTRONIC TIMER & WIRES) -->
               <g v-else-if="el.type === 'c4_bomb' || el.type === 'plant_a' || el.type === 'plant_b'">
-                <!-- Main Bomb Base -->
+                <!-- Main C4 Composite Explosive Body (Dark Tactical Brick) -->
                 <rect
-                  :x="el.points[0].x * 10 - 14"
-                  :y="el.points[0].y * 10 - 14"
-                  width="28"
-                  height="28"
-                  rx="6"
-                  fill="#7f1d1d"
-                  stroke="#ef4444"
-                  stroke-width="2"
-                  class="shadow-xl"
+                  :x="el.points[0].x * 10 - 15"
+                  :y="el.points[0].y * 10 - 12"
+                  width="30"
+                  height="24"
+                  rx="3"
+                  fill="#27272a"
+                  stroke="#52525b"
+                  stroke-width="1.5"
+                  class="shadow-2xl"
                 />
+                <!-- Compound C4 Clay / Semtex Layer Base -->
+                <rect
+                  :x="el.points[0].x * 10 - 13"
+                  :y="el.points[0].y * 10 - 10"
+                  width="26"
+                  height="8"
+                  rx="2"
+                  fill="#78350f"
+                  stroke="#92400e"
+                  stroke-width="1"
+                />
+                <!-- Duct Tape Security Straps -->
+                <rect :x="el.points[0].x * 10 - 11" :y="el.points[0].y * 10 - 11" width="4" height="22" fill="#71717a" opacity="0.85" />
+                <rect :x="el.points[0].x * 10 + 7" :y="el.points[0].y * 10 - 11" width="4" height="22" fill="#71717a" opacity="0.85" />
+
+                <!-- Digital Electronic Keypad & LCD Timer Unit -->
+                <rect
+                  :x="el.points[0].x * 10 - 5"
+                  :y="el.points[0].y * 10 - 1"
+                  width="16"
+                  height="10"
+                  rx="2"
+                  fill="#09090b"
+                  stroke="#3f3f46"
+                  stroke-width="1"
+                />
+                <!-- LCD Digital Counter (7355608) -->
                 <text
-                  :x="el.points[0].x * 10"
-                  :y="el.points[0].y * 10 + 4.5"
-                  font-size="14"
+                  :x="el.points[0].x * 10 + 3"
+                  :y="el.points[0].y * 10 + 5.5"
+                  fill="#ef4444"
+                  font-size="4"
+                  font-family="monospace"
+                  font-weight="900"
                   text-anchor="middle"
-                  class="select-none pointer-events-none"
-                >
-                  💣
-                </text>
+                  class="select-none pointer-events-none tracking-tighter"
+                >7355608</text>
+
+                <!-- Blinking Red LED Light -->
+                <circle
+                  :cx="el.points[0].x * 10 - 9"
+                  :cy="el.points[0].y * 10 + 4"
+                  r="1.8"
+                  fill="#ef4444"
+                  stroke="#7f1d1d"
+                  stroke-width="0.8"
+                  class="animate-pulse"
+                />
+
+                <!-- Colored Detonator Wire Coils -->
+                <path
+                  :d="`M ${el.points[0].x * 10 - 9} ${el.points[0].y * 10 - 2} Q ${el.points[0].x * 10 - 7} ${el.points[0].y * 10 - 6} ${el.points[0].x * 10 - 5} ${el.points[0].y * 10 - 1}`"
+                  stroke="#eab308"
+                  stroke-width="1.2"
+                  fill="none"
+                />
+                <path
+                  :d="`M ${el.points[0].x * 10 - 9} ${el.points[0].y * 10 + 1} Q ${el.points[0].x * 10 - 7} ${el.points[0].y * 10 + 6} ${el.points[0].x * 10 - 5} ${el.points[0].y * 10 + 7}`"
+                  stroke="#38bdf8"
+                  stroke-width="1.2"
+                  fill="none"
+                />
 
                 <!-- Small Player Badge on Top-Right Corner of Bomb -->
-                <g :transform="`translate(${el.points[0].x * 10 + 9}, ${el.points[0].y * 10 - 9})`">
-                  <circle cx="0" cy="0" r="7" fill="#0f172a" stroke="var(--app-accent, #de9b35)" stroke-width="1.5" />
+                <g :transform="`translate(${el.points[0].x * 10 + 11}, ${el.points[0].y * 10 - 11})`">
+                  <circle cx="0" cy="0" r="6" fill="#0f172a" stroke="var(--app-accent, #de9b35)" stroke-width="1.5" />
                   <image
                     v-if="el.authorAvatar"
                     :href="el.authorAvatar"
-                    x="-5"
-                    y="-5"
-                    width="10"
-                    height="10"
-                    clip-path="circle(5px at center)"
+                    x="-4"
+                    y="-4"
+                    width="8"
+                    height="8"
+                    clip-path="circle(4px at center)"
                   />
                   <text
                     v-else
                     x="0"
-                    y="3"
+                    y="2.5"
                     fill="var(--app-accent, #de9b35)"
-                    font-size="7"
+                    font-size="6"
                     font-weight="900"
                     text-anchor="middle"
                   >
-                    {{ (el.authorUsername || 'P').charAt(0).toUpperCase() }}
+                    {{ (el.authorUsername || 'P').slice(0, 1).toUpperCase() }}
                   </text>
                 </g>
               </g>

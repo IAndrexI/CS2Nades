@@ -66,14 +66,17 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
 
   const allowSignedUsersToDraw = ref<boolean>(true)
   const allowGuestsToDraw = ref<boolean>(false)
+  const onlyHostCanChangeMap = ref<boolean>(true)
 
-  function updateRoomPermissions(signedUsers: boolean, guests: boolean) {
+  function updateRoomPermissions(signedUsers: boolean, guests: boolean, onlyHostMap = true) {
     allowSignedUsersToDraw.value = signedUsers
     allowGuestsToDraw.value = guests
+    onlyHostCanChangeMap.value = onlyHostMap
     if (socket.value && socket.value.connected) {
       socket.value.emit('room:update_permissions', {
         allowSignedUsersToDraw: signedUsers,
-        allowGuestsToDraw: guests
+        allowGuestsToDraw: guests,
+        onlyHostCanChangeMap: onlyHostMap
       })
     }
   }
@@ -108,6 +111,7 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
         activeBroadcastLineups.value = state.activeLineups || []
         if (state.allowSignedUsersToDraw !== undefined) allowSignedUsersToDraw.value = state.allowSignedUsersToDraw
         if (state.allowGuestsToDraw !== undefined) allowGuestsToDraw.value = state.allowGuestsToDraw
+        if (state.onlyHostCanChangeMap !== undefined) onlyHostCanChangeMap.value = state.onlyHostCanChangeMap
       })
 
       socket.value.on('room:host_updated', (data: { host: string; members: RoomMember[] }) => {
@@ -115,13 +119,22 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
         members.value = data.members
       })
 
-      socket.value.on('room:permissions_updated', (data: { allowSignedUsersToDraw: boolean; allowGuestsToDraw: boolean }) => {
+      socket.value.on('room:permissions_updated', (data: { allowSignedUsersToDraw: boolean; allowGuestsToDraw: boolean; onlyHostCanChangeMap?: boolean }) => {
         if (data.allowSignedUsersToDraw !== undefined) allowSignedUsersToDraw.value = data.allowSignedUsersToDraw
         if (data.allowGuestsToDraw !== undefined) allowGuestsToDraw.value = data.allowGuestsToDraw
+        if (data.onlyHostCanChangeMap !== undefined) onlyHostCanChangeMap.value = data.onlyHostCanChangeMap
         announcements.value.push({
-          text: `🔒 Host updated drawing permissions: Signed Users (${data.allowSignedUsersToDraw ? 'Allowed' : 'Locked'}), Guests (${data.allowGuestsToDraw ? 'Allowed' : 'Locked'})`,
+          text: `🔒 Host updated permissions: Signed Users (${data.allowSignedUsersToDraw ? 'Allowed' : 'Locked'}), Guests (${data.allowGuestsToDraw ? 'Allowed' : 'Locked'}), Map Switch (${data.onlyHostCanChangeMap !== false ? 'Host Only' : 'Everyone'})`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         })
+      })
+
+      socket.value.on('room:action_denied', (data: { message: string }) => {
+        announcements.value.push({
+          text: `⚠️ ${data.message}`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        })
+        alert(data.message)
       })
 
       socket.value.on('room:lock_updated', (data: { allowGuestsToDraw: boolean }) => {
@@ -298,6 +311,7 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
     isHost,
     allowSignedUsersToDraw,
     allowGuestsToDraw,
+    onlyHostCanChangeMap,
     updateRoomPermissions,
     currentMapId,
     members,

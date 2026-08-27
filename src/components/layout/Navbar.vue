@@ -161,7 +161,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <header class="navbar-wrapper w-full bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 sticky top-0 z-40">
+  <header class="navbar-wrapper w-full bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 sticky top-0 z-[100]">
     <!-- GUEST PREVIEW MODE BANNER (ACTIVE WHEN ADMIN TOGGLES GUEST VIEW) -->
     <div
       v-if="authStore.isGuestPreviewMode"
@@ -364,7 +364,7 @@ onUnmounted(() => {
         </button>
 
         <!-- USER PROFILE / LOGIN BUTTON -->
-        <div class="relative user-dropdown-container">
+        <div class="relative user-dropdown-container z-50">
           <template v-if="authStore.isAuthenticated">
             <button
               @click="isUserDropdownOpen = !isUserDropdownOpen"
@@ -391,7 +391,7 @@ onUnmounted(() => {
             <!-- USER DROPDOWN -->
             <div 
               v-if="isUserDropdownOpen"
-              class="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in text-xs"
+              class="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-[9999] flex flex-col py-1 animate-fade-in text-xs"
             >
               <div class="p-3 border-b border-slate-800 flex flex-col gap-1 bg-slate-950/60">
                 <div class="flex items-center justify-between">

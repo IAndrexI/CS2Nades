@@ -20,6 +20,12 @@ const pendingTargetMapId = ref<string | null>(null)
 function handleMapSelect(targetMapId: string) {
   if (!targetMapId || targetMapId === mapStore.currentMapId) return
 
+  // Permission check: only host can change map unless setting toggled
+  if (gameRoomStore.currentRoomCode && !gameRoomStore.isHost && gameRoomStore.onlyHostCanChangeMap) {
+    alert('Only the Room Host can change maps (Host locked map switching).')
+    return
+  }
+
   // If there are active markings on current board, warn user and offer temp save!
   if (stratStore.boardElements.length > 0) {
     pendingTargetMapId.value = targetMapId
