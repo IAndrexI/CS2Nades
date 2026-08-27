@@ -18,7 +18,11 @@ import {
   Lock,
   Plus,
   Trash2,
-  Crown
+  Crown,
+  Settings,
+  UserMinus,
+  UserPlus,
+  LogOut
 } from 'lucide-vue-next'
 import axios from 'axios'
 import type { DirectMessage } from '../../types'
@@ -426,6 +430,137 @@ async function scrollToBottom() {
   }
 }
 
+// Manage Group Modal State
+const isManageGroupModalOpen = ref(false)
+const editGroupName = ref('')
+const selectedUserToAdd = ref('')
+const isUpdatingGroup = ref(false)
+
+function handleOpenManageGroup() {
+  if (!selectedGroupInfo.value) return
+  editGroupName.value = selectedGroupInfo.value.name
+  selectedUserToAdd.value = ''
+  isManageGroupModalOpen.value = true
+}
+
+async function handleSaveGroupName() {
+  if (!selectedGroupId.value || !editGroupName.value.trim()) return
+  isUpdatingGroup.value = true
+  try {
+    const res = await axios.put(`/api/groups/${selectedGroupId.value}`, {
+      name: editGroupName.value.trim()
+    })
+    selectedGroupInfo.value = res.data
+    const idx = squadGroups.value.findIndex(g => g.id === res.data.id)
+    if (idx >= 0) squadGroups.value[idx] = res.data
+  } catch (err) {
+    console.error('Failed to rename group', err)
+  } finally {
+    isUpdatingGroup.value = false
+  }
+}
+
+async function handleAddUserToGroup() {
+  if (!selectedGroupId.value || !selectedUserToAdd.value || !selectedGroupInfo.value) return
+  isUpdatingGroup.value = true
+  try {
+    const updatedMembers = Array.from(new Set([...selectedGroupInfo.value.memberUsernames, selectedUserToAdd.value]))
+    const res = await axios.put(`/api/groups/${selectedGroupId.value}`, {
+      memberUsernames: updatedMembers
+    })
+    selectedGroupInfo.value = res.data
+    const idx = squadGroups.value.findIndex(g => g.id === res.data.id)
+    if (idx >= 0) squadGroups.value[idx] = res.data
+    selectedUserToAdd.value = ''
+  } catch (err) {
+    console.error('Failed to add user to group', err)
+  } finally {
+    isUpdatingGroup.value = false
+  }
+}
+
+async function handleRemoveUserFromGroup(username: string) {
+  if (!selectedGroupId.value || !selectedGroupInfo.value) return
+  const ok = await confirmAction({
+    title: `Remove ${username}?`,
+    message: `Are you sure you want to remove ${username} from ${selectedGroupInfo.value.name}?`,
+    confirmLabel: 'Remove Member',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (!ok) return
+
+  isUpdatingGroup.value = true
+  try {
+    const updatedMembers = selectedGroupInfo.value.memberUsernames.filter(u => u !== username)
+    const res = await axios.put(`/api/groups/${selectedGroupId.value}`, {
+      memberUsernames: updatedMembers
+    })
+    selectedGroupInfo.value = res.data
+    const idx = squadGroups.value.findIndex(g => g.id === res.data.id)
+    if (idx >= 0) squadGroups.value[idx] = res.data
+  } catch (err) {
+    console.error('Failed to remove user from group', err)
+  } finally {
+    isUpdatingGroup.value = false
+  }
+}
+
+async function handleLeaveCurrentGroup() {
+  if (!selectedGroupId.value || !selectedGroupInfo.value) return
+  const ok = await confirmAction({
+    title: 'Leave Group Chat?',
+    message: `Are you sure you want to leave ${selectedGroupInfo.value.name}?`,
+    confirmLabel: 'Leave Group',
+    cancelLabel: 'Cancel',
+    isDestructive: true
+  })
+  if (!ok) return
+
+  try {
+    await axios.post(`/api/groups/${selectedGroupId.value}/leave`)
+    squadGroups.value = squadGroups.value.filter(g => g.id !== selectedGroupId.value)
+    selectedGroupId.value = null
+    selectedGroupInfo.value = null
+    groupMessages.value = []
+  } catch (err) {
+    console.error('Failed to leave group', err)
+  }
+}
+
+const availableUsersToAdd = computed(() => {
+  if (!selectedGroupInfo.value) return []
+  const currentMembers = new Set(selectedGroupInfo.value.memberUsernames.map(u => u.toLowerCase()))
+  return allPeople.value.filter(p => !currentMembers.has(p.username.toLowerCase()))
+})
+
+onMounted(() => {
+  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  if (socket) {
+    socket.on('dm:new', handleIncomingDm)
+    if (authStore.currentUser) {
+      socket.on(`dm:${authStore.currentUser.id}`, handleIncomingDm)
+    }
+    socket.on('group:msg', handleIncomingGroupMsg)
+    socket.on('group:updated', (updatedGroup: GroupChat) => {
+      const idx = squadGroups.value.findIndex(g => g.id === updatedGroup.id)
+      if (idx >= 0) squadGroups.value[idx] = updatedGroup
+      else squadGroups.value.push(updatedGroup)
+      if (selectedGroupId.value === updatedGroup.id) {
+        selectedGroupInfo.value = updatedGroup
+      }
+    })
+    socket.on('group:deleted', ({ id }: { id: string }) => {
+      squadGroups.value = squadGroups.value.filter(g => g.id !== id)
+      if (selectedGroupId.value === id) {
+        selectedGroupId.value = null
+        selectedGroupInfo.value = null
+        groupMessages.value = []
+      }
+    })
+  }
+})
+
 watch(() => props.isOpen, (open) => {
   if (open) {
     fetchConversations()
@@ -755,7 +890,29 @@ watch(() => props.initialTargetUserId, (newId) => {
                 <span>Delete Chat</span>
               </button>
 
-              <!-- DELETE GROUP BUTTON -->
+              <!-- MANAGE GROUP BUTTON (FOR HOST/ADMIN) -->
+              <button
+                v-if="selectedGroupInfo && (selectedGroupInfo.creatorId === authStore.currentUser?.id || selectedGroupInfo.creatorUsername === authStore.currentUser?.username || authStore.isAdmin)"
+                @click="handleOpenManageGroup"
+                class="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-lg text-[11px] font-bold cursor-pointer transition-colors border border-slate-700"
+                title="Manage Group: Rename, Add or Remove Members"
+              >
+                <Settings class="w-3.5 h-3.5" />
+                <span>Manage</span>
+              </button>
+
+              <!-- LEAVE GROUP BUTTON (FOR REGULAR MEMBERS) -->
+              <button
+                v-if="selectedGroupInfo && !(selectedGroupInfo.creatorId === authStore.currentUser?.id || selectedGroupInfo.creatorUsername === authStore.currentUser?.username || authStore.isAdmin)"
+                @click="handleLeaveCurrentGroup"
+                class="flex items-center gap-1 px-2.5 py-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                title="Leave Group Chat"
+              >
+                <LogOut class="w-3.5 h-3.5" />
+                <span>Leave</span>
+              </button>
+
+              <!-- DELETE GROUP BUTTON (FOR HOST/ADMIN) -->
               <button
                 v-if="selectedGroupInfo && (selectedGroupInfo.creatorId === authStore.currentUser?.id || selectedGroupInfo.creatorUsername === authStore.currentUser?.username || authStore.isAdmin)"
                 @click="handleDeleteGroup(selectedGroupInfo)"
@@ -763,7 +920,7 @@ watch(() => props.initialTargetUserId, (newId) => {
                 title="Delete Group Chat"
               >
                 <Trash2 class="w-3.5 h-3.5" />
-                <span>Delete Group</span>
+                <span>Delete</span>
               </button>
 
               <button
@@ -931,6 +1088,118 @@ watch(() => props.initialTargetUserId, (newId) => {
             class="px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow"
           >
             {{ isCreatingGroup ? 'Creating...' : 'Create Group' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MANAGE SQUAD GROUP MODAL (HOST CONTROLS) -->
+    <div
+      v-if="isManageGroupModalOpen && selectedGroupInfo"
+      class="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+      @click.self="isManageGroupModalOpen = false"
+    >
+      <div class="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl flex flex-col gap-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <Settings class="w-4 h-4 text-amber-400" />
+            <h3 class="text-sm font-black uppercase text-white">Manage Group Settings</h3>
+          </div>
+          <button @click="isManageGroupModalOpen = false" class="text-slate-400 hover:text-white cursor-pointer">
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+
+        <div class="flex flex-col gap-4 text-xs">
+          <!-- RENAME GROUP -->
+          <div class="flex flex-col gap-1.5">
+            <label class="font-bold text-slate-300">Group Name</label>
+            <div class="flex items-center gap-2">
+              <input
+                v-model="editGroupName"
+                type="text"
+                class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+              />
+              <button
+                @click="handleSaveGroupName"
+                :disabled="!editGroupName.trim() || isUpdatingGroup"
+                class="px-3.5 py-2 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 disabled:opacity-40 text-amber-400 font-bold rounded-xl transition-all cursor-pointer border border-slate-700"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+
+          <!-- ADD MEMBER -->
+          <div v-if="availableUsersToAdd.length > 0" class="flex flex-col gap-1.5 pt-2 border-t border-slate-800">
+            <label class="font-bold text-slate-300 flex items-center gap-1.5">
+              <UserPlus class="w-3.5 h-3.5 text-amber-400" />
+              Add New Member
+            </label>
+            <div class="flex items-center gap-2">
+              <select
+                v-model="selectedUserToAdd"
+                class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500"
+              >
+                <option value="" disabled>Select a player to add...</option>
+                <option v-for="user in availableUsersToAdd" :key="user.id" :value="user.username">
+                  {{ user.username }} ({{ user.inGameRole || 'Player' }})
+                </option>
+              </select>
+              <button
+                @click="handleAddUserToGroup"
+                :disabled="!selectedUserToAdd || isUpdatingGroup"
+                class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-black rounded-xl transition-all cursor-pointer shadow"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          <!-- MEMBER LIST & REMOVE -->
+          <div class="flex flex-col gap-1.5 pt-2 border-t border-slate-800">
+            <label class="font-bold text-slate-300">
+              Members ({{ selectedGroupInfo.memberUsernames.length }})
+            </label>
+            <div class="max-h-48 overflow-y-auto flex flex-col gap-1 p-2 bg-slate-950 border border-slate-800 rounded-xl scrollbar-thin">
+              <div
+                v-for="username in selectedGroupInfo.memberUsernames"
+                :key="username"
+                class="flex items-center justify-between p-2 bg-slate-900/60 rounded-lg border border-slate-800/80"
+              >
+                <div class="flex items-center gap-2">
+                  <img :src="`https://api.dicebear.com/7.x/bottts/svg?seed=${username}`" class="w-5 h-5 rounded-md object-cover" />
+                  <span class="font-bold text-slate-200">{{ username }}</span>
+                  <span
+                    v-if="username === selectedGroupInfo.creatorUsername"
+                    class="flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[9px] font-black rounded font-mono"
+                  >
+                    <Crown class="w-2.5 h-2.5" />
+                    HOST
+                  </span>
+                </div>
+
+                <!-- REMOVE MEMBER BUTTON (HOST ONLY, CANNOT REMOVE SELF/HOST) -->
+                <button
+                  v-if="username !== selectedGroupInfo.creatorUsername"
+                  @click="handleRemoveUserFromGroup(username)"
+                  :disabled="isUpdatingGroup"
+                  class="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded cursor-pointer transition-colors"
+                  title="Remove from group"
+                >
+                  <UserMinus class="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+          <button
+            @click="isManageGroupModalOpen = false"
+            class="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs cursor-pointer"
+          >
+            Done
           </button>
         </div>
       </div>

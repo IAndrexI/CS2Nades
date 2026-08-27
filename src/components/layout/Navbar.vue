@@ -6,6 +6,7 @@ import { useLineupStore } from '../../stores/lineupStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useAdminStore } from '../../stores/adminStore'
 import { useThemeStore } from '../../stores/themeStore'
+import { useGameRoomStore } from '../../stores/gameRoomStore'
 import { BRANDING, NAV_LABELS } from '../../config/site'
 import DataSyncModal from '../common/DataSyncModal.vue'
 import MapSettingsModal from '../map/MapSettingsModal.vue'
@@ -48,6 +49,7 @@ const lineupStore = useLineupStore()
 const authStore = useAuthStore()
 const adminStore = useAdminStore()
 const themeStore = useThemeStore()
+const gameRoomStore = useGameRoomStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -106,6 +108,8 @@ function handleLogout() {
   isUserDropdownOpen.value = false
 }
 
+const unreadMessageCount = ref(0)
+
 import { onMounted, onUnmounted } from 'vue'
 
 function handleGlobalClick(e: MouseEvent) {
@@ -121,6 +125,20 @@ function handleGlobalClick(e: MouseEvent) {
 
 onMounted(() => {
   window.addEventListener('click', handleGlobalClick)
+
+  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  if (socket) {
+    socket.on('dm:new', (msg: any) => {
+      if (!isPeopleGroupsOpen.value && msg.senderId !== authStore.currentUser?.id) {
+        unreadMessageCount.value++
+      }
+    })
+    socket.on('group:msg', (msg: any) => {
+      if (!isPeopleGroupsOpen.value && msg.senderId !== authStore.currentUser?.id) {
+        unreadMessageCount.value++
+      }
+    })
+  }
 })
 
 onUnmounted(() => {
@@ -279,13 +297,19 @@ onUnmounted(() => {
           <span class="hidden md:inline">Server</span>
         </button>
 
-        <!-- PEOPLE & SQUAD GROUPS (ICON ONLY) -->
+        <!-- PEOPLE & SQUAD GROUPS (ICON ONLY WITH UNREAD NOTIFICATION BADGE) -->
         <button
-          @click="isPeopleGroupsOpen = true"
-          class="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm group"
-          title="People & Squads Directory"
+          @click="isPeopleGroupsOpen = true; unreadMessageCount = 0"
+          class="relative p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm group"
+          title="People & Squads Directory / Chat"
         >
           <Users class="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+          <span 
+            v-if="unreadMessageCount > 0" 
+            class="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white shadow-lg animate-pulse"
+          >
+            {{ unreadMessageCount > 9 ? '9+' : unreadMessageCount }}
+          </span>
         </button>
 
         <!-- USER PROFILE / LOGIN BUTTON -->

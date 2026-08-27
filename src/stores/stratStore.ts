@@ -27,8 +27,6 @@ export const useStratStore = defineStore('strat', () => {
     | 'molotov'
     | 'he_blast'
     | 'c4_bomb'
-    | 'plant_a'
-    | 'plant_b'
     | 'player_t'
     | 'player_ct'
     | 'player'
@@ -41,6 +39,16 @@ export const useStratStore = defineStore('strat', () => {
   const tempSavedBoards = ref<Record<string, { elements: TacticsElement[]; savedAt: string }>>({})
   const history = ref<TacticsElement[][]>([])
   const historyIndex = ref<number>(-1)
+
+  // Per-User Undo / Redo Stacks
+  interface UserActionRecord {
+    action: 'add' | 'remove'
+    element: TacticsElement
+    userId?: string
+    username?: string
+  }
+  const userActionUndoStack = ref<UserActionRecord[]>([])
+  const userActionRedoStack = ref<UserActionRecord[]>([])
 
   const TEMP_BOARDS_STORAGE_KEY = 'cs2_stratbook_temp_saved_boards'
 
@@ -175,8 +183,16 @@ export const useStratStore = defineStore('strat', () => {
   }
 
   // Tactics Board Drawing actions
-  function addBoardElement(element: TacticsElement) {
-    // Cut any redo history
+  function addBoardElement(element: TacticsElement, authorInfo?: { userId?: string; username?: string }) {
+    if (authorInfo?.userId || element.authorId) {
+      const uId = authorInfo?.userId || element.authorId
+      const uName = authorInfo?.username || element.authorUsername
+      userActionUndoStack.value.push({ action: 'add', element: { ...element }, userId: uId, username: uName })
+      // Clear redo stack for this user
+      userActionRedoStack.value = userActionRedoStack.value.filter(r => r.userId !== uId)
+    }
+
+    // Cut any global redo history
     if (historyIndex.value < history.value.length - 1) {
       history.value = history.value.slice(0, historyIndex.value + 1)
     }
@@ -187,7 +203,15 @@ export const useStratStore = defineStore('strat', () => {
     saveToStorage()
   }
 
-  function removeBoardElement(id: string) {
+  function removeBoardElement(id: string, authorInfo?: { userId?: string; username?: string }) {
+    const existing = boardElements.value.find(el => el.id === id)
+    if (existing && (authorInfo?.userId || existing.authorId)) {
+      const uId = authorInfo?.userId || existing.authorId
+      const uName = authorInfo?.username || existing.authorUsername
+      userActionUndoStack.value.push({ action: 'remove', element: { ...existing }, userId: uId, username: uName })
+      userActionRedoStack.value = userActionRedoStack.value.filter(r => r.userId !== uId)
+    }
+
     boardElements.value = boardElements.value.filter(el => el.id !== id)
     mapElements.value[mapStore.currentMapId] = [...boardElements.value]
     history.value.push([...boardElements.value])
@@ -200,10 +224,38 @@ export const useStratStore = defineStore('strat', () => {
     mapElements.value[mapStore.currentMapId] = []
     history.value.push([])
     historyIndex.value = history.value.length - 1
+    userActionUndoStack.value = []
+    userActionRedoStack.value = []
     saveToStorage()
   }
 
-  function undo() {
+  // User-Specific Undo (reverts only the requesting user's recent input)
+  function undo(userId?: string): { action: 'add' | 'remove'; element: TacticsElement } | null {
+    if (userId) {
+      for (let i = userActionUndoStack.value.length - 1; i >= 0; i--) {
+        const record = userActionUndoStack.value[i]
+        if (record.userId === userId || (record.username && record.username === userId)) {
+          userActionUndoStack.value.splice(i, 1)
+          if (record.action === 'add') {
+            // Revert 'add' by removing element
+            boardElements.value = boardElements.value.filter(el => el.id !== record.element.id)
+            userActionRedoStack.value.push({ ...record })
+            mapElements.value[mapStore.currentMapId] = [...boardElements.value]
+            saveToStorage()
+            return { action: 'remove', element: record.element }
+          } else if (record.action === 'remove') {
+            // Revert 'remove' by restoring element
+            boardElements.value.push(record.element)
+            userActionRedoStack.value.push({ ...record })
+            mapElements.value[mapStore.currentMapId] = [...boardElements.value]
+            saveToStorage()
+            return { action: 'add', element: record.element }
+          }
+        }
+      }
+    }
+
+    // Global fallback if no user id provided
     if (historyIndex.value > 0) {
       historyIndex.value--
       boardElements.value = [...history.value[historyIndex.value]]
@@ -215,6 +267,7 @@ export const useStratStore = defineStore('strat', () => {
       mapElements.value[mapStore.currentMapId] = []
       saveToStorage()
     }
+    return null
   }
 
   function setBoardElements(elements: TacticsElement[]) {
@@ -225,13 +278,39 @@ export const useStratStore = defineStore('strat', () => {
     saveToStorage()
   }
 
-  function redo() {
+  // User-Specific Redo
+  function redo(userId?: string): { action: 'add' | 'remove'; element: TacticsElement } | null {
+    if (userId) {
+      for (let i = userActionRedoStack.value.length - 1; i >= 0; i--) {
+        const record = userActionRedoStack.value[i]
+        if (record.userId === userId || (record.username && record.username === userId)) {
+          userActionRedoStack.value.splice(i, 1)
+          if (record.action === 'add') {
+            // Re-apply 'add'
+            boardElements.value.push(record.element)
+            userActionUndoStack.value.push({ ...record })
+            mapElements.value[mapStore.currentMapId] = [...boardElements.value]
+            saveToStorage()
+            return { action: 'add', element: record.element }
+          } else if (record.action === 'remove') {
+            // Re-apply 'remove'
+            boardElements.value = boardElements.value.filter(el => el.id !== record.element.id)
+            userActionUndoStack.value.push({ ...record })
+            mapElements.value[mapStore.currentMapId] = [...boardElements.value]
+            saveToStorage()
+            return { action: 'remove', element: record.element }
+          }
+        }
+      }
+    }
+
     if (historyIndex.value < history.value.length - 1) {
       historyIndex.value++
       boardElements.value = [...history.value[historyIndex.value]]
       mapElements.value[mapStore.currentMapId] = [...boardElements.value]
       saveToStorage()
     }
+    return null
   }
 
   return {

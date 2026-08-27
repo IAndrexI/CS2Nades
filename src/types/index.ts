@@ -160,6 +160,9 @@ export interface TacticsElement {
   playerNum?: number | string
   radius?: number
   strokeWidth?: number
+  authorId?: string
+  authorUsername?: string
+  authorAvatar?: string
 }
 
 export interface NadeExecute {

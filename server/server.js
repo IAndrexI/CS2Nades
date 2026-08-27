@@ -541,9 +541,10 @@ app.put('/api/auth/profile', requireAuth, (req, res) => {
 app.delete('/api/auth/account', requireAuth, (req, res) => {
   db = loadDB()
   const userId = req.user.id
+  const username = req.user.username
   
   // Wipe personal lineups
-  db.lineups = db.lineups.filter(l => l.userId !== userId)
+  db.lineups = (db.lineups || []).filter(l => l.userId !== userId)
   
   // Wipe personal strategies
   db.strats = (db.strats || []).filter(s => s.userId !== userId)
@@ -556,10 +557,26 @@ app.delete('/api/auth/account', requireAuth, (req, res) => {
     }
   } catch (err) {}
 
+  // Wipe all direct messages sent by or to this user
+  db.dms = (db.dms || []).filter(m => m.senderId !== userId && m.recipientId !== userId && m.senderUsername !== username && m.recipientUsername !== username)
+
+  // Wipe group messages sent by this user
+  if (db.groupMessages) {
+    db.groupMessages = db.groupMessages.filter(m => m.senderId !== userId && m.senderUsername !== username)
+  }
+
+  // Remove user from all groups and delete empty groups
+  if (db.groups) {
+    db.groups.forEach(g => {
+      g.memberUsernames = (g.memberUsernames || []).filter(u => u.toLowerCase() !== username.toLowerCase())
+    })
+    db.groups = db.groups.filter(g => g.memberUsernames && g.memberUsernames.length > 0)
+  }
+
   // Remove user
-  db.users = db.users.filter(u => u.id !== userId)
+  db.users = (db.users || []).filter(u => u.id !== userId)
   saveDB(db)
-  res.json({ success: true, message: 'Account and associated data completely wiped' })
+  res.json({ success: true, message: 'Account, chats, and associated data completely wiped' })
 })
 
 // PUBLIC / TEAMMATE PROFILE
@@ -796,6 +813,65 @@ app.delete('/api/groups/:id', requireAuth, (req, res) => {
   res.json({ success: true, message: 'Group chat deleted successfully' })
 })
 
+// EDIT GROUP (RENAME / ADD MEMBER / REMOVE MEMBER - ONLY HOST/CREATOR OR ADMIN)
+app.put('/api/groups/:id', requireAuth, (req, res) => {
+  db = loadDB()
+  const { id } = req.params
+  const index = (db.groups || []).findIndex(g => g.id === id)
+  if (index === -1) return res.status(404).json({ error: 'Group not found' })
+
+  const group = db.groups[index]
+  const isCreator = group.creatorId === req.user.id || group.creatorUsername === req.user.username
+  const isAdmin = req.user.role === 'admin'
+
+  if (!isCreator && !isAdmin) {
+    return res.status(403).json({ error: 'Only the group host or admin can edit group settings and members' })
+  }
+
+  const { name, description, memberUsernames } = req.body
+
+  if (name !== undefined && name.trim()) {
+    group.name = name.trim()
+  }
+  if (description !== undefined) {
+    group.description = description.trim()
+  }
+  if (Array.isArray(memberUsernames)) {
+    // Keep creator in the group always
+    const safeMembers = Array.from(new Set([group.creatorUsername || req.user.username, ...memberUsernames]))
+    group.memberUsernames = safeMembers
+  }
+
+  saveDB(db)
+  io.emit('group:updated', group)
+  res.json(group)
+})
+
+// LEAVE GROUP (FOR REGULAR MEMBERS)
+app.post('/api/groups/:id/leave', requireAuth, (req, res) => {
+  db = loadDB()
+  const { id } = req.params
+  const index = (db.groups || []).findIndex(g => g.id === id)
+  if (index === -1) return res.status(404).json({ error: 'Group not found' })
+
+  const group = db.groups[index]
+  group.memberUsernames = (group.memberUsernames || []).filter(u => u.toLowerCase() !== req.user.username.toLowerCase())
+
+  if (group.memberUsernames.length === 0) {
+    db.groups.splice(index, 1)
+    if (db.groupMessages) {
+      db.groupMessages = db.groupMessages.filter(m => m.groupId !== id)
+    }
+    saveDB(db)
+    io.emit('group:deleted', { id })
+    return res.json({ success: true, message: 'Group removed as last member left' })
+  }
+
+  saveDB(db)
+  io.emit('group:updated', group)
+  res.json({ success: true, message: 'Left group successfully' })
+})
+
 app.get('/api/groups/:id/messages', requireAuth, (req, res) => {
   db = loadDB()
   if (!db.groupMessages) db.groupMessages = []
@@ -835,14 +911,6 @@ app.post('/api/groups/:id/messages', requireAuth, (req, res) => {
   res.json(newMsg)
 })
 
-app.delete('/api/groups/:id', requireAdmin, (req, res) => {
-  db = loadDB()
-  const { id } = req.params
-  db.groups = db.groups.filter(g => g.id !== id)
-  saveDB(db)
-  res.json({ success: true })
-})
-
 // ==========================================
 // ADMIN USER MANAGEMENT
 // ==========================================
@@ -877,9 +945,40 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
   if (id === req.user.id) {
     return res.status(400).json({ error: 'Cannot delete your own admin account' })
   }
+  const targetUser = (db.users || []).find(u => u.id === id)
+  const targetUsername = targetUser?.username
+
+  // Wipe personal lineups & strats
+  db.lineups = (db.lineups || []).filter(l => l.userId !== id)
+  db.strats = (db.strats || []).filter(s => s.userId !== id)
+
+  // Wipe DMs
+  db.dms = (db.dms || []).filter(m => m.senderId !== id && m.recipientId !== id && (targetUsername ? m.senderUsername !== targetUsername && m.recipientUsername !== targetUsername : true))
+
+  // Wipe group messages
+  if (db.groupMessages) {
+    db.groupMessages = db.groupMessages.filter(m => m.senderId !== id && (targetUsername ? m.senderUsername !== targetUsername : true))
+  }
+
+  // Remove from groups
+  if (db.groups && targetUsername) {
+    db.groups.forEach(g => {
+      g.memberUsernames = (g.memberUsernames || []).filter(u => u.toLowerCase() !== targetUsername.toLowerCase())
+    })
+    db.groups = db.groups.filter(g => g.memberUsernames && g.memberUsernames.length > 0)
+  }
+
+  // Delete personal JSON file
+  try {
+    const userPersonalFile = path.join(PERSONAL_DIR, `${id}.json`)
+    if (fs.existsSync(userPersonalFile)) {
+      fs.unlinkSync(userPersonalFile)
+    }
+  } catch (err) {}
+
   db.users = db.users.filter(u => u.id !== id)
   saveDB(db)
-  res.json({ success: true })
+  res.json({ success: true, message: 'User and all associated chat logs wiped' })
 })
 
 // ==========================================
@@ -1593,6 +1692,23 @@ io.on('connection', (socket) => {
     })
   })
 
+  // Explicit Room Leave handler
+  socket.on('room:leave', () => {
+    if (currentRoomId && gameRooms.has(currentRoomId)) {
+      const room = gameRooms.get(currentRoomId)
+      socket.leave(currentRoomId)
+      if (!isGhostMode) {
+        room.members = room.members.filter(m => m.socketId !== socket.id)
+        io.to(currentRoomId).emit('room:members', room.members)
+        if (room.members.length === 0) {
+          gameRooms.delete(currentRoomId)
+          io.emit('room:deleted', { roomCode: currentRoomId })
+        }
+      }
+      currentRoomId = null
+    }
+  })
+
   // Disconnect handler
   socket.on('disconnect', () => {
     if (currentUserInfo?.username) {
@@ -1605,11 +1721,8 @@ io.on('connection', (socket) => {
       room.members = room.members.filter(m => m.socketId !== socket.id)
       io.to(currentRoomId).emit('room:members', room.members)
       if (room.members.length === 0) {
-        setTimeout(() => {
-          if (gameRooms.get(currentRoomId)?.members.length === 0) {
-            gameRooms.delete(currentRoomId)
-          }
-        }, 600000)
+        gameRooms.delete(currentRoomId)
+        io.emit('room:deleted', { roomCode: currentRoomId })
       }
     }
   })

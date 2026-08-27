@@ -266,9 +266,7 @@ const allToolsCatalogue = [
   { id: 'flash', label: 'Flash Burst', icon: Zap, category: 'Utility' },
   { id: 'molotov', label: 'Molotov Fire', icon: Flame, category: 'Utility' },
   { id: 'he_blast', label: 'HE Grenade', icon: Crosshair, category: 'Utility' },
-  { id: 'c4_bomb', label: 'C4 Bomb', icon: Bomb, category: 'Objectives' },
-  { id: 'plant_a', label: 'Plant A', icon: Crosshair, category: 'Objectives' },
-  { id: 'plant_b', label: 'Plant B', icon: Crosshair, category: 'Objectives' },
+  { id: 'c4_bomb', label: 'C4 Bomb (Plant Zone Only)', icon: Bomb, category: 'Objectives' },
   { id: 'player_t', label: 'T Player Pin', icon: User, category: 'Players' },
   { id: 'player_ct', label: 'CT Player Pin', icon: User, category: 'Players' },
   { id: 'eraser', label: 'Eraser', icon: Eraser, category: 'General' }
@@ -277,7 +275,7 @@ const allToolsCatalogue = [
 const enabledToolIds = ref<string[]>([
   'select', 'pen', 'arrow', 'line', 'text',
   'smoke', 'flash', 'molotov', 'he_blast', 'c4_bomb',
-  'plant_a', 'plant_b', 'player_t', 'player_ct', 'eraser'
+  'player_t', 'player_ct', 'eraser'
 ])
 
 const visibleTools = computed(() => {
@@ -433,8 +431,40 @@ onMounted(async () => {
     }
   }, 7000)
 
+  // Restore saved tool preferences
+  const prefTool = localStorage.getItem('cs2_tactics_pref_tool')
+  if (prefTool && prefTool !== 'plant_a' && prefTool !== 'plant_b') {
+    stratStore.activeTool = prefTool as any
+  }
+  const prefArrowMode = localStorage.getItem('cs2_tactics_pref_arrow_mode')
+  if (prefArrowMode === 'head_controls' || prefArrowMode === 'tail_controls') {
+    arrowControlMode.value = prefArrowMode
+  }
+  const prefStroke = localStorage.getItem('cs2_tactics_pref_stroke_width')
+  if (prefStroke) {
+    activeStrokeWidth.value = Number(prefStroke) || 4
+  }
+  const prefColor = localStorage.getItem('cs2_tactics_pref_color')
+  if (prefColor) {
+    stratStore.activeColor = prefColor
+  }
+
   window.addEventListener('focus', handleWindowFocusSync)
   window.addEventListener('click', handleTacticsMapGlobalClick)
+})
+
+// Watch and persist tool preferences
+watch(() => stratStore.activeTool, (tool) => {
+  if (tool) localStorage.setItem('cs2_tactics_pref_tool', tool)
+})
+watch(arrowControlMode, (mode) => {
+  if (mode) localStorage.setItem('cs2_tactics_pref_arrow_mode', mode)
+})
+watch(activeStrokeWidth, (w) => {
+  if (w) localStorage.setItem('cs2_tactics_pref_stroke_width', String(w))
+})
+watch(() => stratStore.activeColor, (col) => {
+  if (col) localStorage.setItem('cs2_tactics_pref_color', col)
 })
 
 let autoSyncTimer: any = null
@@ -551,14 +581,67 @@ function handleElementMouseDown(e: MouseEvent, el: TacticsElement) {
   }
 }
 
+const isErasing = ref(false)
+
+function distToSegment(p: { x: number; y: number }, v: { x: number; y: number }, w: { x: number; y: number }): number {
+  const l2 = (v.x - w.x) * (v.x - w.x) + (v.y - w.y) * (v.y - w.y)
+  if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y)
+  let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2
+  t = Math.max(0, Math.min(1, t))
+  return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)))
+}
+
+function eraseAtCoords(coords: { x: number; y: number }) {
+  const currentUserId = authStore.currentUser?.id || authStore.currentUser?.username
+  const s = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  const toRemoveIds: string[] = []
+
+  stratStore.boardElements.forEach(el => {
+    if (el.type === 'pen') {
+      const remaining = el.points.filter(pt => Math.hypot(pt.x - coords.x, pt.y - coords.y) > 3.2)
+      if (remaining.length < el.points.length) {
+        if (remaining.length < 2) {
+          toRemoveIds.push(el.id)
+        } else {
+          el.points = remaining
+        }
+      }
+    } else if (el.type === 'line' || el.type === 'arrow') {
+      if (el.points.length >= 2) {
+        const d = distToSegment(coords, el.points[0], el.points[1])
+        if (d <= 3.2) {
+          toRemoveIds.push(el.id)
+        }
+      }
+    } else if (el.points.length > 0) {
+      if (Math.hypot(el.points[0].x - coords.x, el.points[0].y - coords.y) <= 3.8) {
+        toRemoveIds.push(el.id)
+      }
+    }
+  })
+
+  toRemoveIds.forEach(id => {
+    stratStore.removeBoardElement(id, { userId: currentUserId })
+    if (s && s.connected) {
+      s.emit('room:element_remove', { elementId: id, mapId: mapStore.currentMapId })
+    }
+  })
+}
+
 function handleMouseDown(e: MouseEvent) {
   if (!gameRoomStore.isHost && !gameRoomStore.allowGuestsToDraw) {
     return
   }
   const tool = stratStore.activeTool
-  if (tool === 'select' || tool === 'eraser') return
+  if (tool === 'select') return
 
   const coords = getMapCoords(e)
+
+  if (tool === 'eraser') {
+    isErasing.value = true
+    eraseAtCoords(coords)
+    return
+  }
 
   if (tool === 'text') {
     pendingTextCoords.value = coords
@@ -573,7 +656,9 @@ function handleMouseDown(e: MouseEvent) {
       type: 'smoke_cloud',
       color: '#94a3b8',
       points: [coords],
-      radius: 32
+      radius: 32,
+      authorId: authStore.currentUser?.id,
+      authorUsername: authStore.currentUser?.username
     })
     return
   }
@@ -584,7 +669,9 @@ function handleMouseDown(e: MouseEvent) {
       type: 'flash_burst',
       color: '#eab308',
       points: [coords],
-      radius: 16
+      radius: 16,
+      authorId: authStore.currentUser?.id,
+      authorUsername: authStore.currentUser?.username
     })
     return
   }
@@ -595,7 +682,9 @@ function handleMouseDown(e: MouseEvent) {
       type: 'molotov_fire',
       color: '#f97316',
       points: [coords],
-      radius: 25
+      radius: 25,
+      authorId: authStore.currentUser?.id,
+      authorUsername: authStore.currentUser?.username
     })
     return
   }
@@ -606,30 +695,52 @@ function handleMouseDown(e: MouseEvent) {
       type: 'he_blast',
       color: '#22c55e',
       points: [coords],
-      radius: 20
+      radius: 20,
+      authorId: authStore.currentUser?.id,
+      authorUsername: authStore.currentUser?.username
     })
     return
   }
 
   if (tool === 'c4_bomb') {
+    // Check if clicked inside Site A or Site B plant zones (red box)
+    const siteA = mapStore.currentMap.sites?.a
+    const siteB = mapStore.currentMap.sites?.b
+
+    const distA = siteA ? Math.hypot(coords.x - siteA.x, coords.y - siteA.y) : 999
+    const distB = siteB ? Math.hypot(coords.x - siteB.x, coords.y - siteB.y) : 999
+
+    const isInsideSite = distA <= 7.5 || distB <= 7.5
+
+    if (!isInsideSite) {
+      tempSaveToast.value = '⚠️ C4 can ONLY be placed inside Site A or Site B plant box!'
+      setTimeout(() => { tempSaveToast.value = '' }, 3500)
+      return
+    }
+
+    const myUserId = authStore.currentUser?.id || 'guest'
+    const myUsername = authStore.currentUser?.username || 'Player'
+
+    // Limit 1 bomb per player: Remove player's existing bomb if already placed
+    const existingBomb = stratStore.boardElements.find(e => 
+      e.type === 'c4_bomb' && (e.authorId === myUserId || e.authorUsername === myUsername)
+    )
+
+    if (existingBomb) {
+      stratStore.removeBoardElement(existingBomb.id, { userId: myUserId, username: myUsername })
+      const s = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+      if (s && s.connected) s.emit('room:element_remove', { elementId: existingBomb.id, mapId: mapStore.currentMapId })
+    }
+
     addElement({
       id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       type: 'c4_bomb',
-      color: '#f97316',
+      color: '#ef4444',
       points: [coords],
-      radius: 16
-    })
-    return
-  }
-
-  if (tool === 'plant_a' || tool === 'plant_b') {
-    addElement({
-      id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      type: tool as any,
-      color: stratStore.activeColor,
-      points: [coords],
-      text: tool === 'plant_a' ? 'A' : 'B',
-      radius: 18
+      radius: 16,
+      authorId: myUserId,
+      authorUsername: myUsername,
+      authorAvatar: authStore.currentUser?.avatar
     })
     return
   }
@@ -651,7 +762,9 @@ function handleMouseDown(e: MouseEvent) {
       color: isT ? '#f97316' : '#0ea5e9',
       points: [coords],
       playerNum: nextNum,
-      radius: 15
+      radius: 15,
+      authorId: authStore.currentUser?.id,
+      authorUsername: authStore.currentUser?.username
     })
     return
   }
@@ -666,6 +779,17 @@ function handleMouseMove(e: MouseEvent) {
     const el = stratStore.boardElements.find(item => item.id === draggedElementId.value)
     if (el) {
       const coords = getMapCoords(e)
+      // If dragging C4 bomb, maintain plant zone constraint
+      if (el.type === 'c4_bomb') {
+        const siteA = mapStore.currentMap.sites?.a
+        const siteB = mapStore.currentMap.sites?.b
+        const distA = siteA ? Math.hypot(coords.x - siteA.x, coords.y - siteA.y) : 999
+        const distB = siteB ? Math.hypot(coords.x - siteB.x, coords.y - siteB.y) : 999
+        if (distA > 8 && distB > 8) {
+          return // do not drag outside plant zones
+        }
+      }
+
       const targetX = Math.round(Math.max(3, Math.min(97, coords.x - dragOffset.value.x)) * 10) / 10
       const targetY = Math.round(Math.max(3, Math.min(97, coords.y - dragOffset.value.y)) * 10) / 10
 
@@ -680,6 +804,12 @@ function handleMouseMove(e: MouseEvent) {
         }))
       }
     }
+    return
+  }
+
+  if (isErasing.value && stratStore.activeTool === 'eraser') {
+    const coords = getMapCoords(e)
+    eraseAtCoords(coords)
     return
   }
 
@@ -699,6 +829,10 @@ function handleMouseMove(e: MouseEvent) {
 }
 
 function handleMouseUp() {
+  if (isErasing.value) {
+    isErasing.value = false
+  }
+
   if (isDraggingElement.value) {
     isDraggingElement.value = false
     draggedElementId.value = null
@@ -716,8 +850,6 @@ function handleMouseUp() {
   const tool = stratStore.activeTool
   if (currentStroke.value.length >= 2) {
     let finalPoints = [...currentStroke.value]
-    // Tail-controlled mode: First click was the Head (target), dragging pulled the Tail.
-    // We reverse so points[0] = Tail (origin), points[1] = Head (destination + arrowhead)
     if (tool === 'arrow' && arrowControlMode.value === 'tail_controls') {
       finalPoints = [currentStroke.value[1], currentStroke.value[0]]
     }
@@ -727,24 +859,54 @@ function handleMouseUp() {
       type: (tool === 'pen' ? 'pen' : tool === 'arrow' ? 'arrow' : 'line') as TacticsElementType,
       color: stratStore.activeColor,
       strokeWidth: activeStrokeWidth.value,
-      points: finalPoints
+      points: finalPoints,
+      authorId: authStore.currentUser?.id,
+      authorUsername: authStore.currentUser?.username
     })
   }
   currentStroke.value = []
 }
 
 function addElement(element: TacticsElement) {
-  stratStore.addBoardElement(element)
+  const currentUserId = authStore.currentUser?.id || authStore.currentUser?.username
+  stratStore.addBoardElement(element, { userId: currentUserId, username: authStore.currentUser?.username })
   const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
   if (socket && socket.connected) {
     socket.emit('room:element_add', { element, mapId: mapStore.currentMapId })
   }
 }
 
+function handleUndo() {
+  const currentUserId = authStore.currentUser?.id || authStore.currentUser?.username
+  const res = stratStore.undo(currentUserId)
+  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  if (res && socket && socket.connected) {
+    if (res.action === 'remove') {
+      socket.emit('room:element_remove', { elementId: res.element.id, mapId: mapStore.currentMapId })
+    } else if (res.action === 'add') {
+      socket.emit('room:element_add', { element: res.element, mapId: mapStore.currentMapId })
+    }
+  }
+}
+
+function handleRedo() {
+  const currentUserId = authStore.currentUser?.id || authStore.currentUser?.username
+  const res = stratStore.redo(currentUserId)
+  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  if (res && socket && socket.connected) {
+    if (res.action === 'add') {
+      socket.emit('room:element_add', { element: res.element, mapId: mapStore.currentMapId })
+    } else if (res.action === 'remove') {
+      socket.emit('room:element_remove', { elementId: res.element.id, mapId: mapStore.currentMapId })
+    }
+  }
+}
+
 function handleElementClick(e: MouseEvent, el: TacticsElement) {
   e.stopPropagation()
   if (stratStore.activeTool === 'eraser') {
-    stratStore.removeBoardElement(el.id)
+    const currentUserId = authStore.currentUser?.id || authStore.currentUser?.username
+    stratStore.removeBoardElement(el.id, { userId: currentUserId })
     const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
     if (socket && socket.connected) socket.emit('room:element_remove', { elementId: el.id, mapId: mapStore.currentMapId })
   } else if (stratStore.activeTool === 'select') {
@@ -1155,15 +1317,15 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
       <!-- ACTIONS: UNDO, REDO, CLEAR, DELETE SELECTED -->
       <div class="flex items-center gap-1.5">
         <button
-          @click="stratStore.undo()"
-          title="Undo"
+          @click="handleUndo"
+          title="Undo Your Input"
           class="p-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-xl text-xs transition-colors cursor-pointer"
         >
           <RotateCcw class="w-4 h-4" />
         </button>
         <button
-          @click="stratStore.redo()"
-          title="Redo"
+          @click="handleRedo"
+          title="Redo Your Input"
           class="p-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-xl text-xs transition-colors cursor-pointer"
         >
           <RotateCw class="w-4 h-4" />
@@ -1348,15 +1510,29 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   stroke-width="1.5"
                   stroke-dasharray="4 3"
                 />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="10" fill="#0f172a" stroke="#94a3b8" stroke-width="1.5" />
-                <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3.5" fill="#ffffff" font-size="9" font-weight="black" text-anchor="middle">S</text>
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="12" fill="#0f172a" stroke="#94a3b8" stroke-width="1.5" />
+                <image
+                  href="/icons/smoke.png"
+                  :x="el.points[0].x * 10 - 8"
+                  :y="el.points[0].y * 10 - 8"
+                  width="16"
+                  height="16"
+                  preserveAspectRatio="xMidYMid meet"
+                />
               </g>
 
               <!-- 6. FLASH BURST -->
               <g v-else-if="el.type === 'flash_burst'">
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="16" fill="#eab308" fill-opacity="0.25" stroke="#eab308" stroke-width="1.5" stroke-dasharray="3 2" />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="9" fill="#0f172a" stroke="#eab308" stroke-width="1.5" />
-                <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3" fill="#fde047" font-size="8" font-weight="black" text-anchor="middle">F</text>
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="18" fill="#eab308" fill-opacity="0.25" stroke="#eab308" stroke-width="1.5" stroke-dasharray="3 2" />
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="11" fill="#0f172a" stroke="#eab308" stroke-width="1.5" />
+                <image
+                  href="/icons/flash.png"
+                  :x="el.points[0].x * 10 - 7"
+                  :y="el.points[0].y * 10 - 7"
+                  width="14"
+                  height="14"
+                  preserveAspectRatio="xMidYMid meet"
+                />
               </g>
 
               <!-- 7. MOLOTOV FIRE -->
@@ -1370,41 +1546,78 @@ function getArrowheadPolygon(p1: { x: number; y: number }, p2: { x: number; y: n
                   stroke-width="1.5"
                   stroke-dasharray="4 3"
                 />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="10" fill="#0f172a" stroke="#f97316" stroke-width="1.5" />
-                <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3.5" fill="#fb923c" font-size="9" font-weight="black" text-anchor="middle">M</text>
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="12" fill="#0f172a" stroke="#f97316" stroke-width="1.5" />
+                <image
+                  href="/icons/molotov.png"
+                  :x="el.points[0].x * 10 - 8"
+                  :y="el.points[0].y * 10 - 8"
+                  width="16"
+                  height="16"
+                  preserveAspectRatio="xMidYMid meet"
+                />
               </g>
 
               <!-- 8. HE GRENADE BLAST -->
               <g v-else-if="el.type === 'he_blast'">
                 <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="20" fill="#22c55e" fill-opacity="0.2" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="3 2" />
-                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="9" fill="#0f172a" stroke="#22c55e" stroke-width="1.5" />
-                <text :x="el.points[0].x * 10" :y="el.points[0].y * 10 + 3" fill="#4ade80" font-size="8" font-weight="black" text-anchor="middle">HE</text>
+                <circle :cx="el.points[0].x * 10" :cy="el.points[0].y * 10" r="11" fill="#0f172a" stroke="#22c55e" stroke-width="1.5" />
+                <image
+                  href="/icons/grenade.png"
+                  :x="el.points[0].x * 10 - 7"
+                  :y="el.points[0].y * 10 - 7"
+                  width="14"
+                  height="14"
+                  preserveAspectRatio="xMidYMid meet"
+                />
               </g>
 
-              <!-- 9. C4 BOMB / PLANT SPOT -->
+              <!-- 9. C4 BOMB (PLANT ZONE ONLY, WITH USER BADGE) -->
               <g v-else-if="el.type === 'c4_bomb' || el.type === 'plant_a' || el.type === 'plant_b'">
+                <!-- Main Bomb Base -->
                 <rect
-                  :x="el.points[0].x * 10 - 12"
-                  :y="el.points[0].y * 10 - 12"
-                  width="24"
-                  height="24"
-                  rx="5"
-                  :fill="el.type === 'c4_bomb' ? '#b91c1c' : el.color"
-                  stroke="#ffffff"
-                  stroke-width="1.5"
-                  class="shadow-lg"
+                  :x="el.points[0].x * 10 - 14"
+                  :y="el.points[0].y * 10 - 14"
+                  width="28"
+                  height="28"
+                  rx="6"
+                  fill="#7f1d1d"
+                  stroke="#ef4444"
+                  stroke-width="2"
+                  class="shadow-xl"
                 />
-                <text
-                  :x="el.points[0].x * 10"
-                  :y="el.points[0].y * 10 + 4"
-                  fill="#ffffff"
-                  font-size="11"
-                  font-weight="black"
-                  font-family="monospace"
-                  text-anchor="middle"
-                >
-                  {{ el.text || 'C4' }}
-                </text>
+                <image
+                  href="/icons/c4.png"
+                  :x="el.points[0].x * 10 - 10"
+                  :y="el.points[0].y * 10 - 10"
+                  width="20"
+                  height="20"
+                  preserveAspectRatio="xMidYMid meet"
+                />
+
+                <!-- Small Player Badge on Top-Right Corner of Bomb -->
+                <g :transform="`translate(${el.points[0].x * 10 + 9}, ${el.points[0].y * 10 - 9})`">
+                  <circle cx="0" cy="0" r="7" fill="#0f172a" stroke="#de9b35" stroke-width="1.5" />
+                  <image
+                    v-if="el.authorAvatar"
+                    :href="el.authorAvatar"
+                    x="-5"
+                    y="-5"
+                    width="10"
+                    height="10"
+                    clip-path="circle(5px at center)"
+                  />
+                  <text
+                    v-else
+                    x="0"
+                    y="3"
+                    fill="#de9b35"
+                    font-size="7"
+                    font-weight="900"
+                    text-anchor="middle"
+                  >
+                    {{ (el.authorUsername || 'P').charAt(0).toUpperCase() }}
+                  </text>
+                </g>
               </g>
 
               <!-- 10. PLAYER PIN (5v5 ROSTER, MOVEABLE) -->
