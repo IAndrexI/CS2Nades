@@ -67,9 +67,10 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
   function getSocket(): Socket {
     if (!socket.value) {
       socket.value = io({
-        autoConnect: false,
+        autoConnect: true,
         reconnection: true,
-        reconnectionAttempts: 5
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000
       })
 
       socket.value.on('connect', () => {
@@ -249,6 +250,7 @@ export const useGameRoomStore = defineStore('gameRoom', () => {
 
   return {
     socket,
+    getSocket,
     isConnected,
     currentRoomCode,
     hostUsername,

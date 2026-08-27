@@ -1,7 +1,8 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '../../stores/authStore'
 import { useGameRoomStore } from '../../stores/gameRoomStore'
+import { useThemeStore } from '../../stores/themeStore'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
 import axios from 'axios'
 import { 
@@ -36,6 +37,7 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore()
 const gameRoomStore = useGameRoomStore()
+const themeStore = useThemeStore()
 const { confirmAction } = useConfirmDialog()
 
 const activeTab = ref<'people' | 'groups' | 'rooms'>('people')
@@ -144,7 +146,10 @@ watch(() => props.isOpen, (open) => {
       class="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md overflow-y-auto p-4 sm:p-6 flex justify-center items-center animate-fade-in"
       @click.self="emit('close')"
     >
-      <div class="relative w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto h-[85vh] max-h-[88vh]">
+      <div 
+        class="relative w-full max-w-4xl border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto h-[85vh] max-h-[88vh]"
+        :style="{ backgroundColor: themeStore.customModalBgColor }"
+      >
         <!-- HEADER -->
         <div class="p-5 border-b border-slate-800 bg-slate-950/80 flex flex-wrap items-center justify-between gap-4 shrink-0">
           <div class="flex items-center gap-3">

@@ -111,6 +111,24 @@ async function loadPrivateThread(targetId: string) {
   }
 }
 
+async function silentRefreshPrivateThread(targetId: string) {
+  if (!authStore.token || !authStore.currentUser || !targetId) return
+  try {
+    const res = await axios.get(`/api/dm/messages/${targetId}`)
+    const secret = generateConversationSecret(authStore.currentUser.id, targetId)
+    const decrypted = await Promise.all(
+      res.data.map(async (m: DirectMessage) => {
+        const plain = await decryptMessage(m.text, secret)
+        return { ...m, text: plain }
+      })
+    )
+    if (decrypted.length !== privateMessages.value.length || 
+        (decrypted.length > 0 && decrypted[decrypted.length - 1].id !== privateMessages.value[privateMessages.value.length - 1]?.id)) {
+      privateMessages.value = decrypted
+    }
+  } catch (e) {}
+}
+
 async function sendPrivateMessage() {
   if (!privateChatInput.value.trim() || !selectedPrivateRecipientId.value || !authStore.currentUser) return
   const textToSend = privateChatInput.value.trim()
@@ -120,7 +138,9 @@ async function sendPrivateMessage() {
     const secret = generateConversationSecret(authStore.currentUser.id, selectedPrivateRecipientId.value)
     const cipher = await encryptMessage(textToSend, secret)
     const res = await axios.post(`/api/dm/messages/${selectedPrivateRecipientId.value}`, { text: cipher })
-    privateMessages.value.push({ ...res.data, text: textToSend })
+    if (!privateMessages.value.some(m => m.id === res.data.id)) {
+      privateMessages.value.push({ ...res.data, text: textToSend })
+    }
   } catch (e) {
     console.error('Failed to send encrypted private DM', e)
   }
@@ -346,7 +366,7 @@ onMounted(async () => {
   }
 
   // Socket element & map synchronization
-  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  const socket = gameRoomStore.getSocket()
   if (socket) {
     socket.on('room:state', (state: any) => {
       if (state.elementsByMap && Object.keys(state.elementsByMap).length > 0) {
@@ -421,15 +441,38 @@ onMounted(async () => {
         stratStore.mapElements[mapId] = []
       }
     })
+
+    socket.on('dm:new', async (newMsg: DirectMessage) => {
+      if (!authStore.currentUser || !newMsg) return
+      const myId = authStore.currentUser.id
+      const isSender = newMsg.senderId === myId
+      const isRecipient = newMsg.recipientId === myId
+      if (!isSender && !isRecipient) return
+
+      const otherPartyId = isSender ? newMsg.recipientId : newMsg.senderId
+      if (selectedPrivateRecipientId.value === otherPartyId) {
+        let plainText = newMsg.text
+        if (newMsg.text.startsWith('ENC:')) {
+          const secret = generateConversationSecret(myId, otherPartyId)
+          plainText = await decryptMessage(newMsg.text, secret)
+        }
+        if (!privateMessages.value.some(m => m.id === newMsg.id)) {
+          privateMessages.value.push({ ...newMsg, text: plainText })
+        }
+      }
+    })
   }
 
   // Automatic Background Reconciliation Auto-Sync
   autoSyncTimer = setInterval(() => {
-    const s = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+    const s = gameRoomStore.getSocket()
     if (s && s.connected) {
       s.emit('room:request_sync', { mapId: mapStore.currentMapId })
     }
-  }, 7000)
+    if (selectedPrivateRecipientId.value && rightSidebarTab.value === 'private_chat') {
+      silentRefreshPrivateThread(selectedPrivateRecipientId.value)
+    }
+  }, 2500)
 
   // Restore saved tool preferences
   const prefTool = localStorage.getItem('cs2_tactics_pref_tool')

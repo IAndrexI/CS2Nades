@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useAuthStore } from '../../stores/authStore'
 import { useGameRoomStore } from '../../stores/gameRoomStore'
 import { useThemeStore } from '../../stores/themeStore'
@@ -266,17 +266,20 @@ async function handleToggleVisibility() {
 
 // REAL-TIME AUTO UPDATE HANDLERS
 async function handleIncomingDm(newMsg: DirectMessage) {
-  if (!authStore.currentUser) return
+  if (!authStore.currentUser || !newMsg) return
   
-  const isCurrentChat = (selectedContactId.value === newMsg.senderId) || 
-                        (selectedContactId.value === newMsg.recipientId)
+  const myId = authStore.currentUser.id
+  const isSender = newMsg.senderId === myId
+  const isRecipient = newMsg.recipientId === myId
+
+  if (!isSender && !isRecipient) return
+
+  const otherPartyId = isSender ? newMsg.recipientId : newMsg.senderId
+  const isCurrentChat = selectedContactId.value === otherPartyId
 
   let plainText = newMsg.text
   if (newMsg.text.startsWith('ENC:')) {
-    const secret = generateConversationSecret(
-      authStore.currentUser.id, 
-      newMsg.senderId === authStore.currentUser.id ? newMsg.recipientId : newMsg.senderId
-    )
+    const secret = generateConversationSecret(myId, otherPartyId)
     plainText = await decryptMessage(newMsg.text, secret)
   }
 
@@ -288,7 +291,7 @@ async function handleIncomingDm(newMsg: DirectMessage) {
     }
   }
 
-  const otherPartyId = newMsg.senderId === authStore.currentUser.id ? newMsg.recipientId : newMsg.senderId
+  // Update contact list preview in real-time
   const contact = contacts.value.find(c => c.id === otherPartyId)
   if (contact) {
     contact.lastMessage = plainText
@@ -299,6 +302,7 @@ async function handleIncomingDm(newMsg: DirectMessage) {
 }
 
 function handleIncomingGroupMsg(msg: GroupMessage) {
+  if (!msg) return
   if (selectedGroupId.value === msg.groupId) {
     const exists = groupMessages.value.some(m => m.id === msg.id)
     if (!exists) {
@@ -306,6 +310,39 @@ function handleIncomingGroupMsg(msg: GroupMessage) {
       scrollToBottom()
     }
   }
+}
+
+async function silentRefreshMessages(targetId: string) {
+  if (!authStore.token || !authStore.currentUser || !targetId) return
+  try {
+    const res = await axios.get(`/api/dm/messages/${targetId}`)
+    const rawMsgs = res.data
+    const secret = generateConversationSecret(authStore.currentUser.id, targetId)
+    const decrypted = await Promise.all(
+      rawMsgs.map(async (m: DirectMessage) => {
+        const plain = await decryptMessage(m.text, secret)
+        return { ...m, text: plain }
+      })
+    )
+    if (decrypted.length !== messages.value.length || 
+        (decrypted.length > 0 && decrypted[decrypted.length - 1].id !== messages.value[messages.value.length - 1]?.id)) {
+      messages.value = decrypted
+      await scrollToBottom()
+    }
+  } catch (e) {}
+}
+
+async function silentRefreshGroupMessages(groupId: string) {
+  if (!authStore.token || !groupId) return
+  try {
+    const res = await axios.get(`/api/groups/${groupId}/messages`)
+    const rawMsgs = res.data
+    if (rawMsgs.length !== groupMessages.value.length || 
+        (rawMsgs.length > 0 && rawMsgs[rawMsgs.length - 1].id !== groupMessages.value[groupMessages.value.length - 1]?.id)) {
+      groupMessages.value = rawMsgs
+      await scrollToBottom()
+    }
+  } catch (e) {}
 }
 
 async function handleSendMessage() {
@@ -536,11 +573,13 @@ const availableUsersToAdd = computed(() => {
   return allPeople.value.filter(p => !currentMembers.has(p.username.toLowerCase()))
 })
 
+let dmPollInterval: any = null
+
 onMounted(() => {
-  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  const socket = gameRoomStore.getSocket()
   if (socket) {
     socket.on('dm:new', handleIncomingDm)
-    if (authStore.currentUser) {
+    if (authStore.currentUser?.id) {
       socket.on(`dm:${authStore.currentUser.id}`, handleIncomingDm)
     }
     socket.on('group:msg', handleIncomingGroupMsg)
@@ -563,6 +602,15 @@ onMounted(() => {
   }
 })
 
+watch(() => authStore.currentUser?.id, (newId) => {
+  if (newId) {
+    const socket = gameRoomStore.getSocket()
+    if (socket) {
+      socket.on(`dm:${newId}`, handleIncomingDm)
+    }
+  }
+})
+
 watch(() => props.isOpen, (open) => {
   if (open) {
     fetchConversations()
@@ -571,6 +619,28 @@ watch(() => props.isOpen, (open) => {
     if (authStore.currentUser?.privacy?.hideFromList !== undefined) {
       isVisibleInDirectory.value = !authStore.currentUser.privacy.hideFromList
     }
+
+    if (!dmPollInterval) {
+      dmPollInterval = setInterval(() => {
+        if (selectedContactId.value) {
+          silentRefreshMessages(selectedContactId.value)
+        } else if (selectedGroupId.value) {
+          silentRefreshGroupMessages(selectedGroupId.value)
+        }
+      }, 2000)
+    }
+  } else {
+    if (dmPollInterval) {
+      clearInterval(dmPollInterval)
+      dmPollInterval = null
+    }
+  }
+})
+
+onUnmounted(() => {
+  if (dmPollInterval) {
+    clearInterval(dmPollInterval)
+    dmPollInterval = null
   }
 })
 

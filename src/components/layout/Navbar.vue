@@ -126,10 +126,10 @@ function handleGlobalClick(e: MouseEvent) {
 onMounted(() => {
   window.addEventListener('click', handleGlobalClick)
 
-  const socket = (gameRoomStore as any).getSocket ? (gameRoomStore as any).getSocket() : ((gameRoomStore as any).socket?.value || (gameRoomStore as any).socket)
+  const socket = gameRoomStore.getSocket()
   if (socket) {
     socket.on('dm:new', (msg: any) => {
-      if (!isPeopleGroupsOpen.value && msg.senderId !== authStore.currentUser?.id) {
+      if (!isPeopleGroupsOpen.value && msg.senderId !== authStore.currentUser?.id && (msg.recipientId === authStore.currentUser?.id || !msg.recipientId)) {
         unreadMessageCount.value++
       }
     })
