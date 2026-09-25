@@ -10,7 +10,7 @@
 
 // ── BRANDING ──────────────────────────────────────────────
 export const BRANDING = {
-  siteTitle:   'Protutech',
+  siteTitle:   'CS2 nade lineups',
   teamName:    'Tactical Hub',
   tagline:     'CS2 Utility & Strategy Platform',
   version:     'v2.0',
