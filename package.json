@@ -8,7 +8,8 @@
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "start": "node server/server.js",
-    "server": "node server/server.js"
+    "server": "node server/server.js",
+    "push": "git add -A && git commit -m \"auto update\" && git push origin main"
   },
   "dependencies": {
     "@lucide/vue": "^1.33.0",
