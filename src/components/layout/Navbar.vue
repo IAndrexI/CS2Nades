@@ -14,6 +14,7 @@ import LineupConflictModal from '../lineups/LineupConflictModal.vue'
 import UserSettingsModal from '../user/UserSettingsModal.vue'
 import DirectMessagesModal from '../user/DirectMessagesModal.vue'
 import PeopleAndGroupsModal from '../user/PeopleAndGroupsModal.vue'
+import PracticeServerModal from '../common/PracticeServerModal.vue'
 
 import { 
   Crosshair, 
@@ -60,6 +61,7 @@ const isMobileMenuOpen = ref(false)
 const isUserSettingsOpen = ref(false)
 const isDirectMessagesOpen = ref(false)
 const isPeopleGroupsOpen = ref(false)
+const isPracticeModalOpen = ref(false)
 const directMessageTargetId = ref<string | undefined>(undefined)
 
 function openDirectMessageWith(userId: string) {
@@ -337,8 +339,19 @@ onUnmounted(() => {
         </router-link>
       </nav>
 
-      <!-- RIGHT ACTIONS: PEOPLE & GROUPS, DISCORD, USER PROFILE, NEW NADE -->
+      <!-- RIGHT ACTIONS: PRACTICE SERVER, PEOPLE & GROUPS, DISCORD, USER PROFILE, NEW NADE -->
       <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- PRACTICE SERVER & CFG STUDIO BUTTON -->
+        <button
+          @click="isPracticeModalOpen = true"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-amber-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
+          title="Host & Configure Practice Server / Generate practice.cfg"
+        >
+          <Gamepad2 class="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
+          <span class="hidden lg:inline">Practice Server</span>
+          <span class="hidden sm:inline lg:hidden">Practice</span>
+        </button>
+
         <!-- PEOPLE & SQUAD GROUPS (ICON ONLY WITH UNREAD NOTIFICATION BADGE) -->
         <button
           @click="isPeopleGroupsOpen = true; unreadMessageCount = 0"
@@ -574,6 +587,14 @@ onUnmounted(() => {
         <span>{{ link.name }}</span>
       </router-link>
 
+      <button
+        @click="isPracticeModalOpen = true; isMobileMenuOpen = false"
+        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-amber-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
+      >
+        <Gamepad2 class="w-4 h-4" />
+        <span>Practice Server & CFG Studio</span>
+      </button>
+
       <a
         href="https://discord.gg/XEDqfYEW5h"
         target="_blank"
@@ -610,6 +631,10 @@ onUnmounted(() => {
       @close="isPeopleGroupsOpen = false"
       @open-dm="openDirectMessageWith"
       @join-room="handleJoinRoomFromPeople"
+    />
+    <PracticeServerModal
+      :is-open="isPracticeModalOpen"
+      @close="isPracticeModalOpen = false"
     />
     <LineupConflictModal />
   </header>
