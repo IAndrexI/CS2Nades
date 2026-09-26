@@ -237,7 +237,48 @@ function requireAdmin(req, res, next) {
     return res.status(403).json({ error: 'Admin privileges required' })
   }
   next()
+// Serve /uploads static directory for in-game screenshots and custom images
+const UPLOADS_DIR = path.join(__dirname, '../uploads')
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true })
 }
+app.use('/uploads', express.static(UPLOADS_DIR))
+
+// Upload Base64 Screenshot Endpoint
+app.post('/api/upload', (req, res) => {
+  try {
+    const { image, filename } = req.body
+    if (!image) return res.status(400).json({ error: 'No image data provided' })
+    
+    // If it's already a full URL or existing path, return it directly
+    if (image.startsWith('http://') || image.startsWith('https://') || image.startsWith('/uploads/')) {
+      return res.json({ url: image })
+    }
+
+    // Parse base64 data url
+    const matches = image.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/)
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ error: 'Invalid base64 image data' })
+    }
+
+    const mime = matches[1].toLowerCase()
+    let ext = 'png'
+    if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg'
+    else if (mime.includes('webp')) ext = 'webp'
+    else if (mime.includes('gif')) ext = 'gif'
+
+    const uniqueName = `screenshot_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`
+    const filePath = path.join(UPLOADS_DIR, uniqueName)
+    const buffer = Buffer.from(matches[2], 'base64')
+    
+    fs.writeFileSync(filePath, buffer)
+    const publicUrl = `/uploads/${uniqueName}`
+    return res.json({ url: publicUrl, filename: uniqueName })
+  } catch (err) {
+    console.error('[Upload] Image upload error:', err)
+    return res.status(500).json({ error: 'Failed to save uploaded image' })
+  }
+})
 
 app.use(authenticateToken)
 

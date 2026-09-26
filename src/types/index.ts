@@ -80,8 +80,11 @@ export interface Lineup {
   // Media & Guides
   videoUrl?: string // YouTube, Streamable, or direct MP4
   imageUrl?: string // Main lineup preview image / gif
-  standingScreenshot?: string // Where to stand
-  aimScreenshot?: string // Where crosshair aligns
+  standingScreenshot?: string // Where player stands in-game
+  aimScreenshot?: string // Crosshair alignment in-game
+  landingScreenshot?: string // Where the grenade detonates / lands
+  screenshots?: string[] // Additional screenshots
+  cs2Pos?: { x: number; y: number; z: number; pitch?: number; yaw?: number; roll?: number } // Raw CS2 World Coordinates
   
   // Instructions
   description?: string
