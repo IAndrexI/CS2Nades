@@ -22,6 +22,7 @@ const activeTab = ref<'credentials' | 'steam'>('credentials')
 
 const steamForm = reactive({
   steamInput: '',
+  password: '',
   inGameRole: 'Entry Fragger'
 })
 
@@ -39,7 +40,11 @@ async function handleSteamSync() {
     authStore.authError = 'Please enter your Steam Profile URL or SteamID'
     return
   }
-  const ok = await authStore.loginWithSteamProfile(steamForm.steamInput.trim(), steamForm.inGameRole)
+  if (!steamForm.password || steamForm.password.trim().length < 4) {
+    authStore.authError = 'Password (min 4 characters) is required to secure your profile'
+    return
+  }
+  const ok = await authStore.loginWithSteamProfile(steamForm.steamInput.trim(), steamForm.inGameRole, steamForm.password)
   if (ok) {
     authStore.isAuthModalOpen = false
   }
@@ -171,6 +176,27 @@ async function handleQuickGuest() {
             />
             <span class="text-[10px] text-slate-500">
               Automatically pulls your CS2 gamer tag and high-res Steam avatar!
+            </span>
+          </div>
+
+          <!-- ACCOUNT PASSWORD REQUIRED -->
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <label class="font-bold text-slate-300">Account Password (Required)</label>
+              <span class="text-[10px] text-amber-400 font-mono">Security Check</span>
+            </div>
+            <div class="relative">
+              <Lock class="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input 
+                v-model="steamForm.password" 
+                type="password" 
+                required
+                placeholder="Enter password (min 4 characters)"
+                class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white focus:outline-none focus:border-amber-500 text-xs"
+              />
+            </div>
+            <span class="text-[10px] text-slate-400">
+              Required to secure your profile and prevent unauthorized profile access.
             </span>
           </div>
 

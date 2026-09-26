@@ -13,7 +13,7 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem(TOKEN_KEY))
   const currentUser = ref<UserProfile | null>(null)
   const isAuthModalOpen = ref<boolean>(false)
-  const authMode = ref<'login' | 'register' | 'steam'>('steam') // Default to Steam login!
+  const authMode = ref<'login' | 'register' | 'steam'>('login') // Default to Password Login!
   const isLoading = ref<boolean>(false)
   const authError = ref<string | null>(null)
 
@@ -144,11 +144,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // 1. Sign In / Sync with Steam Profile
-  async function loginWithSteamProfile(steamInput: string, inGameRole: any = 'Entry'): Promise<boolean> {
+  async function loginWithSteamProfile(steamInput: string, inGameRole: any = 'Entry', password = ''): Promise<boolean> {
     isLoading.value = true
     authError.value = null
     try {
-      const res = await axios.post('/api/auth/steam-sync', { steamInput, inGameRole })
+      const res = await axios.post('/api/auth/steam-sync', { steamInput, inGameRole, password })
       setAuthToken(res.data.token)
       currentUser.value = res.data.user
       localStorage.setItem(USER_KEY, JSON.stringify(res.data.user))

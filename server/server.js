@@ -305,10 +305,14 @@ async function fetchSteamProfile(input) {
 // ==========================================
 app.post('/api/auth/steam-sync', async (req, res) => {
   db = loadDB()
-  const { steamInput, inGameRole } = req.body
+  const { steamInput, inGameRole, password } = req.body
 
   if (!steamInput) {
     return res.status(400).json({ error: 'Please enter a Steam Profile URL, SteamID64, or Custom URL' })
+  }
+
+  if (!password || password.trim().length < 4) {
+    return res.status(400).json({ error: 'Password (min 4 characters) is required to secure your profile.' })
   }
 
   const profile = await fetchSteamProfile(steamInput)
@@ -319,18 +323,32 @@ app.post('/api/auth/steam-sync', async (req, res) => {
   let user = db.users.find(u => (u.steamId && u.steamId === profile.steamId) || u.username.toLowerCase() === profile.username.toLowerCase())
 
   if (user) {
+    // Existing user: Password check MUST match
+    if (user.passwordHash) {
+      const validPassword = bcrypt.compareSync(password, user.passwordHash)
+      if (!validPassword) {
+        return res.status(401).json({ error: 'Incorrect password for this existing profile. Access denied.' })
+      }
+    } else {
+      // Set password if not set
+      const salt = bcrypt.genSaltSync(10)
+      user.passwordHash = bcrypt.hashSync(password, salt)
+    }
+
     user.username = profile.username
     user.avatar = profile.avatar
     if (!user.steamId) user.steamId = profile.steamId
     if (inGameRole) user.inGameRole = inGameRole
   } else {
+    // New user: Create with hashed password
+    const salt = bcrypt.genSaltSync(10)
     const role = db.users.length === 0 ? 'admin' : 'player'
     user = {
       id: `usr-steam-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       steamId: profile.steamId,
       username: profile.username,
       email: '',
-      passwordHash: '',
+      passwordHash: bcrypt.hashSync(password, salt),
       role,
       inGameRole: inGameRole || 'Entry',
       avatar: profile.avatar,
