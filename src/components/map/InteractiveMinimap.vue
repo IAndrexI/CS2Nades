@@ -182,6 +182,48 @@ function handleMouseUp() {
   isDragging.value = false
 }
 
+// Touch Event Handlers for Mobile & Tablet
+let touchStartDistance = 0
+
+function handleTouchStart(e: TouchEvent) {
+  if (e.touches.length === 1) {
+    const touch = e.touches[0]
+    isDragging.value = true
+    dragStart.value = {
+      x: touch.clientX - mapStore.panOffset.x,
+      y: touch.clientY - mapStore.panOffset.y
+    }
+  } else if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX
+    const dy = e.touches[0].clientY - e.touches[1].clientY
+    touchStartDistance = Math.hypot(dx, dy)
+  }
+}
+
+function handleTouchMove(e: TouchEvent) {
+  if (e.touches.length === 1 && isDragging.value) {
+    const touch = e.touches[0]
+    mapStore.panOffset = {
+      x: touch.clientX - dragStart.value.x,
+      y: touch.clientY - dragStart.value.y
+    }
+  } else if (e.touches.length === 2 && touchStartDistance > 0) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX
+    const dy = e.touches[0].clientY - e.touches[1].clientY
+    const newDistance = Math.hypot(dx, dy)
+    const factor = newDistance / touchStartDistance
+    if (factor > 0.6 && factor < 1.8) {
+      mapStore.zoomLevel = Math.min(Math.max(mapStore.zoomLevel * factor, 0.8), 4.0)
+      touchStartDistance = newDistance
+    }
+  }
+}
+
+function handleTouchEnd() {
+  isDragging.value = false
+  touchStartDistance = 0
+}
+
 // ─────────────────────────────────────────────────────────────
 // BULLETPROOF COORDINATE SYSTEM: SVG Matrix Inversion
 // ─────────────────────────────────────────────────────────────
@@ -395,10 +437,13 @@ onUnmounted(() => {
     <!-- MAIN RADAR MAP VIEWPORT -->
     <div 
       ref="mapContainer"
-      class="interactive-minimap-container relative w-full h-[580px] sm:h-[640px] lg:h-[720px] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl select-none"
+      class="interactive-minimap-container relative w-full h-[420px] sm:h-[580px] lg:h-[720px] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl select-none touch-none"
       @wheel="handleWheel"
       @mousedown="handleMouseDown"
       @mousemove="handleMouseMove"
+      @touchstart.passive="handleTouchStart"
+      @touchmove.passive="handleTouchMove"
+      @touchend="handleTouchEnd"
       @click="handleBackgroundMapClick"
       @contextmenu.prevent="handleContextMenu"
       :class="[

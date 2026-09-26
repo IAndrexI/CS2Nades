@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { 
   X, 
   Monitor, 
@@ -15,7 +16,12 @@ import {
   Copy,
   ChevronRight,
   Info,
-  Laptop
+  Laptop,
+  Smartphone,
+  Star,
+  GitBranch,
+  Code2,
+  BookOpen
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -26,7 +32,10 @@ const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
+const router = useRouter()
+const activeTab = ref<'overlay' | 'phone' | 'github'>('overlay')
 const copiedBat = ref(false)
+const copiedDockerCmd = ref(false)
 
 function openWebOverlayPopup() {
   const overlayUrl = `${window.location.origin}/overlay`
@@ -51,6 +60,11 @@ function downloadFullAppZip() {
   window.open('/api/download/overlay-app', '_blank')
 }
 
+function openMobileCompanion() {
+  emit('close')
+  router.push('/remote')
+}
+
 async function copyBatScript() {
   const serverUrl = window.location.origin
   const script = `@echo off\ntitle CS2 Nades In-Game Overlay\necho Starting CS2 Nades Overlay HUD...\nstart msedge.exe --app="${serverUrl}/overlay" --window-size=480,720 --window-position=50,50\nexit`
@@ -58,6 +72,15 @@ async function copyBatScript() {
     await navigator.clipboard.writeText(script)
     copiedBat.value = true
     setTimeout(() => (copiedBat.value = false), 2000)
+  } catch (e) {}
+}
+
+async function copyDockerCommand() {
+  const cmd = `cd /opt/CS2Nades && git pull origin main && docker compose up -d --build`
+  try {
+    await navigator.clipboard.writeText(cmd)
+    copiedDockerCmd.value = true
+    setTimeout(() => (copiedDockerCmd.value = false), 2000)
   } catch (e) {}
 }
 </script>
@@ -72,20 +95,20 @@ async function copyBatScript() {
       <div class="relative w-full max-w-2xl max-h-[92vh] my-auto bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col text-slate-100">
         
         <!-- HEADER -->
-        <div class="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/70">
+        <div class="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/70">
           <div class="flex items-center gap-3">
             <div class="p-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-2xl shadow">
               <Monitor class="w-6 h-6 stroke-[2.5]" />
             </div>
             <div>
               <h2 class="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
-                <span>CS2 In-Game Overlay App</span>
+                <span>Apps & Open Source Hub</span>
                 <span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono rounded-full font-bold">
-                  100% VAC Safe
+                  v2.0 Released
                 </span>
               </h2>
               <p class="text-xs text-slate-400">
-                Display live radar trajectories, lineup crosshairs, and squad calls over CS2 while playing
+                In-Game CS2 Overlay App, Mobile Touch Deck & Official GitHub Repository
               </p>
             </div>
           </div>
@@ -98,122 +121,214 @@ async function copyBatScript() {
           </button>
         </div>
 
+        <!-- TABS -->
+        <div class="flex items-center gap-1 px-5 py-2.5 bg-slate-950 border-b border-slate-800 text-xs font-bold overflow-x-auto scrollbar-none">
+          <button
+            @click="activeTab = 'overlay'"
+            :class="[
+              'px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shrink-0',
+              activeTab === 'overlay' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-slate-200'
+            ]"
+          >
+            <Monitor class="w-3.5 h-3.5" />
+            <span>In-Game Overlay App</span>
+          </button>
+
+          <button
+            @click="activeTab = 'phone'"
+            :class="[
+              'px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shrink-0',
+              activeTab === 'phone' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-slate-200'
+            ]"
+          >
+            <Smartphone class="w-3.5 h-3.5" />
+            <span>Mobile Companion App</span>
+          </button>
+
+          <button
+            @click="activeTab = 'github'"
+            :class="[
+              'px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shrink-0',
+              activeTab === 'github' ? 'bg-slate-800 text-white border border-slate-700 shadow font-black' : 'text-slate-400 hover:text-slate-200'
+            ]"
+          >
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+            </svg>
+            <span>GitHub Repository</span>
+          </button>
+        </div>
+
         <!-- BODY -->
         <div class="flex-grow overflow-y-auto p-5 sm:p-6 flex flex-col gap-5 text-xs text-slate-300">
           
-          <!-- OPTION CARDS: 1-CLICK WEB POPUP VS WINDOWS DOWNLOAD -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            
-            <!-- CARD 1: ZERO-INSTALL WEB POPUP OVERLAY -->
-            <div class="p-4 bg-slate-950 border border-slate-800 hover:border-amber-500/50 rounded-2xl flex flex-col justify-between gap-3 shadow-lg transition-all group">
-              <div class="flex flex-col gap-2">
-                <div class="flex items-center justify-between">
-                  <div class="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
-                    <Zap class="w-5 h-5" />
+          <!-- TAB 1: IN-GAME OVERLAY -->
+          <div v-show="activeTab === 'overlay'" class="flex flex-col gap-4 animate-fade-in">
+            <!-- OPTION CARDS: 1-CLICK WEB POPUP VS WINDOWS DOWNLOAD -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              
+              <!-- CARD 1: ZERO-INSTALL WEB POPUP OVERLAY -->
+              <div class="p-4 bg-slate-950 border border-slate-800 hover:border-amber-500/50 rounded-2xl flex flex-col justify-between gap-3 shadow-lg transition-all group">
+                <div class="flex flex-col gap-2">
+                  <div class="flex items-center justify-between">
+                    <div class="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
+                      <Zap class="w-5 h-5" />
+                    </div>
+                    <span class="px-2 py-0.5 bg-slate-900 border border-slate-700 text-slate-300 font-mono text-[10px] rounded-full">
+                      Zero Install
+                    </span>
                   </div>
-                  <span class="px-2 py-0.5 bg-slate-900 border border-slate-700 text-slate-300 font-mono text-[10px] rounded-full">
-                    Zero Install
-                  </span>
+                  <h3 class="font-black text-sm text-white group-hover:text-amber-400 transition-colors">
+                    Web-Based HUD Popout
+                  </h3>
+                  <p class="text-[11px] text-slate-400 leading-relaxed">
+                    Opens a dedicated ultra-compact popup window with transparency control that floats on your 2nd monitor or alongside your game.
+                  </p>
                 </div>
-                <h3 class="font-black text-sm text-white group-hover:text-amber-400 transition-colors">
-                  Web-Based HUD Popout
-                </h3>
-                <p class="text-[11px] text-slate-400 leading-relaxed">
-                  Opens a dedicated ultra-compact popup window with transparency control that floats on your 2nd monitor or alongside your game.
-                </p>
+
+                <button 
+                  @click="openWebOverlayPopup"
+                  class="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wide rounded-xl flex items-center justify-center gap-2 shadow cursor-pointer transition-all active:scale-95"
+                >
+                  <ExternalLink class="w-4 h-4" />
+                  <span>Launch Web Overlay</span>
+                </button>
               </div>
 
-              <button 
-                @click="openWebOverlayPopup"
-                class="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wide rounded-xl flex items-center justify-center gap-2 shadow cursor-pointer transition-all active:scale-95"
+              <!-- CARD 2: DOWNLOAD WINDOWS OVERLAY LAUNCHER -->
+              <div class="p-4 bg-slate-950 border border-slate-800 hover:border-emerald-500/50 rounded-2xl flex flex-col justify-between gap-3 shadow-lg transition-all group">
+                <div class="flex flex-col gap-2">
+                  <div class="flex items-center justify-between">
+                    <div class="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
+                      <Laptop class="w-5 h-5" />
+                    </div>
+                    <span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono text-[10px] rounded-full font-bold">
+                      Windows Desktop App
+                    </span>
+                  </div>
+                  <h3 class="font-black text-sm text-white group-hover:text-emerald-400 transition-colors">
+                    Windows Overlay Launcher
+                  </h3>
+                  <p class="text-[11px] text-slate-400 leading-relaxed">
+                    Download the 1-click Windows desktop runner (<code class="text-emerald-400 font-mono">.bat</code> / <code class="text-emerald-400 font-mono">.zip</code>) to launch an always-on-top borderless CS2 HUD.
+                  </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button 
+                    @click="downloadOverlayLauncher"
+                    class="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wide rounded-xl flex items-center justify-center gap-1.5 shadow cursor-pointer transition-all active:scale-95"
+                  >
+                    <Download class="w-4 h-4" />
+                    <span>Download .bat</span>
+                  </button>
+                  <button 
+                    @click="downloadFullAppZip"
+                    class="p-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl border border-slate-700 transition-colors cursor-pointer"
+                    title="Download Complete Package (.zip)"
+                  >
+                    <Layers class="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- VAC & ANTICHEAT SAFETY NOTICE -->
+            <div class="p-3.5 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl flex items-start gap-3">
+              <ShieldCheck class="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              <div class="flex flex-col gap-1">
+                <span class="font-bold text-xs text-emerald-300">100% VAC & Matchmaking Safe</span>
+                <p class="text-[11px] text-slate-300 leading-relaxed">
+                  The CS2 Nades overlay is a standalone external window (similar to Discord Overlay or OBS). It <strong>never touches CS2 game memory, DLLs, or hooks into the graphics pipeline</strong>, making it completely compliant with Valve Anti-Cheat (VAC) and Premier Matchmaking.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: MOBILE COMPANION APP -->
+          <div v-show="activeTab === 'phone'" class="flex flex-col gap-4 animate-fade-in">
+            <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div class="flex items-center gap-3">
+                <div class="p-3 bg-cyan-500/20 text-cyan-400 rounded-2xl">
+                  <Smartphone class="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 class="font-black text-sm text-white">Mobile Touch StreamDeck & Voice Remote</h3>
+                  <p class="text-[11px] text-slate-400 mt-0.5">
+                    Use your phone as a second-screen stream deck with live voice recognition (<kbd class="px-1 bg-slate-900 border border-slate-700 rounded text-amber-300">"Mirage window smoke"</kbd>).
+                  </p>
+                </div>
+              </div>
+
+              <button
+                @click="openMobileCompanion"
+                class="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs uppercase rounded-xl shadow cursor-pointer transition-all shrink-0"
               >
-                <ExternalLink class="w-4 h-4" />
-                <span>Launch Web Overlay</span>
+                Open Mobile Deck
               </button>
             </div>
 
-            <!-- CARD 2: DOWNLOAD WINDOWS OVERLAY LAUNCHER -->
-            <div class="p-4 bg-slate-950 border border-slate-800 hover:border-emerald-500/50 rounded-2xl flex flex-col justify-between gap-3 shadow-lg transition-all group">
-              <div class="flex flex-col gap-2">
-                <div class="flex items-center justify-between">
-                  <div class="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
-                    <Laptop class="w-5 h-5" />
-                  </div>
-                  <span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono text-[10px] rounded-full font-bold">
-                    Windows Desktop App
-                  </span>
+            <!-- PWA INSTALL INSTRUCTIONS -->
+            <div class="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl flex flex-col gap-2">
+              <span class="font-bold text-xs text-white">📱 Install as App on iOS & Android (PWA):</span>
+              <ul class="space-y-1.5 text-[11px] text-slate-300 list-disc list-inside">
+                <li><strong>iPhone (Safari):</strong> Tap Share (<svg class="inline w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>) and tap <em>"Add to Home Screen"</em>.</li>
+                <li><strong>Android (Chrome):</strong> Tap the 3 dots menu and tap <em>"Install App"</em> or <em>"Add to Home screen"</em>.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- TAB 3: GITHUB REPOSITORY & OPEN SOURCE -->
+          <div v-show="activeTab === 'github'" class="flex flex-col gap-4 animate-fade-in">
+            <!-- GITHUB BANNER CARD -->
+            <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div class="flex items-center gap-3">
+                <div class="p-3 bg-white/10 text-white rounded-2xl">
+                  <svg class="w-8 h-8 fill-current" viewBox="0 0 24 24">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                  </svg>
                 </div>
-                <h3 class="font-black text-sm text-white group-hover:text-emerald-400 transition-colors">
-                  Windows Overlay Launcher
-                </h3>
-                <p class="text-[11px] text-slate-400 leading-relaxed">
-                  Download the 1-click Windows desktop runner (<code class="text-emerald-400 font-mono">.bat</code> / <code class="text-emerald-400 font-mono">.zip</code>) to launch an always-on-top borderless CS2 HUD.
-                </p>
+                <div>
+                  <h3 class="font-black text-sm text-white">IAndrexI / CS2Nades</h3>
+                  <p class="text-[11px] text-slate-400 mt-0.5">
+                    Open Source CS2 Tactical Stratbook, Live Minimap, Lineup Indexer & In-Game Overlay.
+                  </p>
+                </div>
               </div>
 
-              <div class="flex items-center gap-2">
-                <button 
-                  @click="downloadOverlayLauncher"
-                  class="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wide rounded-xl flex items-center justify-center gap-1.5 shadow cursor-pointer transition-all active:scale-95"
+              <a
+                href="https://github.com/IAndrexI/CS2Nades"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 transition-all cursor-pointer border border-slate-700 shadow shrink-0"
+              >
+                <Star class="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                <span>Star on GitHub</span>
+                <ExternalLink class="w-3.5 h-3.5 ml-1 text-slate-400" />
+              </a>
+            </div>
+
+            <!-- PROXMOX / DOCKER DEPLOYMENT COMMAND -->
+            <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-2">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-xs text-amber-400 flex items-center gap-1.5">
+                  <Terminal class="w-3.5 h-3.5 text-amber-400" />
+                  <span>Proxmox LXC / Docker 1-Click Update Command:</span>
+                </span>
+                <button
+                  @click="copyDockerCommand"
+                  class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-700 cursor-pointer flex items-center gap-1"
                 >
-                  <Download class="w-4 h-4" />
-                  <span>Download .bat</span>
-                </button>
-                <button 
-                  @click="downloadFullAppZip"
-                  class="p-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl border border-slate-700 transition-colors cursor-pointer"
-                  title="Download Complete Package (.zip)"
-                >
-                  <Layers class="w-4 h-4" />
+                  <Check v-if="copiedDockerCmd" class="w-3 h-3 text-emerald-400 stroke-[3]" />
+                  <Copy v-else class="w-3 h-3" />
+                  <span>{{ copiedDockerCmd ? 'Copied!' : 'Copy Command' }}</span>
                 </button>
               </div>
-            </div>
 
-          </div>
-
-          <!-- HIGHLIGHTED FEATURES -->
-          <div class="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl flex flex-col gap-2.5">
-            <span class="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-              <Sliders class="w-4 h-4 text-amber-400" />
-              <span>Key In-Game Overlay Features</span>
-            </span>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300">
-              <div class="flex items-start gap-2">
-                <Check class="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0 stroke-[3]" />
-                <span><strong>Live Minimap & Radar:</strong> Real-time grenade trajectories and smoke landing markers.</span>
-              </div>
-              <div class="flex items-start gap-2">
-                <Check class="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0 stroke-[3]" />
-                <span><strong>1-Click Console Binds:</strong> Copy exact <code class="text-amber-300 font-mono">setpos</code> teleport commands in 1 click.</span>
-              </div>
-              <div class="flex items-start gap-2">
-                <Check class="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0 stroke-[3]" />
-                <span><strong>Squad Real-Time Sync:</strong> Teammate lineup callouts pop up directly on your screen.</span>
-              </div>
-              <div class="flex items-start gap-2">
-                <Check class="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0 stroke-[3]" />
-                <span><strong>Custom Opacity:</strong> Slide between 30% and 100% transparency to avoid blocking crosshair vision.</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- VAC & ANTICHEAT SAFETY NOTICE -->
-          <div class="p-3.5 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl flex items-start gap-3">
-            <ShieldCheck class="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-            <div class="flex flex-col gap-1">
-              <span class="font-bold text-xs text-emerald-300">100% VAC & Matchmaking Safe</span>
-              <p class="text-[11px] text-slate-300 leading-relaxed">
-                The CS2 Nades overlay is a standalone external window (similar to Discord Overlay or OBS). It <strong>never touches CS2 game memory, DLLs, or hooks into the graphics pipeline</strong>, making it completely compliant with Valve Anti-Cheat (VAC) and Premier Matchmaking.
-              </p>
-            </div>
-          </div>
-
-          <!-- CS2 DISPLAY SETTINGS TIP -->
-          <div class="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between gap-3 text-[11px] text-slate-400">
-            <div class="flex items-center gap-2">
-              <Info class="w-4 h-4 text-amber-400 shrink-0" />
-              <span><strong>Game Setup:</strong> In CS2 Video Settings, set <em>Display Mode</em> to <strong>"Fullscreen Windowed" (Borderless)</strong> for seamless overlay rendering.</span>
+              <code class="p-2.5 bg-slate-900/90 border border-slate-800 rounded-xl font-mono text-[11px] text-emerald-300 select-all overflow-x-auto">
+                cd /opt/CS2Nades &amp;&amp; git pull origin main &amp;&amp; docker compose up -d --build
+              </code>
             </div>
           </div>
 
@@ -221,13 +336,19 @@ async function copyBatScript() {
 
         <!-- FOOTER -->
         <div class="p-4 sm:p-5 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between">
-          <button 
-            @click="copyBatScript"
-            class="text-[11px] text-slate-400 hover:text-amber-400 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <Copy class="w-3.5 h-3.5" />
-            <span>{{ copiedBat ? 'Copied Launch Script!' : 'Copy Raw Batch Script' }}</span>
-          </button>
+          <div class="flex items-center gap-3">
+            <a
+              href="https://github.com/IAndrexI/CS2Nades"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-[11px] text-slate-400 hover:text-white font-mono flex items-center gap-1.5 transition-colors"
+            >
+              <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+              </svg>
+              <span>GitHub: IAndrexI/CS2Nades</span>
+            </a>
+          </div>
 
           <button 
             @click="emit('close')"
