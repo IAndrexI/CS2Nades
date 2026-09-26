@@ -71,6 +71,15 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
           </span>
         </div>
       </div>
+
+      <!-- PHONE SLEEPING / STANDBY DESKTOP INDICATOR -->
+      <div 
+        v-if="companionStore.isPaired && companionStore.isPhoneSleeping"
+        class="fixed bottom-4 right-4 z-[99999] flex items-center gap-2.5 px-3 py-2 bg-slate-900/90 backdrop-blur-md border border-slate-700/60 rounded-xl shadow-lg text-xs"
+      >
+        <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+        <span class="text-slate-300 font-medium text-[11px]">💤 Phone in standby mode</span>
+      </div>
     </Teleport>
 
     <!-- MAIN VIEW ROUTER CONTENT -->

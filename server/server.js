@@ -1985,6 +1985,20 @@ io.on('connection', (socket) => {
     io.to(remoteRoom).emit('remote:voice_received', { transcript, matchedAction, timestamp: Date.now() })
   })
 
+  socket.on('remote:phone_sleep', ({ code }) => {
+    if (!code) return
+    const cleanCode = code.toUpperCase().trim()
+    const remoteRoom = `remote-${cleanCode}`
+    io.to(remoteRoom).emit('remote:phone_slept', { code: cleanCode, timestamp: Date.now() })
+  })
+
+  socket.on('remote:phone_wake', ({ code }) => {
+    if (!code) return
+    const cleanCode = code.toUpperCase().trim()
+    const remoteRoom = `remote-${cleanCode}`
+    io.to(remoteRoom).emit('remote:phone_woke', { code: cleanCode, timestamp: Date.now() })
+  })
+
   // Disconnect handler
   socket.on('disconnect', () => {
     activeGuestSessions.delete(socket.id)

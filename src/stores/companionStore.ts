@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import { useMapStore } from './mapStore'
 import { useLineupStore } from './lineupStore'
+import { useGameRoomStore } from './gameRoomStore'
 import type { GrenadeType, TeamSide } from '../types'
 
 export interface VoiceFeedback {
@@ -25,6 +26,7 @@ export const useCompanionStore = defineStore('companion', () => {
   const pairingCode = ref<string>(savedCode || defaultCode())
 
   const isPaired = ref<boolean>(false)
+  const isPhoneSleeping = ref<boolean>(false)
   const pairedDeviceName = ref<string>('')
   const isPairModalOpen = ref<boolean>(false)
   const isListeningVoice = ref<boolean>(false)
@@ -63,7 +65,21 @@ export const useCompanionStore = defineStore('companion', () => {
     socket.value.on('remote:paired', (data: { code: string; phoneInfo?: { device?: string } }) => {
       if (data.code === pairingCode.value) {
         isPaired.value = true
+        isPhoneSleeping.value = false
         pairedDeviceName.value = data.phoneInfo?.device || 'Mobile Phone'
+      }
+    })
+
+    socket.value.on('remote:phone_slept', (data: { code: string }) => {
+      if (data.code === pairingCode.value) {
+        isPhoneSleeping.value = true
+      }
+    })
+
+    socket.value.on('remote:phone_woke', (data: { code: string }) => {
+      if (data.code === pairingCode.value) {
+        isPhoneSleeping.value = false
+        isPaired.value = true
       }
     })
 
@@ -126,9 +142,40 @@ export const useCompanionStore = defineStore('companion', () => {
     }
   }
 
+  // Notify desktop phone went to sleep / inactive and close socket connection
+  function notifyPhoneSleep() {
+    if (socket.value && pairingCode.value) {
+      if (socket.value.connected) {
+        socket.value.emit('remote:phone_sleep', { code: pairingCode.value })
+      }
+      isPhoneSleeping.value = true
+      // Close socket connection to save battery & data
+      socket.value.disconnect()
+    }
+  }
+
+  // Notify desktop phone woke up and re-establish connection
+  function notifyPhoneWake() {
+    isPhoneSleeping.value = false
+    if (pairingCode.value) {
+      initSocket()
+      if (socket.value && !socket.value.connected) {
+        socket.value.connect()
+      }
+      socket.value?.emit('remote:pair_phone', {
+        code: pairingCode.value,
+        phoneInfo: { device: typeof navigator !== 'undefined' && navigator.userAgent.includes('iPhone') ? 'iPhone' : 'Mobile Phone' }
+      })
+      socket.value?.emit('remote:phone_wake', { code: pairingCode.value })
+    }
+  }
+
   // Send action from phone to desktop
   function sendCommand(command: string, payload?: any) {
-    if (!socket.value) initSocket()
+    if (!socket.value || !socket.value.connected) {
+      initSocket()
+      if (socket.value && !socket.value.connected) socket.value.connect()
+    }
     socket.value?.emit('remote:command', {
       code: pairingCode.value,
       command,
@@ -138,7 +185,10 @@ export const useCompanionStore = defineStore('companion', () => {
 
   // Send voice command from phone to desktop
   function sendVoiceCommand(transcript: string, matchedAction: any) {
-    if (!socket.value) initSocket()
+    if (!socket.value || !socket.value.connected) {
+      initSocket()
+      if (socket.value && !socket.value.connected) socket.value.connect()
+    }
     socket.value?.emit('remote:voice_command', {
       code: pairingCode.value,
       transcript,
@@ -169,6 +219,29 @@ export const useCompanionStore = defineStore('companion', () => {
 
       case 'close_lineup':
         lineupStore.closeLineup()
+        break
+
+      case 'join_tactics_room':
+        if (payload?.roomCode) {
+          try {
+            const gameRoomStore = useGameRoomStore()
+            const u = localStorage.getItem('cs2_stratbook_user') ? JSON.parse(localStorage.getItem('cs2_stratbook_user') || '{}') : null
+            gameRoomStore.joinRoom(payload.roomCode, u)
+          } catch (e) {
+            console.error('Error joining tactics room via remote:', e)
+          }
+        }
+        break
+
+      case 'broadcast_lineup':
+        if (payload?.lineup) {
+          try {
+            const gameRoomStore = useGameRoomStore()
+            gameRoomStore.pushLineup(payload.lineup)
+          } catch (e) {
+            console.error('Error broadcasting lineup via remote:', e)
+          }
+        }
         break
 
       case 'filter_nade':
@@ -215,6 +288,7 @@ export const useCompanionStore = defineStore('companion', () => {
   return {
     pairingCode,
     isPaired,
+    isPhoneSleeping,
     pairedDeviceName,
     isPairModalOpen,
     isListeningVoice,
@@ -223,6 +297,8 @@ export const useCompanionStore = defineStore('companion', () => {
     initSocket,
     registerDesktop,
     connectAsPhone,
+    notifyPhoneSleep,
+    notifyPhoneWake,
     sendCommand,
     sendVoiceCommand,
     regenerateCode
