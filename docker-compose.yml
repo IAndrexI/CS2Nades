@@ -16,6 +16,12 @@ services:
       - JWT_SECRET=cs2-stratbook-secret-key-change-me-if-desired
     volumes:
       - cs2-stratbook-data:/app/server/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
     labels:
       - "io.portainer.accesscontrol.teams=admin"
 

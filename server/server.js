@@ -237,6 +237,18 @@ function requireAdmin(req, res, next) {
     return res.status(403).json({ error: 'Admin privileges required' })
   }
   next()
+}
+
+// Health Check Endpoint for Reverse Proxies (Cloudflare Tunnel, Nginx, Portainer)
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    service: 'CS2 Stratbook & Tactical Hub'
+  })
+})
+
 // Serve /uploads static directory for in-game screenshots and custom images
 const UPLOADS_DIR = path.join(__dirname, '../uploads')
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -278,6 +290,7 @@ app.post('/api/upload', (req, res) => {
     console.error('[Upload] Image upload error:', err)
     return res.status(500).json({ error: 'Failed to save uploaded image' })
   }
+})
 // Download 1-Click Windows Overlay Launcher (.bat)
 app.get('/api/download/overlay-launcher', (req, res) => {
   const host = req.get('host') || 'localhost:5000'
