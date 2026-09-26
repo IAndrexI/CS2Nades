@@ -185,6 +185,21 @@ const activeCount = computed(() => lineupStore.filteredLineups.length)
           <span>Callouts</span>
         </button>
 
+        <!-- BASIC META LINEUPS TOGGLE -->
+        <button
+          @click="lineupStore.toggleBasicLineups()"
+          :class="[
+            'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors cursor-pointer border',
+            lineupStore.showBasicLineups
+              ? 'text-amber-400 font-medium bg-amber-500/10 border-amber-500/30'
+              : 'text-slate-500 border-slate-800 hover:text-slate-300 bg-slate-950'
+          ]"
+          :title="lineupStore.showBasicLineups ? 'Basic meta lineups are included (Click to hide)' : 'Basic meta lineups hidden (Click to show)'"
+        >
+          <Globe class="w-3.5 h-3.5" />
+          <span>Basic Nades: {{ lineupStore.showBasicLineups ? 'ON' : 'OFF' }}</span>
+        </button>
+
         <!-- ACTIVE EXECUTE BADGE IF SELECTED -->
         <div v-if="lineupStore.activeExecute" class="flex items-center gap-2 px-2.5 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-lg text-xs font-bold">
           <span>Active Execute: <strong>{{ lineupStore.activeExecute.title }}</strong></span>

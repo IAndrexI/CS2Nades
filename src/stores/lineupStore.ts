@@ -8,6 +8,7 @@ import type { Lineup, GrenadeType, NadeExecute } from '../types'
 const STORAGE_KEY = 'cs2_stratbook_custom_lineups'
 const FAVORITES_KEY = 'cs2_stratbook_favorites'
 const EXECUTES_STORAGE_KEY = 'cs2_stratbook_executes'
+const BASIC_LINEUPS_KEY = 'cs2_stratbook_show_basic_lineups'
 
 export const useLineupStore = defineStore('lineup', () => {
   const mapStore = useMapStore()
@@ -23,6 +24,7 @@ export const useLineupStore = defineStore('lineup', () => {
   const hoveredLineup = ref<Lineup | null>(null)
   const isAddModalOpen = ref<boolean>(false)
   const isPresetsModalOpen = ref<boolean>(false)
+  const showBasicLineups = ref<boolean>(true) // Toggle for basic / meta community lineups
   const isEditMode = ref<boolean>(false)
   const editingLineup = ref<Lineup | null>(null)
 
@@ -47,6 +49,10 @@ export const useLineupStore = defineStore('lineup', () => {
       if (execs) {
         customExecutes.value = JSON.parse(execs)
       }
+      const storedBasic = localStorage.getItem(BASIC_LINEUPS_KEY)
+      if (storedBasic !== null) {
+        showBasicLineups.value = storedBasic === 'true'
+      }
     } catch (e) {
       console.error('Failed to load custom lineups from storage', e)
     }
@@ -57,6 +63,7 @@ export const useLineupStore = defineStore('lineup', () => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(customLineups.value))
       localStorage.setItem(FAVORITES_KEY, JSON.stringify(favoriteIds.value))
       localStorage.setItem(EXECUTES_STORAGE_KEY, JSON.stringify(customExecutes.value))
+      localStorage.setItem(BASIC_LINEUPS_KEY, String(showBasicLineups.value))
     } catch (e) {
       console.error('Failed to save custom lineups to storage', e)
     }
@@ -65,14 +72,21 @@ export const useLineupStore = defineStore('lineup', () => {
   loadFromStorage()
 
   // Watch for changes to save
-  watch([customLineups, favoriteIds, customExecutes], () => {
+  watch([customLineups, favoriteIds, customExecutes, showBasicLineups], () => {
     saveToStorage()
   }, { deep: true })
 
-  // All combined lineups
+  // All combined lineups (respecting showBasicLineups toggle)
   const allLineups = computed<Lineup[]>(() => {
-    return [...DEFAULT_LINEUPS, ...customLineups.value]
+    if (showBasicLineups.value) {
+      return [...DEFAULT_LINEUPS, ...customLineups.value]
+    }
+    return customLineups.value
   })
+
+  function toggleBasicLineups() {
+    showBasicLineups.value = !showBasicLineups.value
+  }
 
   // Lineups for the currently selected map
   const currentMapLineups = computed<Lineup[]>(() => {
@@ -409,6 +423,8 @@ export const useLineupStore = defineStore('lineup', () => {
     isCreateExecuteModalOpen,
     isAddModalOpen,
     isPresetsModalOpen,
+    showBasicLineups,
+    toggleBasicLineups,
     isEditMode,
     editingLineup,
     isSyncing,
