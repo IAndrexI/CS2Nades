@@ -278,6 +278,65 @@ app.post('/api/upload', (req, res) => {
     console.error('[Upload] Image upload error:', err)
     return res.status(500).json({ error: 'Failed to save uploaded image' })
   }
+// Download 1-Click Windows Overlay Launcher (.bat)
+app.get('/api/download/overlay-launcher', (req, res) => {
+  const host = req.get('host') || 'localhost:5000'
+  const protocol = req.protocol || 'http'
+  const overlayUrl = `${protocol}://${host}/overlay`
+
+  const batContent = `@echo off
+title CS2 Nades In-Game Overlay
+color 0E
+echo ===================================================
+echo     CS2 Nades & Tactics In-Game Overlay HUD
+echo ===================================================
+echo.
+echo Launching In-Game HUD...
+echo Target: ${overlayUrl}
+echo.
+
+:: Try launching Microsoft Edge in App Mode
+start msedge.exe --app="${overlayUrl}" --window-size=480,720 --window-position=50,50
+if %errorlevel% neq 0 (
+    :: Fallback to Chrome
+    start chrome.exe --app="${overlayUrl}" --window-size=480,720 --window-position=50,50
+)
+if %errorlevel% neq 0 (
+    :: Fallback to default browser
+    start "" "${overlayUrl}"
+)
+
+echo Overlay Launched! Switch to CS2 (Fullscreen Windowed).
+timeout /t 3 >nul
+exit
+`
+
+  res.setHeader('Content-Type', 'application/x-bat')
+  res.setHeader('Content-Disposition', 'attachment; filename="CS2Nades-Overlay-Launcher.bat"')
+  res.send(batContent)
+})
+
+// Download Windows Standalone Overlay Script (.ps1)
+app.get('/api/download/overlay-app', (req, res) => {
+  const host = req.get('host') || 'localhost:5000'
+  const protocol = req.protocol || 'http'
+  const overlayUrl = `${protocol}://${host}/overlay`
+
+  const ps1Content = `# CS2 Nades & Tactics In-Game Overlay Launcher
+# 100% VAC Safe External HUD Window
+
+$url = "${overlayUrl}"
+Write-Host "===================================================" -ForegroundColor Yellow
+Write-Host "   CS2 Nades & Tactics In-Game Overlay HUD" -ForegroundColor Cyan
+Write-Host "===================================================" -ForegroundColor Yellow
+Write-Host "Starting CS2 Overlay at $url..."
+
+Start-Process "msedge.exe" -ArgumentList "--app=$url --window-size=480,720 --window-position=50,50" -ErrorAction SilentlyContinue
+`
+
+  res.setHeader('Content-Type', 'text/plain')
+  res.setHeader('Content-Disposition', 'attachment; filename="Launch-CS2-Overlay.ps1"')
+  res.send(ps1Content)
 })
 
 app.use(authenticateToken)

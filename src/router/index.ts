@@ -58,6 +58,16 @@ const routes = [
     path: '/companion',
     name: 'companion',
     component: () => import('../views/RemoteCompanionView.vue')
+  },
+  {
+    path: '/overlay',
+    name: 'overlay',
+    component: () => import('../views/InGameOverlayView.vue')
+  },
+  {
+    path: '/in-game-overlay',
+    name: 'in-game-overlay',
+    component: () => import('../views/InGameOverlayView.vue')
   }
 ]
 
