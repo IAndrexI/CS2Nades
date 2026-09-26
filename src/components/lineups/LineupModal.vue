@@ -254,23 +254,42 @@ onUnmounted(() => {
           </div>
 
           <!-- PRACTICE CONSOLE COMMAND -->
-          <div v-if="lineup.consoleCommand" class="flex flex-col gap-2 mt-auto">
+          <div v-if="lineup.consoleCommand" class="flex flex-col gap-2.5 mt-auto p-4 bg-black/90 border-2 border-amber-500/40 rounded-2xl shadow-xl">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Terminal class="w-3.5 h-3.5 text-amber-400" />
-                <span>CS2 Practice Command</span>
+              <span class="text-xs font-mono font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                <Terminal class="w-4 h-4 text-amber-400 animate-pulse" />
+                <span>CS2 Console Teleport & Aim Bind</span>
               </span>
+              <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
+                setpos_exact
+              </span>
+            </div>
+
+            <!-- HIGH VISIBILITY CONSOLE TERMINAL BOX -->
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2 bg-slate-950 border border-slate-700/80 rounded-xl">
+              <div class="flex items-center gap-2 flex-1 min-w-0 px-2 py-1">
+                <span class="text-emerald-400 font-mono font-black text-sm select-none">&gt;</span>
+                <span 
+                  @click="copyConsole"
+                  class="flex-1 font-mono text-xs sm:text-sm font-bold text-emerald-300 tracking-wide select-all truncate cursor-pointer hover:text-white transition-colors"
+                  title="Click to copy console command"
+                >
+                  {{ lineup.consoleCommand }}
+                </span>
+              </div>
+
               <button 
                 @click="copyConsole"
-                class="flex items-center gap-1 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-md cursor-pointer hover:scale-105 active:scale-95 shrink-0"
               >
-                <Check v-if="copiedCommand" class="w-3.5 h-3.5" />
-                <Copy v-else class="w-3.5 h-3.5" />
-                <span>{{ copiedCommand ? 'Copied!' : 'Copy Bind' }}</span>
+                <Check v-if="copiedCommand" class="w-3.5 h-3.5 stroke-[3] text-slate-950" />
+                <Copy v-else class="w-3.5 h-3.5 stroke-[2.5]" />
+                <span class="tracking-wide">{{ copiedCommand ? 'COPIED!' : 'COPY' }}</span>
               </button>
             </div>
-            <div class="p-3 bg-slate-950 border border-slate-800 rounded-xl font-mono text-[11px] text-slate-300 overflow-x-auto select-all">
-              {{ lineup.consoleCommand }}
+
+            <div class="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <span>💡 Paste into CS2 console (<kbd class="px-1 py-0.2 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono text-[10px]">~</kbd>) to teleport and align your crosshair.</span>
             </div>
           </div>
 

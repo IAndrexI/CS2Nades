@@ -586,28 +586,46 @@ async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' |
             </div>
 
             <!-- OUTPUT CONSOLE COMMAND -->
-            <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-3">
-              <span class="font-bold text-white text-xs">Generated CS2 Console Command:</span>
-              <div class="flex items-center gap-2">
-                <input
-                  type="text"
-                  readonly
-                  :value="currentSetposCommand"
-                  class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 font-mono text-xs text-amber-400 focus:outline-none"
-                />
+            <div class="p-5 bg-black/90 border-2 border-amber-500/40 rounded-2xl flex flex-col gap-3 shadow-xl">
+              <div class="flex items-center justify-between">
+                <span class="font-mono font-black uppercase tracking-wider text-amber-400 text-xs flex items-center gap-2">
+                  <Terminal class="w-4 h-4 text-amber-400 animate-pulse" />
+                  CS2 Teleport Console Command (setpos_exact)
+                </span>
+                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
+                  Valve Standard Format
+                </span>
+              </div>
+
+              <!-- HIGH VISIBILITY CONSOLE TERMINAL BOX -->
+              <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 p-2 bg-slate-950 border border-slate-700/80 rounded-xl">
+                <div class="flex items-center gap-2 flex-1 min-w-0 px-2 py-1">
+                  <span class="text-emerald-400 font-mono font-black text-sm select-none">&gt;</span>
+                  <input
+                    type="text"
+                    readonly
+                    :value="currentSetposCommand"
+                    @click="copyToClipboard(currentSetposCommand, 'setpos')"
+                    class="flex-1 bg-transparent font-mono text-sm font-bold text-emerald-300 tracking-wide focus:outline-none cursor-pointer select-all truncate"
+                    title="Click to select & copy"
+                  />
+                </div>
+
                 <button
                   @click="copyToClipboard(currentSetposCommand, 'setpos')"
-                  class="px-4 py-2.5 font-black text-xs rounded-xl transition-all flex items-center gap-1.5 shadow cursor-pointer hover:opacity-90"
+                  class="px-5 py-2.5 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer hover:scale-[1.02] active:scale-95 shrink-0"
                   :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
                 >
-                  <Check v-if="copiedSetpos" class="w-4 h-4 text-emerald-950" />
-                  <Copy v-else class="w-4 h-4" />
-                  <span>{{ copiedSetpos ? 'Copied!' : 'Copy Command' }}</span>
+                  <Check v-if="copiedSetpos" class="w-4 h-4 text-emerald-950 stroke-[3]" />
+                  <Copy v-else class="w-4 h-4 stroke-[2.5]" />
+                  <span class="tracking-wide">{{ copiedSetpos ? 'COPIED TO CLIPBOARD!' : 'COPY COMMAND' }}</span>
                 </button>
               </div>
-              <p class="text-[11px] text-slate-400">
-                💡 Paste directly into your CS2 console (`~) while in a practice server to instantly teleport onto the lineup spot.
-              </p>
+
+              <div class="flex items-center gap-2 text-[11px] text-slate-300 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                <span class="text-base">💡</span>
+                <span>Open your CS2 in-game console with <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-amber-300 font-mono font-bold text-[10px]">~</kbd> and paste (<kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-amber-300 font-mono font-bold text-[10px]">Ctrl + V</kbd>) to teleport directly to the throw spot.</span>
+              </div>
             </div>
           </div>
 

@@ -835,13 +835,17 @@ onUnmounted(() => {
           <div v-if="hoveredLineup.consoleCommand" class="pt-1">
             <button
               @click="handleCopyCommand(hoveredLineup.consoleCommand, $event)"
-              class="w-full flex items-center justify-between px-2 py-1 bg-slate-950 border border-slate-800 hover:border-amber-500/50 rounded-lg text-[10px] text-slate-300 font-mono transition-colors cursor-pointer"
+              class="w-full flex items-center justify-between px-2.5 py-1.5 bg-black border border-amber-500/40 hover:border-amber-400 rounded-xl text-xs font-mono transition-all cursor-pointer shadow-sm group/btn"
+              title="Click to copy in-game setpos command"
             >
-              <span class="truncate max-w-[180px]">setpos / setang</span>
-              <span class="text-amber-400 font-bold flex items-center gap-1">
-                <Check v-if="copiedCommand" class="w-3 h-3 text-emerald-400" />
-                <Copy v-else class="w-3 h-3" />
-                <span>{{ copiedCommand ? 'Copied' : 'Copy' }}</span>
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-emerald-400 font-bold">&gt;</span>
+                <span class="text-emerald-300 font-bold truncate max-w-[150px] text-[11px]">{{ hoveredLineup.consoleCommand }}</span>
+              </div>
+              <span class="text-slate-950 bg-amber-500 group-hover/btn:bg-amber-400 font-black px-2 py-0.5 rounded text-[10px] flex items-center gap-1 shrink-0 ml-2">
+                <Check v-if="copiedCommand" class="w-3 h-3 text-slate-950 stroke-[3]" />
+                <Copy v-else class="w-3 h-3 stroke-[2.5]" />
+                <span>{{ copiedCommand ? 'COPIED' : 'COPY' }}</span>
               </span>
             </button>
           </div>
