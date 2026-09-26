@@ -22,6 +22,7 @@ export const useLineupStore = defineStore('lineup', () => {
   const activeLineup = ref<Lineup | null>(null)
   const hoveredLineup = ref<Lineup | null>(null)
   const isAddModalOpen = ref<boolean>(false)
+  const isPresetsModalOpen = ref<boolean>(false)
   const isEditMode = ref<boolean>(false)
   const editingLineup = ref<Lineup | null>(null)
 
@@ -407,6 +408,7 @@ export const useLineupStore = defineStore('lineup', () => {
     activeExecuteLineups,
     isCreateExecuteModalOpen,
     isAddModalOpen,
+    isPresetsModalOpen,
     isEditMode,
     editingLineup,
     isSyncing,

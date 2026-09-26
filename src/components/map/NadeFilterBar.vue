@@ -14,7 +14,8 @@ import {
   Plus,
   Users,
   Shield,
-  Play
+  Play,
+  Globe
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -130,6 +131,16 @@ const activeCount = computed(() => lineupStore.filteredLineups.length)
             <span class="hidden md:inline">+ Execute Group</span>
           </button>
         </div>
+
+        <!-- COMMUNITY PRESETS BUTTON -->
+        <button
+          @click="lineupStore.isPresetsModalOpen = true"
+          title="Browse & Import popular lineups from CSNades, NadeKing, CS2Lineups, Pracc, and Scope.gg"
+          class="flex items-center gap-1.5 px-3 py-2 bg-slate-950/90 hover:bg-slate-800 text-amber-400 border border-amber-500/30 hover:border-amber-400 font-bold text-xs rounded-xl shadow transition-all cursor-pointer whitespace-nowrap"
+        >
+          <Globe class="w-3.5 h-3.5" />
+          <span>Meta Sources</span>
+        </button>
 
         <!-- ADD LINEUP / ACTION BUTTON -->
         <button

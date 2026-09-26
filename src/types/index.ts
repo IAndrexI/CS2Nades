@@ -91,11 +91,13 @@ export interface Lineup {
   instructions: string[]
   consoleCommand?: string // setpos / setang command
   
-  // Metadata
+  // Metadata & Community Sources
   difficulty: 'easy' | 'medium' | 'hard'
   author?: string
   authorName?: string
   userId?: string
+  sourceWebsite?: string // e.g. "CSNades.gg", "NadeKing", "CS2Lineups", "Pracc.com", "Scope.gg"
+  sourceUrl?: string
   isCustom?: boolean
   inLibrary?: boolean
   isTeamShared?: boolean

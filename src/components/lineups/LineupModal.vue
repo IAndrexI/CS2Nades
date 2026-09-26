@@ -118,6 +118,18 @@ onUnmounted(() => {
                 <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono font-bold">
                   {{ lineup.tickrate === 'cs2_subtick' ? 'CS2 SUBTICK' : lineup.tickrate }}
                 </span>
+                <a 
+                  v-if="lineup.sourceWebsite" 
+                  :href="lineup.sourceUrl || '#'" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold transition-colors"
+                  :title="`Curated from ${lineup.sourceWebsite}`"
+                >
+                  <Globe class="w-2.5 h-2.5" />
+                  <span>{{ lineup.sourceWebsite }}</span>
+                  <ExternalLink v-if="lineup.sourceUrl" class="w-2.5 h-2.5 opacity-70" />
+                </a>
               </div>
               <p class="text-xs text-slate-400 mt-0.5">
                 From <span class="text-slate-200 font-semibold">{{ lineup.startLocation }}</span> to <span class="text-slate-200 font-semibold">{{ lineup.endLocation }}</span>

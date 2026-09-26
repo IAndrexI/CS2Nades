@@ -114,9 +114,14 @@ function handleToggleLibrary(e: MouseEvent) {
       </div>
 
       <div class="flex items-center justify-between pt-2 mt-auto border-t border-slate-800 text-[10px]">
-        <span class="font-mono uppercase font-bold text-amber-400">
-          {{ lineup.throwType.replace('_', ' ') }}
-        </span>
+        <div class="flex items-center gap-1.5">
+          <span class="font-mono uppercase font-bold text-amber-400">
+            {{ lineup.throwType.replace('_', ' ') }}
+          </span>
+          <span v-if="lineup.sourceWebsite" class="px-1.5 py-0.2 bg-slate-800/80 text-amber-400/90 border border-amber-500/20 rounded font-semibold text-[9px]">
+            {{ lineup.sourceWebsite }}
+          </span>
+        </div>
         <span class="text-slate-400 font-medium">
           Site {{ lineup.site || 'General' }}
         </span>

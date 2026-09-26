@@ -9,6 +9,7 @@ import LineupModal from '../components/lineups/LineupModal.vue'
 import AddLineupModal from '../components/lineups/AddLineupModal.vue'
 import CreateExecuteModal from '../components/lineups/CreateExecuteModal.vue'
 import MapSettingsModal from '../components/map/MapSettingsModal.vue'
+import CommunityPresetsModal from '../components/lineups/CommunityPresetsModal.vue'
 
 const mapStore = useMapStore()
 const lineupStore = useLineupStore()
@@ -39,6 +40,10 @@ const lineupStore = useLineupStore()
     <LineupModal />
     <AddLineupModal />
     <CreateExecuteModal />
+    <CommunityPresetsModal 
+      v-if="lineupStore.isPresetsModalOpen" 
+      @close="lineupStore.isPresetsModalOpen = false" 
+    />
     <MapSettingsModal 
       :is-open="mapStore.isMapSettingsOpen" 
       @close="mapStore.isMapSettingsOpen = false" 
