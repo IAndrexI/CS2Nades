@@ -48,6 +48,16 @@ const routes = [
     path: '/admin',
     name: 'admin',
     component: AdminView
+  },
+  {
+    path: '/remote',
+    name: 'remote',
+    component: () => import('../views/RemoteCompanionView.vue')
+  },
+  {
+    path: '/companion',
+    name: 'companion',
+    component: () => import('../views/RemoteCompanionView.vue')
   }
 ]
 

@@ -15,6 +15,8 @@ import UserSettingsModal from '../user/UserSettingsModal.vue'
 import DirectMessagesModal from '../user/DirectMessagesModal.vue'
 import PeopleAndGroupsModal from '../user/PeopleAndGroupsModal.vue'
 import PracticeServerModal from '../common/PracticeServerModal.vue'
+import RemotePairModal from '../common/RemotePairModal.vue'
+import { useCompanionStore } from '../../stores/companionStore'
 
 import { 
   Crosshair, 
@@ -51,6 +53,7 @@ const authStore = useAuthStore()
 const adminStore = useAdminStore()
 const themeStore = useThemeStore()
 const gameRoomStore = useGameRoomStore()
+const companionStore = useCompanionStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -62,6 +65,7 @@ const isUserSettingsOpen = ref(false)
 const isDirectMessagesOpen = ref(false)
 const isPeopleGroupsOpen = ref(false)
 const isPracticeModalOpen = ref(false)
+const isRemoteModalOpen = ref(false)
 const directMessageTargetId = ref<string | undefined>(undefined)
 
 function openDirectMessageWith(userId: string) {
@@ -339,8 +343,28 @@ onUnmounted(() => {
         </router-link>
       </nav>
 
-      <!-- RIGHT ACTIONS: PRACTICE SERVER, PEOPLE & GROUPS, DISCORD, USER PROFILE, NEW NADE -->
+      <!-- RIGHT ACTIONS: PHONE DECK, PRACTICE SERVER, PEOPLE & GROUPS, DISCORD, USER PROFILE, NEW NADE -->
       <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- PHONE REMOTE / STREAM DECK BUTTON -->
+        <button
+          @click="isRemoteModalOpen = true"
+          :class="[
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border group',
+            companionStore.isPaired 
+              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/30' 
+              : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-cyan-500/40 text-cyan-400'
+          ]"
+          title="Connect Phone as Touch Deck & Voice Controller"
+        >
+          <Smartphone class="w-4 h-4 group-hover:scale-110 transition-transform" />
+          <span class="hidden lg:inline">{{ companionStore.isPaired ? 'Phone Live' : 'Phone Deck' }}</span>
+          <span class="hidden sm:inline lg:hidden">Phone</span>
+          <span 
+            v-if="companionStore.isPaired" 
+            class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5"
+          ></span>
+        </button>
+
         <!-- PRACTICE SERVER & CFG STUDIO BUTTON -->
         <button
           @click="isPracticeModalOpen = true"
@@ -588,6 +612,14 @@ onUnmounted(() => {
       </router-link>
 
       <button
+        @click="isRemoteModalOpen = true; isMobileMenuOpen = false"
+        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-cyan-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
+      >
+        <Smartphone class="w-4 h-4" />
+        <span>Phone StreamDeck & Voice Remote</span>
+      </button>
+
+      <button
         @click="isPracticeModalOpen = true; isMobileMenuOpen = false"
         class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-amber-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
       >
@@ -635,6 +667,10 @@ onUnmounted(() => {
     <PracticeServerModal
       :is-open="isPracticeModalOpen"
       @close="isPracticeModalOpen = false"
+    />
+    <RemotePairModal
+      :is-open="isRemoteModalOpen"
+      @close="isRemoteModalOpen = false"
     />
     <LineupConflictModal />
   </header>

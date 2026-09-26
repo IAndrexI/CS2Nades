@@ -1930,6 +1930,43 @@ io.on('connection', (socket) => {
     }
   })
 
+  // -------------------------------------------------------------
+  // PHONE REMOTE COMPANION & VOICE CONTROLLER RELAY
+  // -------------------------------------------------------------
+  socket.on('remote:register_desktop', ({ code }) => {
+    if (!code) return
+    const cleanCode = code.toUpperCase().trim()
+    const remoteRoom = `remote-${cleanCode}`
+    socket.join(remoteRoom)
+    socket.emit('remote:desktop_registered', { code: cleanCode, success: true })
+  })
+
+  socket.on('remote:pair_phone', ({ code, phoneInfo }) => {
+    if (!code) return socket.emit('remote:error', { message: 'Pairing code required' })
+    const cleanCode = code.toUpperCase().trim()
+    const remoteRoom = `remote-${cleanCode}`
+    socket.join(remoteRoom)
+    io.to(remoteRoom).emit('remote:paired', { 
+      code: cleanCode, 
+      phoneInfo: phoneInfo || { device: 'Mobile Companion' },
+      timestamp: Date.now() 
+    })
+  })
+
+  socket.on('remote:command', ({ code, command, payload }) => {
+    if (!code) return
+    const cleanCode = code.toUpperCase().trim()
+    const remoteRoom = `remote-${cleanCode}`
+    io.to(remoteRoom).emit('remote:command_received', { command, payload, timestamp: Date.now() })
+  })
+
+  socket.on('remote:voice_command', ({ code, transcript, matchedAction }) => {
+    if (!code) return
+    const cleanCode = code.toUpperCase().trim()
+    const remoteRoom = `remote-${cleanCode}`
+    io.to(remoteRoom).emit('remote:voice_received', { transcript, matchedAction, timestamp: Date.now() })
+  })
+
   // Disconnect handler
   socket.on('disconnect', () => {
     activeGuestSessions.delete(socket.id)

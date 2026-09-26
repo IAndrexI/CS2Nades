@@ -5,9 +5,12 @@ import AuthModal from './components/auth/AuthModal.vue'
 import GlobalConfirmModal from './components/common/GlobalConfirmModal.vue'
 import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
+import { useCompanionStore } from './stores/companionStore'
+import { Mic, Sparkles } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
+const companionStore = useCompanionStore()
 
 // Auto-detect mobile screen on load and resize
 function checkAutoMobile() {
@@ -22,6 +25,9 @@ function checkAutoMobile() {
 onMounted(() => {
   checkAutoMobile()
   window.addEventListener('resize', checkAutoMobile)
+
+  // Initialize companion socket
+  companionStore.initSocket()
 
   // Enforce Sign In / Account creation to use Protutech
   if (!authStore.isAuthenticated) {
@@ -46,6 +52,26 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
   >
     <!-- NAVBAR -->
     <Navbar />
+
+    <!-- FLOATING VOICE COMMAND HUD (DESKTOP NOTIFICATION) -->
+    <Teleport to="body">
+      <div 
+        v-if="companionStore.lastVoiceFeedback"
+        class="fixed top-16 left-1/2 -translate-x-1/2 z-[999999] flex items-center gap-3 px-4 py-2.5 bg-slate-900/95 backdrop-blur-xl border border-amber-500/60 rounded-2xl shadow-2xl text-xs animate-bounce"
+      >
+        <div class="p-1.5 bg-amber-500 text-slate-950 rounded-xl">
+          <Mic class="w-4 h-4" />
+        </div>
+        <div class="flex flex-col">
+          <span class="text-[10px] text-amber-400 font-mono font-bold uppercase">
+            🎙️ Phone Voice Command: "{{ companionStore.lastVoiceFeedback.transcript }}"
+          </span>
+          <span class="text-white font-bold">
+            {{ companionStore.lastVoiceFeedback.actionText }}
+          </span>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- MAIN VIEW ROUTER CONTENT -->
     <main class="flex-grow">
