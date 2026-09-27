@@ -367,26 +367,14 @@ onUnmounted(() => {
           ></span>
         </button>
 
-        <!-- IN-GAME OVERLAY APP BUTTON -->
+        <!-- UNIFIED IN-GAME OVERLAY & TOOLS BUTTON -->
         <button
           @click="isOverlayModalOpen = true"
           class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-amber-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
-          title="CS2 In-Game Overlay HUD & App"
+          title="In-Game CS2 Overlay HUD, Practice CFG Studio & Downloads"
         >
           <Monitor class="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-          <span class="hidden lg:inline">In-Game Overlay</span>
-          <span class="hidden sm:inline lg:hidden">Overlay</span>
-        </button>
-
-        <!-- PRACTICE SERVER & CFG STUDIO BUTTON -->
-        <button
-          @click="isPracticeModalOpen = true"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-amber-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
-          title="Host & Configure Practice Server / Generate practice.cfg"
-        >
-          <Gamepad2 class="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
-          <span class="hidden lg:inline">Practice Server</span>
-          <span class="hidden sm:inline lg:hidden">Practice</span>
+          <span>In-Game Overlay</span>
         </button>
 
         <!-- PEOPLE & SQUAD GROUPS (ICON ONLY WITH UNREAD NOTIFICATION BADGE) -->
@@ -650,15 +638,7 @@ onUnmounted(() => {
         class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-amber-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
       >
         <Monitor class="w-4 h-4" />
-        <span>In-Game CS2 Overlay App</span>
-      </button>
-
-      <button
-        @click="isPracticeModalOpen = true; isMobileMenuOpen = false"
-        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-amber-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
-      >
-        <Gamepad2 class="w-4 h-4" />
-        <span>Practice Server & CFG Studio</span>
+        <span>In-Game Overlay & Practice Hub</span>
       </button>
 
       <a
@@ -721,6 +701,7 @@ onUnmounted(() => {
     <InGameOverlayModal
       :is-open="isOverlayModalOpen"
       @close="isOverlayModalOpen = false"
+      @open-practice="isPracticeModalOpen = true"
     />
     <LineupConflictModal />
   </header>

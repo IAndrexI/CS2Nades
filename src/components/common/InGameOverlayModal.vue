@@ -21,7 +21,8 @@ import {
   Star,
   GitBranch,
   Code2,
-  BookOpen
+  BookOpen,
+  Gamepad2
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -30,12 +31,46 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
+  (e: 'open-practice'): void
 }>()
 
 const router = useRouter()
-const activeTab = ref<'overlay' | 'phone' | 'github'>('overlay')
+const activeTab = ref<'overlay' | 'practice' | 'phone' | 'github'>('overlay')
 const copiedBat = ref(false)
 const copiedDockerCmd = ref(false)
+const copiedQuickCfg = ref(false)
+
+function handleOpenFullPractice() {
+  emit('close')
+  emit('open-practice')
+}
+
+async function copyQuickPracticeCfg() {
+  const cfg = `// Protutech CS2 Quick Practice
+sv_cheats 1
+bot_kick
+mp_warmup_end
+mp_freezetime 0
+mp_roundtime_defuse 60
+mp_buytime 60000
+mp_buy_anywhere 1
+sv_infinite_ammo 1
+ammo_grenade_limit_total 6
+sv_grenade_trajectory_prac_pipreview 1
+sv_grenade_trajectory_prac_trailtime 15
+cl_grenadepreview 1
+sv_showimpacts 1
+sv_regeneration_force_on 1
+bind "alt" "noclip"
+bind "h" "sv_rethrow_last_grenade"
+bind "c" "ent_fire smokegrenade_projectile kill; ent_fire molotov_projectile kill; ent_fire flashbang_projectile kill; ent_fire hegrenade_projectile kill"
+mp_restartgame 1`
+  try {
+    await navigator.clipboard.writeText(cfg)
+    copiedQuickCfg.value = true
+    setTimeout(() => (copiedQuickCfg.value = false), 2000)
+  } catch (e) {}
+}
 
 function openWebOverlayPopup() {
   const overlayUrl = `${window.location.origin}/overlay`
@@ -122,6 +157,7 @@ async function copyDockerCommand() {
         </div>
 
         <!-- TABS -->
+        <!-- TABS -->
         <div class="flex items-center gap-1 px-5 py-2.5 bg-slate-950 border-b border-slate-800 text-xs font-bold overflow-x-auto scrollbar-none">
           <button
             @click="activeTab = 'overlay'"
@@ -135,6 +171,17 @@ async function copyDockerCommand() {
           </button>
 
           <button
+            @click="activeTab = 'practice'"
+            :class="[
+              'px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shrink-0',
+              activeTab === 'practice' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-slate-200'
+            ]"
+          >
+            <Gamepad2 class="w-3.5 h-3.5" />
+            <span>Practice & CFG Studio</span>
+          </button>
+
+          <button
             @click="activeTab = 'phone'"
             :class="[
               'px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shrink-0',
@@ -142,7 +189,7 @@ async function copyDockerCommand() {
             ]"
           >
             <Smartphone class="w-3.5 h-3.5" />
-            <span>Mobile Companion App</span>
+            <span>Mobile Companion</span>
           </button>
 
           <button
@@ -155,7 +202,7 @@ async function copyDockerCommand() {
             <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
               <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
             </svg>
-            <span>GitHub Repository</span>
+            <span>GitHub</span>
           </button>
         </div>
 
@@ -243,6 +290,54 @@ async function copyDockerCommand() {
                   The CS2 Nades overlay is a standalone external window (similar to Discord Overlay or OBS). It <strong>never touches CS2 game memory, DLLs, or hooks into the graphics pipeline</strong>, making it completely compliant with Valve Anti-Cheat (VAC) and Premier Matchmaking.
                 </p>
               </div>
+            </div>
+          </div>
+
+          <!-- TAB: PRACTICE & CFG STUDIO -->
+          <div v-show="activeTab === 'practice'" class="flex flex-col gap-4 animate-fade-in">
+            <!-- PRACTICE OVERVIEW & LAUNCH -->
+            <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div class="flex items-center gap-3">
+                <div class="p-3 bg-amber-500/20 text-amber-400 rounded-2xl">
+                  <Gamepad2 class="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 class="font-black text-sm text-white">CS2 Practice Config & Server Studio</h3>
+                  <p class="text-[11px] text-slate-400 mt-0.5">
+                    Generate custom <code class="text-amber-400 font-mono">practice.cfg</code>, export teleport binds, and deploy 128-tick practice servers.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                @click="handleOpenFullPractice"
+                class="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase rounded-xl shadow cursor-pointer transition-all shrink-0 flex items-center gap-2"
+              >
+                <Sliders class="w-4 h-4" />
+                <span>Open Practice Studio</span>
+              </button>
+            </div>
+
+            <!-- QUICK CFG SCRIPT BOX -->
+            <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-2">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-xs text-emerald-400 flex items-center gap-1.5">
+                  <Terminal class="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Quick Practice CFG Commands (Subtick & Trajectory):</span>
+                </span>
+                <button
+                  @click="copyQuickPracticeCfg"
+                  class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-700 cursor-pointer flex items-center gap-1"
+                >
+                  <Check v-if="copiedQuickCfg" class="w-3 h-3 text-emerald-400 stroke-[3]" />
+                  <Copy v-else class="w-3 h-3" />
+                  <span>{{ copiedQuickCfg ? 'Copied CFG!' : 'Copy Quick CFG' }}</span>
+                </button>
+              </div>
+
+              <code class="p-2.5 bg-slate-900/90 border border-slate-800 rounded-xl font-mono text-[10px] text-slate-300 overflow-x-auto leading-relaxed">
+                sv_cheats 1; bot_kick; mp_warmup_end; mp_roundtime_defuse 60; sv_infinite_ammo 1; sv_grenade_trajectory_prac_pipreview 1; sv_showimpacts 1; bind "alt" "noclip"; bind "h" "sv_rethrow_last_grenade"; mp_restartgame 1
+              </code>
             </div>
           </div>
 
