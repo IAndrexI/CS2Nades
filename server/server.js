@@ -304,22 +304,128 @@ echo ===================================================
 echo     CS2 Nades & Tactics In-Game Overlay HUD
 echo ===================================================
 echo.
-echo Launching In-Game HUD...
+echo Detecting your default browser (Vivaldi, Opera GX, Edge, Chrome, Brave, etc)...
 echo Target: ${overlayUrl}
 echo.
 
-:: Try launching Microsoft Edge in App Mode
-start msedge.exe --app="${overlayUrl}" --window-size=480,720 --window-position=50,50
-if %errorlevel% neq 0 (
-    :: Fallback to Chrome
-    start chrome.exe --app="${overlayUrl}" --window-size=480,720 --window-position=50,50
-)
-if %errorlevel% neq 0 (
-    :: Fallback to default browser
-    start "" "${overlayUrl}"
+set "TARGET_URL=${overlayUrl}"
+set "APP_ARGS=--app="%TARGET_URL%" --window-size=480,720 --window-position=50,50"
+set "LAUNCHED=0"
+
+:: 1. Detect user's Default Windows Browser from Registry
+for /f "usebackq delims=" %%I in (\`powershell -NoProfile -Command "$p=(Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice' -ErrorAction SilentlyContinue).ProgId; if(!$p){$p=(Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice' -ErrorAction SilentlyContinue).ProgId}; if($p){$c=(Get-ItemProperty -Path ('Registry::HKEY_CLASSES_ROOT\\' + $p + '\\shell\\open\\command') -ErrorAction SilentlyContinue).'(default)'; if($c -match '\"([^\"]+)\"'){ $matches[1] } else { ($c -split ' ')[0] } }"\`) do (
+    if exist "%%~I" (
+        echo Found default browser: %%~nxI
+        echo Launching with default browser...
+        if /i "%%~nxI"=="firefox.exe" (
+            start "" "%%~I" -new-window "%TARGET_URL%"
+        ) else (
+            start "" "%%~I" --app="%TARGET_URL%" --window-size=480,720 --window-position=50,50
+        )
+        set "LAUNCHED=1"
+        goto :done
+    )
 )
 
-echo Overlay Launched! Switch to CS2 (Fullscreen Windowed).
+:: 2. Check Vivaldi
+if exist "%LocalAppData%\\Vivaldi\\Application\\vivaldi.exe" (
+    echo Launching Vivaldi Overlay...
+    start "" "%LocalAppData%\\Vivaldi\\Application\\vivaldi.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+if exist "%ProgramFiles%\\Vivaldi\\Application\\vivaldi.exe" (
+    echo Launching Vivaldi Overlay...
+    start "" "%ProgramFiles%\\Vivaldi\\Application\\vivaldi.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+
+:: 3. Check Opera GX & Opera Stable
+if exist "%LocalAppData%\\Programs\\Opera GX\\launcher.exe" (
+    echo Launching Opera GX Overlay...
+    start "" "%LocalAppData%\\Programs\\Opera GX\\launcher.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+if exist "%LocalAppData%\\Programs\\Opera\\launcher.exe" (
+    echo Launching Opera Overlay...
+    start "" "%LocalAppData%\\Programs\\Opera\\launcher.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+if exist "%ProgramFiles%\\Opera\\launcher.exe" (
+    echo Launching Opera Overlay...
+    start "" "%ProgramFiles%\\Opera\\launcher.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+
+:: 4. Check Brave Browser
+if exist "%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" (
+    echo Launching Brave Overlay...
+    start "" "%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+if exist "%LocalAppData%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" (
+    echo Launching Brave Overlay...
+    start "" "%LocalAppData%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+
+:: 5. Check Google Chrome
+if exist "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" (
+    echo Launching Google Chrome Overlay...
+    start "" "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+if exist "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" (
+    echo Launching Google Chrome Overlay...
+    start "" "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+if exist "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe" (
+    echo Launching Google Chrome Overlay...
+    start "" "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+
+:: 6. Check Microsoft Edge
+if exist "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe" (
+    echo Launching Microsoft Edge Overlay...
+    start "" "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+if exist "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe" (
+    echo Launching Microsoft Edge Overlay...
+    start "" "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe" %APP_ARGS%
+    set "LAUNCHED=1"
+    goto :done
+)
+
+:: 7. Check Mozilla Firefox
+if exist "%ProgramFiles%\\Mozilla Firefox\\firefox.exe" (
+    echo Launching Firefox Overlay...
+    start "" "%ProgramFiles%\\Mozilla Firefox\\firefox.exe" -new-window "%TARGET_URL%"
+    set "LAUNCHED=1"
+    goto :done
+)
+
+:: 8. Universal Fallback (Direct URL handler)
+echo Opening in default system web browser...
+start "" "%TARGET_URL%"
+set "LAUNCHED=1"
+
+:done
+echo.
+echo Overlay HUD launched successfully!
+echo Switch to CS2 (Fullscreen Windowed or Borderless mode recommended).
 timeout /t 3 >nul
 exit
 `
@@ -336,15 +442,73 @@ app.get('/api/download/overlay-app', (req, res) => {
   const overlayUrl = `${protocol}://${host}/overlay`
 
   const ps1Content = `# CS2 Nades & Tactics In-Game Overlay Launcher
-# 100% VAC Safe External HUD Window
+# 100% VAC Safe External HUD Window - Multi-Browser Support (Vivaldi, Opera, Edge, Chrome, Brave, Firefox)
 
 $url = "${overlayUrl}"
+$appArgs = "--app=$url --window-size=480,720 --window-position=50,50"
+
 Write-Host "===================================================" -ForegroundColor Yellow
 Write-Host "   CS2 Nades & Tactics In-Game Overlay HUD" -ForegroundColor Cyan
 Write-Host "===================================================" -ForegroundColor Yellow
-Write-Host "Starting CS2 Overlay at $url..."
+Write-Host "Detecting default browser..." -ForegroundColor Gray
 
-Start-Process "msedge.exe" -ArgumentList "--app=$url --window-size=480,720 --window-position=50,50" -ErrorAction SilentlyContinue
+# 1. Query Default Browser from Windows Registry
+$progId = (Get-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice" -ErrorAction SilentlyContinue).ProgId
+if (-not $progId) {
+    $progId = (Get-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice" -ErrorAction SilentlyContinue).ProgId
+}
+
+$browserPath = ""
+if ($progId) {
+    $rawCmd = (Get-ItemProperty -Path "Registry::HKEY_CLASSES_ROOT\\$progId\\shell\\open\\command" -ErrorAction SilentlyContinue).'(default)'
+    if ($rawCmd -match '"([^"]+)"') {
+        $browserPath = $matches[1]
+    } elseif ($rawCmd) {
+        $browserPath = ($rawCmd -split ' ')[0]
+    }
+}
+
+if ($browserPath -and (Test-Path $browserPath)) {
+    Write-Host "Launching with default browser ($browserPath)..." -ForegroundColor Green
+    if ($browserPath -match 'firefox\\.exe') {
+        Start-Process $browserPath -ArgumentList "-new-window $url"
+    } else {
+        Start-Process $browserPath -ArgumentList $appArgs
+    }
+    exit
+}
+
+# 2. Check installed Chromium browsers (Vivaldi, Opera, Brave, Chrome, Edge)
+$candidates = @(
+    "$env:LOCALAPPDATA\\Vivaldi\\Application\\vivaldi.exe",
+    "$env:ProgramFiles\\Vivaldi\\Application\\vivaldi.exe",
+    "$env:LOCALAPPDATA\\Programs\\Opera GX\\launcher.exe",
+    "$env:LOCALAPPDATA\\Programs\\Opera\\launcher.exe",
+    "$env:ProgramFiles\\Opera\\launcher.exe",
+    "$env:ProgramFiles\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+    "$env:LOCALAPPDATA\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+    "$env:ProgramFiles\\Google\\Chrome\\Application\\chrome.exe",
+    "\${env:ProgramFiles(x86)}\\Google\\Chrome\\Application\\chrome.exe",
+    "$env:LOCALAPPDATA\\Google\\Chrome\\Application\\chrome.exe",
+    "\${env:ProgramFiles(x86)}\\Microsoft\\Edge\\Application\\msedge.exe",
+    "$env:ProgramFiles\\Microsoft\\Edge\\Application\\msedge.exe",
+    "$env:ProgramFiles\\Mozilla Firefox\\firefox.exe"
+)
+
+foreach ($exe in $candidates) {
+    if (Test-Path $exe) {
+        Write-Host "Found installed browser: $exe" -ForegroundColor Green
+        if ($exe -match 'firefox\\.exe') {
+            Start-Process $exe -ArgumentList "-new-window $url"
+        } else {
+            Start-Process $exe -ArgumentList $appArgs
+        }
+        exit
+    }
+}
+
+# 3. Fallback
+Start-Process $url
 `
 
   res.setHeader('Content-Type', 'text/plain')

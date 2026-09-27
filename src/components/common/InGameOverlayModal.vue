@@ -102,7 +102,47 @@ function openMobileCompanion() {
 
 async function copyBatScript() {
   const serverUrl = window.location.origin
-  const script = `@echo off\ntitle CS2 Nades In-Game Overlay\necho Starting CS2 Nades Overlay HUD...\nstart msedge.exe --app="${serverUrl}/overlay" --window-size=480,720 --window-position=50,50\nexit`
+  const script = `@echo off
+title CS2 Nades In-Game Overlay
+color 0E
+echo Detecting default browser (Vivaldi, Opera, Edge, Chrome, Brave, Firefox)...
+set "TARGET_URL=${serverUrl}/overlay"
+set "APP_ARGS=--app="%TARGET_URL%" --window-size=480,720 --window-position=50,50"
+
+:: 1. Registry Default Browser
+for /f "usebackq delims=" %%I in (\`powershell -NoProfile -Command "$p=(Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice' -ErrorAction SilentlyContinue).ProgId; if(!$p){$p=(Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice' -ErrorAction SilentlyContinue).ProgId}; if($p){$c=(Get-ItemProperty -Path ('Registry::HKEY_CLASSES_ROOT\\' + $p + '\\shell\\open\\command') -ErrorAction SilentlyContinue).'(default)'; if($c -match '\"([^\"]+)\"'){ $matches[1] } else { ($c -split ' ')[0] } }"\`) do (
+    if exist "%%~I" (
+        start "" "%%~I" %APP_ARGS%
+        exit
+    )
+)
+
+:: 2. Vivaldi
+if exist "%LocalAppData%\\Vivaldi\\Application\\vivaldi.exe" ( start "" "%LocalAppData%\\Vivaldi\\Application\\vivaldi.exe" %APP_ARGS% & exit )
+if exist "%ProgramFiles%\\Vivaldi\\Application\\vivaldi.exe" ( start "" "%ProgramFiles%\\Vivaldi\\Application\\vivaldi.exe" %APP_ARGS% & exit )
+
+:: 3. Opera GX / Opera
+if exist "%LocalAppData%\\Programs\\Opera GX\\launcher.exe" ( start "" "%LocalAppData%\\Programs\\Opera GX\\launcher.exe" %APP_ARGS% & exit )
+if exist "%LocalAppData%\\Programs\\Opera\\launcher.exe" ( start "" "%LocalAppData%\\Programs\\Opera\\launcher.exe" %APP_ARGS% & exit )
+if exist "%ProgramFiles%\\Opera\\launcher.exe" ( start "" "%ProgramFiles%\\Opera\\launcher.exe" %APP_ARGS% & exit )
+
+:: 4. Brave
+if exist "%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" ( start "" "%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" %APP_ARGS% & exit )
+if exist "%LocalAppData%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" ( start "" "%LocalAppData%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" %APP_ARGS% & exit )
+
+:: 5. Google Chrome
+if exist "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" ( start "" "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" %APP_ARGS% & exit )
+if exist "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe" ( start "" "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe" %APP_ARGS% & exit )
+
+:: 6. Microsoft Edge
+if exist "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe" ( start "" "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe" %APP_ARGS% & exit )
+if exist "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe" ( start "" "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe" %APP_ARGS% & exit )
+
+:: 7. Firefox / Universal fallback
+if exist "%ProgramFiles%\\Mozilla Firefox\\firefox.exe" ( start "" "%ProgramFiles%\\Mozilla Firefox\\firefox.exe" -new-window "%TARGET_URL%" & exit )
+start "" "%TARGET_URL%"
+exit`
+
   try {
     await navigator.clipboard.writeText(script)
     copiedBat.value = true
@@ -242,7 +282,7 @@ async function copyDockerCommand() {
                 </button>
               </div>
 
-              <!-- CARD 2: DOWNLOAD WINDOWS OVERLAY LAUNCHER -->
+              <!-- CARD 2: DOWNLOAD WINDOWS OVERLAY LAUNCHER (MULTI-BROWSER) -->
               <div class="p-4 bg-slate-950 border border-slate-800 hover:border-emerald-500/50 rounded-2xl flex flex-col justify-between gap-3 shadow-lg transition-all group">
                 <div class="flex flex-col gap-2">
                   <div class="flex items-center justify-between">
@@ -250,18 +290,28 @@ async function copyDockerCommand() {
                       <Laptop class="w-5 h-5" />
                     </div>
                     <span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono text-[10px] rounded-full font-bold">
-                      Windows Desktop App
+                      Default Browser Ready
                     </span>
                   </div>
                   <h3 class="font-black text-sm text-white group-hover:text-emerald-400 transition-colors">
                     Windows Overlay Launcher
                   </h3>
                   <p class="text-[11px] text-slate-400 leading-relaxed">
-                    Download the 1-click Windows desktop runner (<code class="text-emerald-400 font-mono">.bat</code> / <code class="text-emerald-400 font-mono">.zip</code>) to launch an always-on-top borderless CS2 HUD.
+                    Auto-detects and launches with your default browser (<strong>Vivaldi, Opera GX, Edge, Chrome, Brave, Firefox</strong>) in borderless HUD app mode.
                   </p>
+
+                  <!-- BROWSER BADGES -->
+                  <div class="flex flex-wrap gap-1 pt-1">
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-[9px] font-mono text-slate-300 font-bold">Vivaldi</span>
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-[9px] font-mono text-slate-300 font-bold">Opera / GX</span>
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-[9px] font-mono text-slate-300 font-bold">MS Edge</span>
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-[9px] font-mono text-slate-300 font-bold">Chrome</span>
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-[9px] font-mono text-slate-300 font-bold">Brave</span>
+                    <span class="px-1.5 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-[9px] font-mono text-slate-300 font-bold">Firefox</span>
+                  </div>
                 </div>
 
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 pt-1">
                   <button 
                     @click="downloadOverlayLauncher"
                     class="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wide rounded-xl flex items-center justify-center gap-1.5 shadow cursor-pointer transition-all active:scale-95"
@@ -270,9 +320,18 @@ async function copyDockerCommand() {
                     <span>Download .bat</span>
                   </button>
                   <button 
+                    @click="copyBatScript"
+                    class="px-3 py-2.5 bg-slate-850 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl border border-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Copy Multi-Browser Batch Script"
+                  >
+                    <Check v-if="copiedBat" class="w-4 h-4 text-emerald-400 stroke-[3]" />
+                    <Copy v-else class="w-4 h-4" />
+                    <span class="hidden xs:inline">{{ copiedBat ? 'Copied!' : 'Copy Script' }}</span>
+                  </button>
+                  <button 
                     @click="downloadFullAppZip"
                     class="p-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl border border-slate-700 transition-colors cursor-pointer"
-                    title="Download Complete Package (.zip)"
+                    title="Download Complete Package (.ps1)"
                   >
                     <Layers class="w-4 h-4" />
                   </button>
