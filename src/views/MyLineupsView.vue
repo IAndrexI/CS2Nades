@@ -7,6 +7,7 @@ import { useThemeStore } from '../stores/themeStore'
 import LineupCard from '../components/lineups/LineupCard.vue'
 import LineupModal from '../components/lineups/LineupModal.vue'
 import AddLineupModal from '../components/lineups/AddLineupModal.vue'
+import QuickAddBar from '../components/lineups/QuickAddBar.vue'
 import { 
   User, 
   Plus, 
@@ -175,6 +176,9 @@ async function handleClearAll() {
         </button>
       </div>
     </div>
+
+    <!-- ⚡ QUICK ADD BAR -->
+    <QuickAddBar />
 
     <!-- FILTER BAR -->
     <div class="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-900/80 border border-slate-800 rounded-xl text-xs">

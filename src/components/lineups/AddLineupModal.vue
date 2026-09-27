@@ -26,8 +26,11 @@ import {
   Sliders,
   Sparkles,
   Layers,
-  FileText
+  FileText,
+  Zap,
+  ArrowRight
 } from 'lucide-vue-next'
+import { parseQuickLineupInput } from '../../utils/quickLineupParser'
 
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
@@ -36,12 +39,39 @@ const themeStore = useThemeStore()
 
 const activeTab = ref<'basics' | 'position' | 'screenshots' | 'guide'>('basics')
 
+const quickFillText = ref<string>('')
 const rawCS2PosInput = ref<string>('')
 const parsedPosStatus = ref<{
   success: boolean
   message: string
   details?: { posX: number; posY: number; posZ: number; pitch?: number; yaw?: number; radarX: number; radarY: number }
 } | null>(null)
+
+function handleQuickFill(text: string) {
+  if (!text.trim()) return
+  const draft = parseQuickLineupInput(text, formData.mapId)
+  formData.title = draft.title
+  formData.mapId = draft.mapId
+  formData.grenadeType = draft.grenadeType
+  formData.side = draft.side
+  formData.throwType = draft.throwType
+  formData.startLocation = draft.startLocation
+  formData.endLocation = draft.endLocation
+  formData.site = draft.site || 'General'
+  formData.originCoords = { ...draft.originCoords }
+  formData.landingCoords = { ...draft.landingCoords }
+  if (draft.consoleCommand) {
+    formData.consoleCommand = draft.consoleCommand
+    rawCS2PosInput.value = draft.consoleCommand
+    processCS2PosInput(draft.consoleCommand)
+  }
+  if (draft.cs2Pos) {
+    formData.cs2Pos = { ...draft.cs2Pos }
+  }
+  if (draft.instructions && draft.instructions.length) {
+    formData.instructions = [...draft.instructions]
+  }
+}
 
 const isUploadingImage = ref<boolean>(false)
 const selectedImagePreview = ref<string | null>(null)
@@ -456,6 +486,38 @@ function resetForm() {
           
           <!-- TAB 1: BASICS & ESSENTIALS -->
           <div v-show="activeTab === 'basics'" class="flex flex-col gap-4 animate-fade-in">
+            
+            <!-- SMART QUICK-TYPE & 1-CLICK POPULATE BOX -->
+            <div class="p-3.5 bg-gradient-to-r from-amber-500/15 via-slate-950 to-slate-950 border-2 border-amber-500/40 rounded-2xl flex flex-col gap-2 shadow-lg">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="p-1.5 bg-amber-500 text-slate-950 rounded-lg font-black">
+                    <Zap class="w-3.5 h-3.5 fill-current" />
+                  </div>
+                  <span class="font-black text-amber-400 uppercase tracking-wider text-xs">
+                    ⚡ Smart Type-To-Fill
+                  </span>
+                </div>
+                <span class="text-[10px] text-slate-400 font-mono">Auto-populates all tabs</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <input 
+                  v-model="quickFillText"
+                  @input="handleQuickFill(quickFillText)"
+                  placeholder="Type anything (e.g. 'Mirage Window Smoke Jumpthrow from T Spawn' or paste setpos)..."
+                  class="flex-1 bg-slate-900 border border-slate-700/80 focus:border-amber-400 rounded-xl px-3 py-2 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+                />
+                <button
+                  type="button"
+                  @click="handleQuickFill(quickFillText)"
+                  class="px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer whitespace-nowrap"
+                >
+                  ⚡ Auto-Fill
+                </button>
+              </div>
+            </div>
+
             <!-- TITLE & MAP -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div class="md:col-span-2 flex flex-col gap-1.5">

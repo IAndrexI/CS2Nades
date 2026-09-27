@@ -101,7 +101,7 @@ export interface Lineup {
   isCustom?: boolean
   inLibrary?: boolean
   isTeamShared?: boolean
-  createdAt: string
+  createdAt?: string
   updatedAt?: string
 }
 

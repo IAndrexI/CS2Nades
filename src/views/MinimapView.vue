@@ -3,6 +3,7 @@ import { useMapStore } from '../stores/mapStore'
 import { useLineupStore } from '../stores/lineupStore'
 import MapSelectorSidebar from '../components/map/MapSelectorSidebar.vue'
 import NadeFilterBar from '../components/map/NadeFilterBar.vue'
+import QuickAddBar from '../components/lineups/QuickAddBar.vue'
 import InteractiveMinimap from '../components/map/InteractiveMinimap.vue'
 import LineupGrid from '../components/lineups/LineupGrid.vue'
 import LineupModal from '../components/lineups/LineupModal.vue'
@@ -26,6 +27,9 @@ const lineupStore = useLineupStore()
     <div class="flex-grow flex flex-col gap-6 min-w-0">
       <!-- NADE FILTER BAR -->
       <NadeFilterBar />
+
+      <!-- ⚡ QUICK-ADD BAR (1-TYPE / 1-PUSH) -->
+      <QuickAddBar />
 
       <!-- INTERACTIVE RADAR MINIMAP -->
       <InteractiveMinimap />
