@@ -7,6 +7,8 @@ import { useThemeStore } from '../stores/themeStore'
 import { useCompanionStore } from '../stores/companionStore'
 import { useGameRoomStore } from '../stores/gameRoomStore'
 import NadeIcon from '../components/common/NadeIcon.vue'
+import VectorMapBlueprint from '../components/map/VectorMapBlueprint.vue'
+import { trajectoryPath, pctToSvg } from '../utils/radarCoords'
 import type { GrenadeType, TeamSide, Lineup } from '../types'
 import { 
   Smartphone, 
@@ -34,7 +36,14 @@ import {
   LogOut,
   ArrowRight,
   Shield,
-  Bell
+  Bell,
+  Crosshair,
+  MapPin,
+  Eye,
+  Maximize2,
+  Layers,
+  Monitor,
+  Terminal
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -52,6 +61,30 @@ const selectedNadeFilter = ref<GrenadeType | 'all'>('all')
 const selectedSideFilter = ref<TeamSide>('all')
 const copiedCommandId = ref<string | null>(null)
 const broadcastSuccessId = ref<string | null>(null)
+
+// ── STREAM LINEUP INSPECTOR & GAME SCREENSHOTS MODAL ─────────
+const selectedStreamLineup = ref<Lineup | null>(null)
+const activeStreamMediaTab = ref<'aim' | 'standing' | 'landing' | 'radar'>('aim')
+const isStreamLightboxOpen = ref<boolean>(false)
+const streamLightboxUrl = ref<string | null>(null)
+
+function handleInspectLineup(lineup: Lineup) {
+  selectedStreamLineup.value = lineup
+  activeStreamMediaTab.value = 'aim'
+  // Also sync select to PC
+  handleSelectLineup(lineup)
+}
+
+function handleCloseStreamInspector() {
+  selectedStreamLineup.value = null
+}
+
+function openStreamLightbox(url?: string) {
+  if (url) {
+    streamLightboxUrl.value = url
+    isStreamLightboxOpen.value = true
+  }
+}
 
 // ── PHONE INACTIVITY & SLEEP / STANDBY SYSTEM ───────────────
 const isSleeping = ref<boolean>(false)
@@ -397,14 +430,14 @@ function parseAndExecuteVoice(text: string) {
 
     if (bestMatch) {
       if (detectedMap) handleSelectMap(detectedMap)
-      handleSelectLineup(bestMatch)
+      handleInspectLineup(bestMatch)
       if (gameRoomStore.currentRoomCode) {
         handleBroadcastLineupToSquad(bestMatch)
       }
       matchedAction = {
         type: 'select_lineup',
         payload: { lineupId: bestMatch.id },
-        description: `Launched & Broadcast: ${bestMatch.title} (${bestMatch.grenadeType.toUpperCase()})`
+        description: `Opened & Broadcast: ${bestMatch.title} (${bestMatch.grenadeType.toUpperCase()})`
       }
     } else if (detectedMap) {
       handleSelectMap(detectedMap)
@@ -705,52 +738,109 @@ function parseAndExecuteVoice(text: string) {
           <div
             v-for="l in activeLineups"
             :key="l.id"
-            @click="handleSelectLineup(l)"
-            class="p-3 bg-slate-900 hover:bg-slate-850 active:scale-[0.99] border border-slate-800 hover:border-amber-500/60 rounded-2xl flex items-center justify-between gap-3 transition-all cursor-pointer shadow group"
+            @click="handleInspectLineup(l)"
+            class="p-3 bg-slate-900 hover:bg-slate-850 active:scale-[0.99] border border-slate-800 hover:border-amber-500/60 rounded-2xl flex flex-col gap-2.5 transition-all cursor-pointer shadow group"
           >
-            <!-- LINEUP INFO -->
-            <div class="flex items-center gap-2.5 min-w-0 flex-1">
-              <div class="p-2 bg-slate-950 rounded-xl border border-slate-800 shrink-0">
-                <NadeIcon :type="l.grenadeType" :size="20" :filled="true" />
+            <!-- TOP ROW: NADE ICON + TITLE + LOCATION -->
+            <div class="flex items-center justify-between gap-2.5 min-w-0">
+              <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                <div class="p-2 bg-slate-950 rounded-xl border border-slate-800 shrink-0">
+                  <NadeIcon :type="l.grenadeType" :size="20" :filled="true" />
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="font-bold text-xs text-white truncate group-hover:text-amber-400 transition-colors">
+                      {{ l.title }}
+                    </span>
+                    <span 
+                      :class="[
+                        'px-1.5 py-0.2 rounded text-[9px] font-bold uppercase shrink-0',
+                        l.side === 't' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                      ]"
+                    >
+                      {{ l.side }}
+                    </span>
+                  </div>
+                  <span class="text-[10px] text-slate-400 truncate">
+                    {{ l.startLocation }} → <strong class="text-emerald-400 font-bold">{{ l.endLocation }}</strong>
+                  </span>
+                </div>
               </div>
-              <div class="flex flex-col min-w-0">
-                <span class="font-bold text-xs text-white truncate group-hover:text-amber-400 transition-colors">
-                  {{ l.title }}
+
+              <!-- SCREENSHOT AVAILABILITY BADGES -->
+              <div class="flex items-center gap-1 shrink-0">
+                <span 
+                  v-if="l.aimScreenshot || l.imageUrl" 
+                  class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1"
+                  title="Crosshair Aim Screenshot Available"
+                >
+                  <Crosshair class="w-2.5 h-2.5" />
+                  <span>Aim</span>
                 </span>
-                <span class="text-[10px] text-slate-400 truncate">
-                  {{ l.startLocation }} → {{ l.endLocation }}
+                <span 
+                  v-if="l.standingScreenshot" 
+                  class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 flex items-center gap-1"
+                  title="Standing Spot Screenshot Available"
+                >
+                  <MapPin class="w-2.5 h-2.5" />
+                  <span>Stand</span>
+                </span>
+                <span 
+                  v-if="l.landingScreenshot" 
+                  class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center gap-1"
+                  title="Landing Spot Screenshot Available"
+                >
+                  <Sparkles class="w-2.5 h-2.5" />
+                  <span>Land</span>
                 </span>
               </div>
             </div>
 
-            <!-- ACTION BUTTONS: BROADCAST TO SQUAD + COPY TELEPORT -->
-            <div class="flex items-center gap-1.5 shrink-0" @click.stop>
-              <!-- BROADCAST TO SQUAD -->
-              <button
-                @click="handleBroadcastLineupToSquad(l)"
-                :class="[
-                  'px-2.5 py-1.5 rounded-xl font-bold text-[10px] uppercase flex items-center gap-1 transition-all cursor-pointer border shadow',
-                  broadcastSuccessId === l.id 
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 scale-105' 
-                    : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
-                ]"
-                title="Broadcast Lineup to Squad Room"
-              >
-                <Check v-if="broadcastSuccessId === l.id" class="w-3 h-3 stroke-[3]" />
-                <Send v-else class="w-3 h-3" />
-                <span>{{ broadcastSuccessId === l.id ? 'Broadcasted' : 'Squad' }}</span>
-              </button>
+            <!-- BOTTOM ACTION STRIP -->
+            <div class="flex items-center justify-between pt-2 border-t border-slate-950/80 gap-2" @click.stop>
+              <div class="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                <span class="uppercase font-bold text-amber-400/90">{{ l.throwType.replace('_', ' ') }}</span>
+                <span v-if="l.site" class="text-slate-500">• {{ l.site }} Site</span>
+              </div>
 
-              <!-- TELEPORT COPY BUTTON -->
-              <button
-                v-if="l.consoleCommand"
-                @click="copyTeleportCommand(l)"
-                class="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-amber-400 transition-colors cursor-pointer"
-                title="Copy Teleport Command"
-              >
-                <Check v-if="copiedCommandId === l.id" class="w-3.5 h-3.5 text-emerald-400" />
-                <Copy v-else class="w-3.5 h-3.5" />
-              </button>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <!-- VIEW SCREENSHOTS & DETAILS BUTTON -->
+                <button
+                  @click="handleInspectLineup(l)"
+                  class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-[10px] rounded-xl flex items-center gap-1 transition-colors cursor-pointer border border-slate-700"
+                  title="Inspect Lineup & View Screenshots"
+                >
+                  <Eye class="w-3 h-3" />
+                  <span>Inspect</span>
+                </button>
+
+                <!-- BROADCAST TO SQUAD -->
+                <button
+                  @click="handleBroadcastLineupToSquad(l)"
+                  :class="[
+                    'px-2 py-1 rounded-xl font-bold text-[10px] uppercase flex items-center gap-1 transition-all cursor-pointer border shadow-sm',
+                    broadcastSuccessId === l.id 
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 scale-105' 
+                      : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
+                  ]"
+                  title="Broadcast Lineup to Squad Room"
+                >
+                  <Check v-if="broadcastSuccessId === l.id" class="w-3 h-3 stroke-[3]" />
+                  <Send v-else class="w-3 h-3" />
+                  <span>{{ broadcastSuccessId === l.id ? 'Sent' : 'Squad' }}</span>
+                </button>
+
+                <!-- TELEPORT COPY BUTTON -->
+                <button
+                  v-if="l.consoleCommand"
+                  @click="copyTeleportCommand(l)"
+                  class="p-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-amber-400 transition-colors cursor-pointer"
+                  title="Copy Teleport Command"
+                >
+                  <Check v-if="copiedCommandId === l.id" class="w-3 h-3 text-emerald-400" />
+                  <Copy v-else class="w-3 h-3" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -762,6 +852,368 @@ function parseAndExecuteVoice(text: string) {
       </div>
 
     </main>
+
+    <!-- 🎯 STREAM LINEUP & IN-GAME SCREENSHOTS INSPECTOR MODAL -->
+    <Transition name="fade">
+      <div 
+        v-if="selectedStreamLineup"
+        class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col justify-end sm:justify-center p-0 sm:p-4 animate-fade-in"
+        @click.self="handleCloseStreamInspector"
+      >
+        <div class="bg-slate-900 border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden mx-auto">
+          
+          <!-- MODAL HEADER -->
+          <div class="p-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="p-2 bg-slate-900 border border-slate-800 rounded-xl shrink-0">
+                <NadeIcon :type="selectedStreamLineup.grenadeType" :size="20" :filled="true" />
+              </div>
+              <div class="flex flex-col min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <h2 class="text-xs font-black text-white uppercase tracking-wider truncate">
+                    {{ selectedStreamLineup.title }}
+                  </h2>
+                  <span 
+                    :class="[
+                      'px-1.5 py-0.2 rounded text-[9px] font-bold uppercase shrink-0',
+                      selectedStreamLineup.side === 't' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                    ]"
+                  >
+                    {{ selectedStreamLineup.side }}
+                  </span>
+                </div>
+                <span class="text-[10px] text-slate-400 truncate">
+                  {{ selectedStreamLineup.startLocation }} → <strong class="text-emerald-400">{{ selectedStreamLineup.endLocation }}</strong>
+                </span>
+              </div>
+            </div>
+
+            <button 
+              @click="handleCloseStreamInspector" 
+              class="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-800/80 hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+            >
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <!-- MODAL BODY (SCROLLABLE) -->
+          <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5">
+            
+            <!-- SCREENSHOT & MEDIA TABS -->
+            <div class="flex items-center gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-bold overflow-x-auto scrollbar-none">
+              <button 
+                @click="activeStreamMediaTab = 'aim'"
+                :class="[
+                  'flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer',
+                  activeStreamMediaTab === 'aim' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-slate-200'
+                ]"
+              >
+                <Crosshair class="w-3.5 h-3.5" />
+                <span>Aim Spot</span>
+              </button>
+
+              <button 
+                @click="activeStreamMediaTab = 'standing'"
+                :class="[
+                  'flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer',
+                  activeStreamMediaTab === 'standing' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-slate-200'
+                ]"
+              >
+                <MapPin class="w-3.5 h-3.5" />
+                <span>Standing</span>
+              </button>
+
+              <button 
+                @click="activeStreamMediaTab = 'landing'"
+                :class="[
+                  'flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer',
+                  activeStreamMediaTab === 'landing' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-slate-200'
+                ]"
+              >
+                <Sparkles class="w-3.5 h-3.5" />
+                <span>Landing Spot</span>
+              </button>
+
+              <button 
+                @click="activeStreamMediaTab = 'radar'"
+                :class="[
+                  'flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer',
+                  activeStreamMediaTab === 'radar' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-slate-200'
+                ]"
+              >
+                <Layers class="w-3.5 h-3.5" />
+                <span>Radar Target</span>
+              </button>
+            </div>
+
+            <!-- MEDIA / SCREENSHOT DISPLAY CONTAINER -->
+            <div class="relative w-full aspect-video bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-xl flex items-center justify-center group">
+              
+              <!-- 1. STANDING SPOT SCREENSHOT -->
+              <div 
+                v-if="activeStreamMediaTab === 'standing'"
+                class="w-full h-full cursor-zoom-in relative"
+                @click="openStreamLightbox(selectedStreamLineup.standingScreenshot || selectedStreamLineup.imageUrl)"
+              >
+                <img 
+                  v-if="selectedStreamLineup.standingScreenshot || selectedStreamLineup.imageUrl"
+                  :src="selectedStreamLineup.standingScreenshot || selectedStreamLineup.imageUrl" 
+                  alt="Standing Position"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full flex flex-col items-center justify-center p-4 text-center text-slate-500">
+                  <MapPin class="w-8 h-8 mb-2 opacity-50" />
+                  <span class="text-xs font-bold">No standing screenshot uploaded</span>
+                  <span class="text-[10px] text-slate-600">Position at: {{ selectedStreamLineup.startLocation }}</span>
+                </div>
+
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-2.5 pointer-events-none">
+                  <span class="text-[10px] font-bold text-sky-300 bg-slate-950/80 px-2 py-0.5 rounded-lg backdrop-blur-md flex items-center gap-1">
+                    <MapPin class="w-3 h-3 text-sky-400" />
+                    <span>Standing Spot: {{ selectedStreamLineup.startLocation }}</span>
+                  </span>
+                  <span class="text-[9px] text-slate-300 bg-slate-950/80 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <Maximize2 class="w-2.5 h-2.5" /> Tap to Zoom
+                  </span>
+                </div>
+              </div>
+
+              <!-- 2. LANDING SPOT / DETONATION SCREENSHOT -->
+              <div 
+                v-else-if="activeStreamMediaTab === 'landing'"
+                class="w-full h-full cursor-zoom-in relative"
+                @click="openStreamLightbox(selectedStreamLineup.landingScreenshot || selectedStreamLineup.imageUrl)"
+              >
+                <img 
+                  v-if="selectedStreamLineup.landingScreenshot || selectedStreamLineup.imageUrl"
+                  :src="selectedStreamLineup.landingScreenshot || selectedStreamLineup.imageUrl" 
+                  alt="Landing Result"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full flex flex-col items-center justify-center p-4 text-center text-slate-500">
+                  <Sparkles class="w-8 h-8 mb-2 opacity-50" />
+                  <span class="text-xs font-bold">No landing screenshot uploaded</span>
+                  <span class="text-[10px] text-slate-600">Detonates at: {{ selectedStreamLineup.endLocation }}</span>
+                </div>
+
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-2.5 pointer-events-none">
+                  <span class="text-[10px] font-bold text-rose-300 bg-slate-950/80 px-2 py-0.5 rounded-lg backdrop-blur-md flex items-center gap-1">
+                    <Sparkles class="w-3 h-3 text-rose-400" />
+                    <span>Landing Result: {{ selectedStreamLineup.endLocation }}</span>
+                  </span>
+                  <span class="text-[9px] text-slate-300 bg-slate-950/80 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <Maximize2 class="w-2.5 h-2.5" /> Tap to Zoom
+                  </span>
+                </div>
+              </div>
+
+              <!-- 3. RADAR TRAJECTORY & LANDING LOCATION MAP -->
+              <div 
+                v-else-if="activeStreamMediaTab === 'radar'"
+                class="w-full h-full relative bg-slate-950 flex items-center justify-center overflow-hidden"
+              >
+                <svg 
+                  class="w-full h-full object-contain"
+                  :viewBox="mapStore.currentMap.viewBox || '0 0 1000 1000'"
+                >
+                  <VectorMapBlueprint :mapInfo="mapStore.currentMap" />
+                  
+                  <!-- TRAJECTORY ARC -->
+                  <path 
+                    :d="trajectoryPath(selectedStreamLineup.originCoords, selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000', selectedStreamLineup.curveOffset || 0)"
+                    fill="none"
+                    stroke="#000000"
+                    stroke-width="7"
+                    stroke-linecap="round"
+                    opacity="0.6"
+                  />
+                  <path 
+                    :d="trajectoryPath(selectedStreamLineup.originCoords, selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000', selectedStreamLineup.curveOffset || 0)"
+                    fill="none"
+                    :stroke="selectedStreamLineup.grenadeType === 'smoke' ? '#94a3b8' : selectedStreamLineup.grenadeType === 'flash' ? '#eab308' : selectedStreamLineup.grenadeType === 'molotov' ? '#ef4444' : '#22c55e'"
+                    stroke-width="3.5"
+                    stroke-dasharray="6 4"
+                    stroke-linecap="round"
+                  />
+
+                  <!-- PLAYER ORIGIN PIN -->
+                  <circle 
+                    :cx="pctToSvg(selectedStreamLineup.originCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(selectedStreamLineup.originCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').y" 
+                    r="14" 
+                    fill="#38bdf8" 
+                    fill-opacity="0.3" 
+                    stroke="#38bdf8" 
+                    stroke-width="2" 
+                  />
+                  <circle 
+                    :cx="pctToSvg(selectedStreamLineup.originCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(selectedStreamLineup.originCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').y" 
+                    r="6" 
+                    fill="#38bdf8" 
+                    stroke="#ffffff" 
+                    stroke-width="2" 
+                  />
+
+                  <!-- GRENADE LANDING PIN -->
+                  <circle 
+                    :cx="pctToSvg(selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').y" 
+                    r="22" 
+                    fill="#ef4444" 
+                    fill-opacity="0.25" 
+                    stroke="#ef4444" 
+                    stroke-width="2" 
+                    class="animate-pulse"
+                  />
+                  <circle 
+                    :cx="pctToSvg(selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').y" 
+                    r="7" 
+                    fill="#ef4444" 
+                    stroke="#ffffff" 
+                    stroke-width="2" 
+                  />
+                </svg>
+
+                <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-2.5 flex items-end justify-between pointer-events-none">
+                  <div class="flex flex-col gap-0.5">
+                    <span class="text-[10px] font-bold text-emerald-300 bg-slate-950/80 px-2 py-0.5 rounded-lg backdrop-blur-md flex items-center gap-1">
+                      <Sparkles class="w-3 h-3 text-emerald-400" />
+                      <span>Target Landing: {{ selectedStreamLineup.endLocation }} ({{ selectedStreamLineup.landingCoords.x }}%, {{ selectedStreamLineup.landingCoords.y }}%)</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4. AIM / CROSSHAIR SCREENSHOT (DEFAULT) -->
+              <div 
+                v-else
+                class="w-full h-full cursor-zoom-in relative"
+                @click="openStreamLightbox(selectedStreamLineup.aimScreenshot || selectedStreamLineup.imageUrl)"
+              >
+                <img 
+                  v-if="selectedStreamLineup.aimScreenshot || selectedStreamLineup.imageUrl" 
+                  :src="selectedStreamLineup.aimScreenshot || selectedStreamLineup.imageUrl" 
+                  :alt="selectedStreamLineup.title"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full flex flex-col items-center justify-center p-4 text-center text-slate-500">
+                  <Crosshair class="w-8 h-8 mb-2 opacity-50" />
+                  <span class="text-xs font-bold">No crosshair screenshot uploaded</span>
+                  <span class="text-[10px] text-slate-600">Throw type: {{ selectedStreamLineup.throwType }}</span>
+                </div>
+
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-2.5 pointer-events-none">
+                  <span class="text-[10px] font-bold text-amber-300 bg-slate-950/80 px-2 py-0.5 rounded-lg backdrop-blur-md flex items-center gap-1">
+                    <Crosshair class="w-3 h-3 text-amber-400" />
+                    <span>Crosshair Aim Spot</span>
+                  </span>
+                  <span class="text-[9px] text-slate-300 bg-slate-950/80 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <Maximize2 class="w-2.5 h-2.5" /> Tap to Zoom
+                  </span>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- LANDING LOCATION & DETAILS CARD -->
+            <div class="p-3 bg-slate-950/70 border border-slate-800 rounded-2xl flex flex-col gap-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-black uppercase text-slate-400 tracking-wider">Tactical Target</span>
+                <span v-if="selectedStreamLineup.site" class="px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded text-[10px] font-bold">
+                  {{ selectedStreamLineup.site }} Site
+                </span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-slate-300">From: <strong class="text-white">{{ selectedStreamLineup.startLocation }}</strong></span>
+                <span class="text-slate-300">Landing: <strong class="text-emerald-400">{{ selectedStreamLineup.endLocation }}</strong></span>
+              </div>
+              <div class="flex items-center justify-between text-[11px] pt-1 border-t border-slate-900 text-slate-400">
+                <span>Technique: <strong class="text-amber-400 uppercase font-mono">{{ selectedStreamLineup.throwType.replace('_', ' ') }}</strong></span>
+                <span>Tickrate: <strong class="text-slate-300 font-mono">{{ selectedStreamLineup.tickrate }}</strong></span>
+              </div>
+            </div>
+
+            <!-- STEP-BY-STEP INSTRUCTIONS -->
+            <div v-if="selectedStreamLineup.instructions && selectedStreamLineup.instructions.length" class="flex flex-col gap-1.5">
+              <span class="text-[10px] font-black uppercase text-slate-400 tracking-wider">Throw Instructions</span>
+              <div class="flex flex-col gap-1.5">
+                <div 
+                  v-for="(step, idx) in selectedStreamLineup.instructions" 
+                  :key="idx"
+                  class="flex items-start gap-2 p-2 bg-slate-950/60 border border-slate-800/80 rounded-xl text-xs text-slate-200"
+                >
+                  <span class="flex items-center justify-center w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 font-mono font-bold text-[10px] shrink-0 mt-0.5">
+                    {{ idx + 1 }}
+                  </span>
+                  <span class="leading-tight text-[11px]">{{ step }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- TELEPORT CONSOLE COMMAND BOX -->
+            <div v-if="selectedStreamLineup.consoleCommand" class="p-2.5 bg-black/80 border border-amber-500/30 rounded-xl flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                <Terminal class="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span class="font-mono text-[10px] text-emerald-400 truncate">{{ selectedStreamLineup.consoleCommand }}</span>
+              </div>
+              <button 
+                @click="copyTeleportCommand(selectedStreamLineup)"
+                class="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10px] rounded-lg transition-colors cursor-pointer shrink-0"
+              >
+                <Check v-if="copiedCommandId === selectedStreamLineup.id" class="w-3 h-3 stroke-[3]" />
+                <span v-else>COPY</span>
+              </button>
+            </div>
+
+          </div>
+
+          <!-- MODAL ACTIONS BAR (BOTTOM) -->
+          <div class="p-3 border-t border-slate-800 bg-slate-950/90 flex items-center gap-2">
+            <button
+              @click="handleSelectLineup(selectedStreamLineup)"
+              class="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow"
+            >
+              <Monitor class="w-4 h-4" />
+              <span>Show on PC</span>
+            </button>
+
+            <button
+              @click="handleBroadcastLineupToSquad(selectedStreamLineup)"
+              :class="[
+                'flex-1 py-2.5 rounded-xl font-black text-xs uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer border shadow',
+                broadcastSuccessId === selectedStreamLineup.id 
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400' 
+                  : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
+              ]"
+            >
+              <Check v-if="broadcastSuccessId === selectedStreamLineup.id" class="w-4 h-4 stroke-[3]" />
+              <Send v-else class="w-4 h-4" />
+              <span>{{ broadcastSuccessId === selectedStreamLineup.id ? 'Broadcasted!' : 'Push to Squad' }}</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </Transition>
+
+    <!-- STREAM FULLSCREEN LIGHTBOX ZOOM -->
+    <div 
+      v-if="isStreamLightboxOpen && streamLightboxUrl" 
+      class="fixed inset-0 z-[100000] bg-black/95 flex items-center justify-center p-2 cursor-zoom-out"
+      @click="isStreamLightboxOpen = false"
+    >
+      <div class="relative max-w-full max-h-[92vh]">
+        <img :src="streamLightboxUrl" class="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain" />
+        <button 
+          @click="isStreamLightboxOpen = false"
+          class="absolute top-2 right-2 p-2 bg-slate-900/90 text-white rounded-full hover:bg-slate-800 cursor-pointer shadow-lg"
+        >
+          <X class="w-4 h-4" />
+        </button>
+      </div>
+    </div>
 
     <!-- SQUAD ROOM CREATION / JOIN MODAL -->
     <Transition name="fade">

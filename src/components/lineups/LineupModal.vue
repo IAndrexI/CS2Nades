@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useLineupStore } from '../../stores/lineupStore'
+import { useMapStore } from '../../stores/mapStore'
 import NadeIcon from '../common/NadeIcon.vue'
+import VectorMapBlueprint from '../map/VectorMapBlueprint.vue'
+import { trajectoryPath, pctToSvg } from '../../utils/radarCoords'
 import { 
   X, 
   Heart, 
@@ -19,15 +22,21 @@ import {
   MapPin,
   Sparkles,
   Eye,
-  Maximize2
+  Maximize2,
+  Layers
 } from 'lucide-vue-next'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
 
 const lineupStore = useLineupStore()
+const mapStore = useMapStore()
 const lineup = computed(() => lineupStore.activeLineup)
+const targetMap = computed(() => {
+  if (!lineup.value) return mapStore.currentMap
+  return mapStore.availableMaps.find(m => m.id === lineup.value?.mapId) || mapStore.currentMap
+})
 
 const copiedCommand = ref(false)
-const activeMediaTab = ref<'aim' | 'standing' | 'landing' | 'video'>('aim')
+const activeMediaTab = ref<'aim' | 'standing' | 'landing' | 'radar' | 'video'>('aim')
 const isLightboxOpen = ref(false)
 const lightboxImageUrl = ref<string | null>(null)
 
@@ -235,6 +244,18 @@ onUnmounted(() => {
                 <span>Landing Result</span>
               </button>
 
+              <!-- RADAR & LANDING SPOT TAB -->
+              <button 
+                @click="activeMediaTab = 'radar'"
+                :class="[
+                  'px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shrink-0',
+                  activeMediaTab === 'radar' ? 'bg-amber-500 text-slate-950 shadow font-black' : 'text-slate-400 hover:text-slate-200'
+                ]"
+              >
+                <Layers class="w-3.5 h-3.5" />
+                <span>Radar & Landing</span>
+              </button>
+
               <!-- VIDEO PLAYBACK TAB -->
               <button 
                 v-if="lineup.videoUrl"
@@ -260,6 +281,88 @@ onUnmounted(() => {
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                 allowfullscreen
               ></iframe>
+
+              <!-- RADAR & LANDING SPOT VIEW -->
+              <div 
+                v-else-if="activeMediaTab === 'radar'"
+                class="w-full h-full relative bg-slate-950 flex items-center justify-center overflow-hidden"
+              >
+                <svg 
+                  class="w-full h-full object-contain"
+                  :viewBox="targetMap?.viewBox || '0 0 1000 1000'"
+                >
+                  <VectorMapBlueprint :mapInfo="targetMap || mapStore.currentMap" />
+                  
+                  <!-- TRAJECTORY ARC -->
+                  <path 
+                    :d="trajectoryPath(lineup.originCoords, lineup.landingCoords, targetMap?.viewBox || '0 0 1000 1000', lineup.curveOffset || 0)"
+                    fill="none"
+                    stroke="#000000"
+                    stroke-width="7"
+                    stroke-linecap="round"
+                    opacity="0.6"
+                  />
+                  <path 
+                    :d="trajectoryPath(lineup.originCoords, lineup.landingCoords, targetMap?.viewBox || '0 0 1000 1000', lineup.curveOffset || 0)"
+                    fill="none"
+                    :stroke="lineup.grenadeType === 'smoke' ? '#94a3b8' : lineup.grenadeType === 'flash' ? '#eab308' : lineup.grenadeType === 'molotov' ? '#ef4444' : '#22c55e'"
+                    stroke-width="3.5"
+                    stroke-dasharray="6 4"
+                    stroke-linecap="round"
+                  />
+
+                  <!-- PLAYER ORIGIN PIN -->
+                  <circle 
+                    :cx="pctToSvg(lineup.originCoords, targetMap?.viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(lineup.originCoords, targetMap?.viewBox || '0 0 1000 1000').y" 
+                    r="14" 
+                    fill="#38bdf8" 
+                    fill-opacity="0.3" 
+                    stroke="#38bdf8" 
+                    stroke-width="2" 
+                  />
+                  <circle 
+                    :cx="pctToSvg(lineup.originCoords, targetMap?.viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(lineup.originCoords, targetMap?.viewBox || '0 0 1000 1000').y" 
+                    r="6" 
+                    fill="#38bdf8" 
+                    stroke="#ffffff" 
+                    stroke-width="2" 
+                  />
+
+                  <!-- GRENADE LANDING PIN -->
+                  <circle 
+                    :cx="pctToSvg(lineup.landingCoords, targetMap?.viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(lineup.landingCoords, targetMap?.viewBox || '0 0 1000 1000').y" 
+                    r="24" 
+                    fill="#ef4444" 
+                    fill-opacity="0.25" 
+                    stroke="#ef4444" 
+                    stroke-width="2" 
+                    class="animate-pulse"
+                  />
+                  <circle 
+                    :cx="pctToSvg(lineup.landingCoords, targetMap?.viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(lineup.landingCoords, targetMap?.viewBox || '0 0 1000 1000').y" 
+                    r="8" 
+                    fill="#ef4444" 
+                    stroke="#ffffff" 
+                    stroke-width="2" 
+                  />
+                </svg>
+
+                <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3.5 flex items-end justify-between pointer-events-none">
+                  <div class="flex flex-col gap-0.5">
+                    <span class="text-[11px] font-bold text-emerald-300 bg-slate-950/80 px-2.5 py-1 rounded-lg backdrop-blur-md flex items-center gap-1.5">
+                      <Sparkles class="w-3 h-3 text-emerald-400" />
+                      <span>Landing Location: {{ lineup.endLocation }} ({{ lineup.landingCoords.x }}%, {{ lineup.landingCoords.y }}%)</span>
+                    </span>
+                    <span class="text-[10px] text-slate-400 bg-slate-950/80 px-2 py-0.5 rounded backdrop-blur-md">
+                      Origin: {{ lineup.startLocation }} ({{ lineup.originCoords.x }}%, {{ lineup.originCoords.y }}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
 
               <!-- STANDING SCREENSHOT -->
               <div 
