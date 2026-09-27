@@ -16,7 +16,6 @@ import DirectMessagesModal from '../user/DirectMessagesModal.vue'
 import PeopleAndGroupsModal from '../user/PeopleAndGroupsModal.vue'
 import PracticeServerModal from '../common/PracticeServerModal.vue'
 import RemotePairModal from '../common/RemotePairModal.vue'
-import InGameOverlayModal from '../common/InGameOverlayModal.vue'
 import { useCompanionStore } from '../../stores/companionStore'
 
 import { 
@@ -67,7 +66,6 @@ const isDirectMessagesOpen = ref(false)
 const isPeopleGroupsOpen = ref(false)
 const isPracticeModalOpen = ref(false)
 const isRemoteModalOpen = ref(false)
-const isOverlayModalOpen = ref(false)
 const directMessageTargetId = ref<string | undefined>(undefined)
 
 function openDirectMessageWith(userId: string) {
@@ -367,14 +365,15 @@ onUnmounted(() => {
           ></span>
         </button>
 
-        <!-- UNIFIED IN-GAME OVERLAY & TOOLS BUTTON -->
+        <!-- PRACTICE SERVER & CFG STUDIO BUTTON -->
         <button
-          @click="isOverlayModalOpen = true"
+          @click="isPracticeModalOpen = true"
           class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-amber-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
-          title="In-Game CS2 Overlay HUD, Practice CFG Studio & Downloads"
+          title="Host & Configure Practice Server / Generate practice.cfg"
         >
-          <Monitor class="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-          <span>In-Game Overlay</span>
+          <Gamepad2 class="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
+          <span class="hidden lg:inline">Practice Server</span>
+          <span class="hidden sm:inline lg:hidden">Practice</span>
         </button>
 
         <!-- PEOPLE & SQUAD GROUPS (ICON ONLY WITH UNREAD NOTIFICATION BADGE) -->
@@ -634,11 +633,11 @@ onUnmounted(() => {
       </button>
 
       <button
-        @click="isOverlayModalOpen = true; isMobileMenuOpen = false"
+        @click="isPracticeModalOpen = true; isMobileMenuOpen = false"
         class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-amber-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
       >
-        <Monitor class="w-4 h-4" />
-        <span>In-Game Overlay & Practice Hub</span>
+        <Gamepad2 class="w-4 h-4" />
+        <span>Practice Server & CFG Studio</span>
       </button>
 
       <a
@@ -697,11 +696,6 @@ onUnmounted(() => {
     <RemotePairModal
       :is-open="isRemoteModalOpen"
       @close="isRemoteModalOpen = false"
-    />
-    <InGameOverlayModal
-      :is-open="isOverlayModalOpen"
-      @close="isOverlayModalOpen = false"
-      @open-practice="isPracticeModalOpen = true"
     />
     <LineupConflictModal />
   </header>

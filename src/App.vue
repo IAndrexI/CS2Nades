@@ -15,9 +15,7 @@ const themeStore = useThemeStore()
 const companionStore = useCompanionStore()
 
 const isStandaloneView = computed(() => {
-  return route.path.startsWith('/overlay') || 
-         route.path.startsWith('/in-game-overlay') || 
-         route.path.startsWith('/remote') || 
+  return route.path.startsWith('/remote') || 
          route.path.startsWith('/companion')
 })
 
@@ -104,15 +102,6 @@ watch(() => [authStore.isAuthenticated, isStandaloneView.value], ([isAuth, isSta
           <span class="font-mono text-xs text-slate-300 font-bold">Protutech | CS2 nade</span>
         </div>
         <div class="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs font-semibold">
-          <router-link
-            to="/overlay"
-            class="text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1.5 font-bold transition-colors"
-          >
-            <span>🖥️ In-Game Overlay</span>
-          </router-link>
-
-          <span class="text-slate-700 hidden sm:inline">•</span>
-
           <a 
             href="https://github.com/IAndrexI/CS2Nades" 
             target="_blank" 
