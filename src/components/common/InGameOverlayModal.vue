@@ -105,26 +105,22 @@ async function copyBatScript() {
   const script = `@echo off
 title CS2 Nades In-Game Overlay
 color 0E
-echo Detecting default browser (Vivaldi, Opera, Edge, Chrome, Brave, Firefox)...
+echo Launching In-Game HUD...
 set "TARGET_URL=${serverUrl}/overlay"
-set "APP_ARGS=--app="%TARGET_URL%" --window-size=480,720 --window-position=50,50"
+set "APP_ARGS=--new-window --app="%TARGET_URL%" --window-size=480,720 --window-position=50,50"
 
-:: 1. Registry Default Browser
-for /f "usebackq delims=" %%I in (\`powershell -NoProfile -Command "$p=(Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice' -ErrorAction SilentlyContinue).ProgId; if(!$p){$p=(Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice' -ErrorAction SilentlyContinue).ProgId}; if($p){$c=(Get-ItemProperty -Path ('Registry::HKEY_CLASSES_ROOT\\' + $p + '\\shell\\open\\command') -ErrorAction SilentlyContinue).'(default)'; if($c -match '\"([^\"]+)\"'){ $matches[1] } else { ($c -split ' ')[0] } }"\`) do (
-    if exist "%%~I" (
-        start "" "%%~I" %APP_ARGS%
-        exit
-    )
-)
-
-:: 2. Vivaldi
+:: 1. Vivaldi
 if exist "%LocalAppData%\\Vivaldi\\Application\\vivaldi.exe" ( start "" "%LocalAppData%\\Vivaldi\\Application\\vivaldi.exe" %APP_ARGS% & exit )
 if exist "%ProgramFiles%\\Vivaldi\\Application\\vivaldi.exe" ( start "" "%ProgramFiles%\\Vivaldi\\Application\\vivaldi.exe" %APP_ARGS% & exit )
+if exist "%ProgramFiles(x86)%\\Vivaldi\\Application\\vivaldi.exe" ( start "" "%ProgramFiles(x86)%\\Vivaldi\\Application\\vivaldi.exe" %APP_ARGS% & exit )
 
-:: 3. Opera GX / Opera
+:: 2. Opera GX
 if exist "%LocalAppData%\\Programs\\Opera GX\\launcher.exe" ( start "" "%LocalAppData%\\Programs\\Opera GX\\launcher.exe" %APP_ARGS% & exit )
+
+:: 3. Opera Stable
 if exist "%LocalAppData%\\Programs\\Opera\\launcher.exe" ( start "" "%LocalAppData%\\Programs\\Opera\\launcher.exe" %APP_ARGS% & exit )
 if exist "%ProgramFiles%\\Opera\\launcher.exe" ( start "" "%ProgramFiles%\\Opera\\launcher.exe" %APP_ARGS% & exit )
+if exist "%ProgramFiles(x86)%\\Opera\\launcher.exe" ( start "" "%ProgramFiles(x86)%\\Opera\\launcher.exe" %APP_ARGS% & exit )
 
 :: 4. Brave
 if exist "%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" ( start "" "%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" %APP_ARGS% & exit )
@@ -132,6 +128,7 @@ if exist "%LocalAppData%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" 
 
 :: 5. Google Chrome
 if exist "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" ( start "" "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" %APP_ARGS% & exit )
+if exist "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" ( start "" "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" %APP_ARGS% & exit )
 if exist "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe" ( start "" "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe" %APP_ARGS% & exit )
 
 :: 6. Microsoft Edge
@@ -140,6 +137,7 @@ if exist "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe" ( start "" "
 
 :: 7. Firefox / Universal fallback
 if exist "%ProgramFiles%\\Mozilla Firefox\\firefox.exe" ( start "" "%ProgramFiles%\\Mozilla Firefox\\firefox.exe" -new-window "%TARGET_URL%" & exit )
+if exist "%ProgramFiles(x86)%\\Mozilla Firefox\\firefox.exe" ( start "" "%ProgramFiles(x86)%\\Mozilla Firefox\\firefox.exe" -new-window "%TARGET_URL%" & exit )
 start "" "%TARGET_URL%"
 exit`
 
