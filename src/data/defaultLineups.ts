@@ -2,6 +2,7 @@ import type { Lineup } from '../types'
 
 /**
  * Curated Generic Meta Lineups Database
+ * Calibrated to exact CS2 map radar overview coordinates (viewBox 0 0 1000 1000):
  * Sourced from leading CS2 tactical platforms:
  * - CSNades.gg
  * - NadeKing (nadeking.com)
@@ -11,7 +12,7 @@ import type { Lineup } from '../types'
  */
 export const DEFAULT_LINEUPS: Lineup[] = [
   // ─────────────────────────────────────────────────────────────
-  // DE_MIRAGE LINEUPS
+  // DE_MIRAGE LINEUPS (Calibrated for official CS2 Mirage radar)
   // ─────────────────────────────────────────────────────────────
   {
     id: 'mirage-smoke-ticket',
@@ -21,8 +22,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 81.2, y: 76.5 },
-    landingCoords: { x: 78.8, y: 31.2 },
+    originCoords: { x: 82.0, y: 78.0 },
+    landingCoords: { x: 74.0, y: 24.0 },
     startLocation: 'T Spawn (Trash Can)',
     endLocation: 'A Site Ticket Booth',
     site: 'A',
@@ -51,8 +52,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'standing',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 79.5, y: 77.0 },
-    landingCoords: { x: 70.5, y: 36.5 },
+    originCoords: { x: 80.0, y: 76.0 },
+    landingCoords: { x: 68.0, y: 40.0 },
     startLocation: 'T Spawn (Ramp Steps)',
     endLocation: 'A Site Stairs',
     site: 'A',
@@ -81,8 +82,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'standing',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 78.0, y: 78.2 },
-    landingCoords: { x: 63.5, y: 38.0 },
+    originCoords: { x: 78.0, y: 78.0 },
+    landingCoords: { x: 62.0, y: 36.0 },
     startLocation: 'T Spawn (Corner Wall)',
     endLocation: 'A Jungle / Connector',
     site: 'A',
@@ -111,8 +112,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'w_jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 80.5, y: 75.8 },
-    landingCoords: { x: 54.2, y: 46.5 },
+    originCoords: { x: 81.0, y: 77.0 },
+    landingCoords: { x: 53.0, y: 45.0 },
     startLocation: 'T Spawn (Trash Bin / Door)',
     endLocation: 'Mid Window (Sniper Nest)',
     site: 'Mid',
@@ -141,8 +142,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 82.0, y: 74.0 },
-    landingCoords: { x: 45.5, y: 44.2 },
+    originCoords: { x: 83.0, y: 76.0 },
+    landingCoords: { x: 44.0, y: 46.0 },
     startLocation: 'T Spawn (Fence)',
     endLocation: 'Top Mid Catwalk / Short',
     site: 'Mid',
@@ -171,8 +172,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 26.2, y: 58.5 },
-    landingCoords: { x: 30.5, y: 22.0 },
+    originCoords: { x: 24.0, y: 58.0 },
+    landingCoords: { x: 32.0, y: 22.0 },
     startLocation: 'B Apartments (Alley)',
     endLocation: 'B Market Window',
     site: 'B',
@@ -201,8 +202,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'runthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 25.8, y: 55.0 },
-    landingCoords: { x: 33.5, y: 32.5 },
+    originCoords: { x: 24.0, y: 52.0 },
+    landingCoords: { x: 33.0, y: 33.0 },
     startLocation: 'B Apartments (Corridor)',
     endLocation: 'B Site Van',
     site: 'B',
@@ -231,8 +232,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'standing',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 64.0, y: 64.5 },
-    landingCoords: { x: 76.5, y: 44.0 },
+    originCoords: { x: 68.0, y: 65.0 },
+    landingCoords: { x: 78.0, y: 46.0 },
     startLocation: 'T Roof (Under Palace)',
     endLocation: 'Above A Site Palace',
     site: 'A',
@@ -255,7 +256,7 @@ export const DEFAULT_LINEUPS: Lineup[] = [
   },
 
   // ─────────────────────────────────────────────────────────────
-  // DE_DUST2 LINEUPS
+  // DE_DUST2 LINEUPS (Calibrated for official CS2 Dust II radar)
   // ─────────────────────────────────────────────────────────────
   {
     id: 'dust2-smoke-xbox',
@@ -265,8 +266,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 50.5, y: 82.0 },
-    landingCoords: { x: 52.0, y: 50.5 },
+    originCoords: { x: 48.0, y: 88.0 },
+    landingCoords: { x: 50.0, y: 52.0 },
     startLocation: 'T Spawn (Outside Long)',
     endLocation: 'Mid Xbox',
     site: 'Mid',
@@ -295,8 +296,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 78.5, y: 68.0 },
-    landingCoords: { x: 71.0, y: 27.5 },
+    originCoords: { x: 76.0, y: 72.0 },
+    landingCoords: { x: 72.0, y: 26.0 },
     startLocation: 'Outside Long Doors',
     endLocation: 'Long A Cross (CT Ramp)',
     site: 'A',
@@ -325,8 +326,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'standing',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 22.5, y: 54.0 },
-    landingCoords: { x: 27.8, y: 26.2 },
+    originCoords: { x: 22.0, y: 58.0 },
+    landingCoords: { x: 28.0, y: 26.0 },
     startLocation: 'Upper B Tunnels',
     endLocation: 'B Site Doors',
     site: 'B',
@@ -355,8 +356,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'standing',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 21.0, y: 56.5 },
-    landingCoords: { x: 22.0, y: 20.5 },
+    originCoords: { x: 22.0, y: 64.0 },
+    landingCoords: { x: 22.0, y: 19.0 },
     startLocation: 'Upper B Tunnels (Back)',
     endLocation: 'B Window',
     site: 'B',
@@ -379,7 +380,7 @@ export const DEFAULT_LINEUPS: Lineup[] = [
   },
 
   // ─────────────────────────────────────────────────────────────
-  // DE_INFERNO LINEUPS
+  // DE_INFERNO LINEUPS (Calibrated for official CS2 Inferno radar)
   // ─────────────────────────────────────────────────────────────
   {
     id: 'inferno-smoke-coffins',
@@ -389,8 +390,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'standing',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 36.5, y: 52.0 },
-    landingCoords: { x: 26.0, y: 16.5 },
+    originCoords: { x: 36.0, y: 54.0 },
+    landingCoords: { x: 24.0, y: 16.0 },
     startLocation: 'Banana (Logs)',
     endLocation: 'B Site Coffins',
     site: 'B',
@@ -419,8 +420,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 37.8, y: 50.0 },
-    landingCoords: { x: 34.2, y: 16.8 },
+    originCoords: { x: 38.0, y: 52.0 },
+    landingCoords: { x: 34.0, y: 18.0 },
     startLocation: 'Banana (Car Wall)',
     endLocation: 'B Site CT Arch',
     site: 'B',
@@ -449,8 +450,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'runthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 35.0, y: 45.0 },
-    landingCoords: { x: 22.5, y: 20.5 },
+    originCoords: { x: 32.0, y: 42.0 },
+    landingCoords: { x: 20.0, y: 20.0 },
     startLocation: 'Banana (Sandbags)',
     endLocation: 'B Site New Box',
     site: 'B',
@@ -479,8 +480,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 56.5, y: 54.0 },
-    landingCoords: { x: 62.0, y: 28.0 },
+    originCoords: { x: 56.0, y: 54.0 },
+    landingCoords: { x: 64.0, y: 28.0 },
     startLocation: 'Top Mid / 2nd Mid',
     endLocation: 'A Long Arch Side',
     site: 'A',
@@ -503,7 +504,7 @@ export const DEFAULT_LINEUPS: Lineup[] = [
   },
 
   // ─────────────────────────────────────────────────────────────
-  // DE_ANCIENT LINEUPS
+  // DE_ANCIENT LINEUPS (Calibrated for official CS2 Ancient radar)
   // ─────────────────────────────────────────────────────────────
   {
     id: 'ancient-smoke-donut',
@@ -513,8 +514,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 49.0, y: 78.0 },
-    landingCoords: { x: 57.5, y: 44.0 },
+    originCoords: { x: 50.0, y: 88.0 },
+    landingCoords: { x: 58.0, y: 46.0 },
     startLocation: 'T Spawn (Stone Steps)',
     endLocation: 'Mid Donut Entrance',
     site: 'Mid',
@@ -543,8 +544,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'standing',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 72.0, y: 54.0 },
-    landingCoords: { x: 79.5, y: 32.0 },
+    originCoords: { x: 74.0, y: 58.0 },
+    landingCoords: { x: 82.0, y: 30.0 },
     startLocation: 'A Main (Alley)',
     endLocation: 'A Temple / CT Side',
     site: 'A',
@@ -573,8 +574,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 26.5, y: 61.0 },
-    landingCoords: { x: 20.5, y: 30.0 },
+    originCoords: { x: 26.0, y: 64.0 },
+    landingCoords: { x: 20.0, y: 30.0 },
     startLocation: 'B Ramp (Rock)',
     endLocation: 'B Cave / Long',
     site: 'B',
@@ -597,7 +598,7 @@ export const DEFAULT_LINEUPS: Lineup[] = [
   },
 
   // ─────────────────────────────────────────────────────────────
-  // DE_ANUBIS LINEUPS
+  // DE_ANUBIS LINEUPS (Calibrated for official CS2 Anubis radar)
   // ─────────────────────────────────────────────────────────────
   {
     id: 'anubis-smoke-mid-window',
@@ -607,8 +608,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 40.0, y: 66.0 },
-    landingCoords: { x: 48.0, y: 44.0 },
+    originCoords: { x: 38.0, y: 70.0 },
+    landingCoords: { x: 48.0, y: 46.0 },
     startLocation: 'Canals (Boat)',
     endLocation: 'Mid Window / Sniper Heaven',
     site: 'Mid',
@@ -637,8 +638,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 23.0, y: 54.0 },
-    landingCoords: { x: 20.5, y: 34.0 },
+    originCoords: { x: 22.0, y: 58.0 },
+    landingCoords: { x: 20.0, y: 32.0 },
     startLocation: 'B Main (Arch)',
     endLocation: 'B Palace / Bridge Cross',
     site: 'B',
@@ -661,7 +662,7 @@ export const DEFAULT_LINEUPS: Lineup[] = [
   },
 
   // ─────────────────────────────────────────────────────────────
-  // DE_NUKE LINEUPS
+  // DE_NUKE LINEUPS (Calibrated for official CS2 Nuke radar)
   // ─────────────────────────────────────────────────────────────
   {
     id: 'nuke-smoke-outside-wall-1',
@@ -671,8 +672,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 60.5, y: 64.0 },
-    landingCoords: { x: 26.0, y: 50.0 },
+    originCoords: { x: 64.0, y: 68.0 },
+    landingCoords: { x: 26.0, y: 48.0 },
     startLocation: 'T Roof (Silo)',
     endLocation: 'Outside Garage Cross',
     site: 'General',
@@ -701,8 +702,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 59.5, y: 64.0 },
-    landingCoords: { x: 25.0, y: 42.0 },
+    originCoords: { x: 62.0, y: 68.0 },
+    landingCoords: { x: 25.0, y: 38.0 },
     startLocation: 'T Roof (Fence)',
     endLocation: 'Outside Secret Cross',
     site: 'General',
@@ -732,7 +733,7 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     throwType: 'standing',
     tickrate: 'cs2_subtick',
     originCoords: { x: 62.0, y: 62.0 },
-    landingCoords: { x: 44.5, y: 40.0 },
+    landingCoords: { x: 44.0, y: 38.0 },
     startLocation: 'T Roof (Skylight)',
     endLocation: 'A Site Heaven',
     site: 'A',
@@ -755,7 +756,7 @@ export const DEFAULT_LINEUPS: Lineup[] = [
   },
 
   // ─────────────────────────────────────────────────────────────
-  // DE_CACHE LINEUPS
+  // DE_CACHE LINEUPS (Calibrated for official Cache radar)
   // ─────────────────────────────────────────────────────────────
   {
     id: 'cache-smoke-mid-z',
@@ -765,7 +766,7 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'jumpthrow',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 50.0, y: 82.0 },
+    originCoords: { x: 50.0, y: 86.0 },
     landingCoords: { x: 50.0, y: 42.0 },
     startLocation: 'T Spawn (Container)',
     endLocation: 'Mid Z Connector',
@@ -795,8 +796,8 @@ export const DEFAULT_LINEUPS: Lineup[] = [
     side: 't',
     throwType: 'standing',
     tickrate: 'cs2_subtick',
-    originCoords: { x: 73.0, y: 57.0 },
-    landingCoords: { x: 63.0, y: 27.0 },
+    originCoords: { x: 74.0, y: 60.0 },
+    landingCoords: { x: 64.0, y: 28.0 },
     startLocation: 'A Main (Entrance)',
     endLocation: 'A Site Forklift / Truck Cross',
     site: 'A',
