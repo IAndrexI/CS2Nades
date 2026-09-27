@@ -1358,182 +1358,21 @@ app.delete('/api/lineups/:id', requireAuth, (req, res) => {
   res.json({ success: true })
 })
 
-// COMMUNITY PRESETS API (Pulls curated lineups from CSNades, NadeKing, CS2Lineups, Pracc, Scope.gg)
+// CLEAR ALL LINEUPS API
+app.post('/api/lineups/clear', (req, res) => {
+  db = loadDB()
+  db.lineups = []
+  saveDB(db)
+  res.json({ success: true, message: 'All lineups cleared' })
+})
+
+// COMMUNITY PRESETS API
 app.get('/api/lineups/presets', (req, res) => {
-  const { mapId, source } = req.query
-  let presets = [
-    {
-      id: 'mirage-smoke-ticket',
-      title: 'A Site Ticket Booth / CT Smoke',
-      mapId: 'mirage',
-      grenadeType: 'smoke',
-      side: 't',
-      throwType: 'jumpthrow',
-      tickrate: 'cs2_subtick',
-      originCoords: { x: 82.0, y: 78.0 },
-      landingCoords: { x: 74.0, y: 24.0 },
-      startLocation: 'T Spawn (Trash Can)',
-      endLocation: 'A Site Ticket Booth',
-      site: 'A',
-      tags: ['A Execute', 'CT Cross', 'Ticket', 'Essential'],
-      imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80',
-      description: 'Deep CT smoke that completely blankets Ticket Booth and CT spawn sniper cross, denying AWPers sight into A site.',
-      instructions: [
-        'Stand against the trash can in T Spawn.',
-        'Aim at the top right apex of the wooden roof beam.',
-        'Perform a standard Jumpthrow.'
-      ],
-      consoleCommand: 'setpos 1285 -342 -160; setang -34.8 -124.6 0',
-      difficulty: 'easy',
-      sourceWebsite: 'CSNades.gg',
-      sourceUrl: 'https://csnades.gg/mirage/smokes/t-spawn-to-ticket-booth',
-      inLibrary: true,
-      isTeamShared: true
-    },
-    {
-      id: 'mirage-smoke-stairs',
-      title: 'A Site Stairs Smoke',
-      mapId: 'mirage',
-      grenadeType: 'smoke',
-      side: 't',
-      throwType: 'standing',
-      tickrate: 'cs2_subtick',
-      originCoords: { x: 80.0, y: 76.0 },
-      landingCoords: { x: 68.0, y: 40.0 },
-      startLocation: 'T Spawn (Ramp Steps)',
-      endLocation: 'A Site Stairs',
-      site: 'A',
-      tags: ['A Execute', 'Stairs', 'Default A', 'Essential'],
-      imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=600&auto=format&fit=crop&q=80',
-      description: 'Essential A site execute smoke that covers stairs and prevents Connector defenders from shooting entering T players.',
-      instructions: [
-        'Crouch into the center of the wooden steps in front of T Spawn palace entrance.',
-        'Aim crosshair at the protruding wooden scaffold beam top center.',
-        'Stand up and left-click throw.'
-      ],
-      consoleCommand: 'setpos 1140 -280 -155; setang -42.2 -112.4 0',
-      difficulty: 'easy',
-      sourceWebsite: 'CS2Lineups',
-      sourceUrl: 'https://cs2lineups.com/mirage/smokes/a-stairs',
-      inLibrary: true,
-      isTeamShared: true
-    },
-    {
-      id: 'mirage-smoke-window',
-      title: 'Mid Window Smoke (Instant Subtick)',
-      mapId: 'mirage',
-      grenadeType: 'smoke',
-      side: 't',
-      throwType: 'w_jumpthrow',
-      tickrate: 'cs2_subtick',
-      originCoords: { x: 81.0, y: 77.0 },
-      landingCoords: { x: 53.0, y: 45.0 },
-      startLocation: 'T Spawn (Trash Bin / Door)',
-      endLocation: 'Mid Window (Sniper Nest)',
-      site: 'Mid',
-      tags: ['Mid Control', 'Window', 'Instant', 'Pro Meta'],
-      imageUrl: 'https://images.unsplash.com/photo-1579373903781-fd5c0c30c4cd?w=600&auto=format&fit=crop&q=80',
-      description: 'The golden standard CS2 subtick window smoke. Lands deep inside Sniper Nest without creating gaps or one-ways.',
-      instructions: [
-        'Walk into the corner of the trash bin and white door in T spawn.',
-        'Hold D (crouched), aim at the top right of the wooden frame antenna.',
-        'Release crouch, press W + Jumpthrow at the same time.'
-      ],
-      consoleCommand: 'setpos 1220 -290 -160; setang -28.4 -92.1 0',
-      difficulty: 'medium',
-      sourceWebsite: 'CSNades.gg',
-      sourceUrl: 'https://csnades.gg/mirage/smokes/t-spawn-to-mid-window',
-      inLibrary: true,
-      isTeamShared: true
-    },
-    {
-      id: 'dust2-smoke-xbox',
-      title: 'Mid Xbox Smoke',
-      mapId: 'dust2',
-      grenadeType: 'smoke',
-      side: 't',
-      throwType: 'jumpthrow',
-      tickrate: 'cs2_subtick',
-      originCoords: { x: 48.0, y: 88.0 },
-      landingCoords: { x: 50.0, y: 52.0 },
-      startLocation: 'T Spawn (Outside Long)',
-      endLocation: 'Mid Xbox',
-      site: 'Mid',
-      tags: ['Mid Control', 'Catwalk', 'Xbox', 'A Short Split', 'Essential'],
-      imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80',
-      description: 'Standard competitive Xbox smoke providing a safe bridge for Ts crossing Catwalk onto A Short.',
-      instructions: [
-        'Line up against the wall corner in T Spawn.',
-        'Aim at the white speck on the wooden roof antenna.',
-        'Jumpthrow.'
-      ],
-      consoleCommand: 'setpos 450 -1200 120; setang -32.5 90.0 0',
-      difficulty: 'easy',
-      sourceWebsite: 'CSNades.gg',
-      sourceUrl: 'https://csnades.gg/dust2/smokes/t-spawn-to-xbox',
-      inLibrary: true,
-      isTeamShared: true
-    },
-    {
-      id: 'inferno-smoke-coffins',
-      title: 'Banana to B Site Coffins Smoke',
-      mapId: 'inferno',
-      grenadeType: 'smoke',
-      side: 't',
-      throwType: 'standing',
-      tickrate: 'cs2_subtick',
-      originCoords: { x: 36.0, y: 54.0 },
-      landingCoords: { x: 24.0, y: 16.0 },
-      startLocation: 'Banana (Logs)',
-      endLocation: 'B Site Coffins',
-      site: 'B',
-      tags: ['B Execute', 'Coffins', 'Essential'],
-      imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80',
-      description: 'Crucial B site execute smoke that fully covers Coffins and prevents CT AWPers from holding Banana entry.',
-      instructions: [
-        'Wedge into the stack of wood logs at the bottom of Banana.',
-        'Aim at the top corner of the small stone tower.',
-        'Left-Click throw.'
-      ],
-      consoleCommand: 'setpos -250 820 160; setang -45.0 -12.0 0',
-      difficulty: 'easy',
-      sourceWebsite: 'CSNades.gg',
-      sourceUrl: 'https://csnades.gg/inferno/smokes/banana-to-coffins',
-      inLibrary: true,
-      isTeamShared: true
-    }
-  ]
-
-  if (mapId) presets = presets.filter(p => p.mapId === mapId)
-  if (source) presets = presets.filter(p => p.sourceWebsite === source)
-
-  res.json(presets)
+  res.json([])
 })
 
 app.post('/api/lineups/sync-presets', requireAuth, (req, res) => {
-  db = loadDB()
-  const { presets } = req.body
-  if (!Array.isArray(presets)) return res.status(400).json({ error: 'Presets array required' })
-
-  let added = 0
-  presets.forEach(p => {
-    const exists = db.lineups.some(l => l.id === p.id || l.title === p.title)
-    if (!exists) {
-      db.lineups.push({
-        ...p,
-        userId: req.user.id,
-        authorName: req.user.username || 'System Meta',
-        isTeamShared: true,
-        isVerified: true,
-        isCustom: false,
-        createdAt: new Date().toISOString().split('T')[0]
-      })
-      added++
-    }
-  })
-
-  saveDB(db)
-  res.json({ success: true, count: added, total: db.lineups.length })
+  res.json({ success: true, count: 0, total: 0 })
 })
 
 // ==========================================
