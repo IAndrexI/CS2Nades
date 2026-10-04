@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useMapStore } from '../../stores/mapStore'
+import { useCs2ServerStore } from '../../stores/cs2ServerStore'
 import { parseQuickLineupInput, type ParsedLineupDraft } from '../../utils/quickLineupParser'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup } from '../../types'
@@ -17,16 +18,20 @@ import {
   X,
   Crosshair,
   MapPin,
-  Clipboard
+  Clipboard,
+  Server,
+  RefreshCw
 } from 'lucide-vue-next'
 
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
+const cs2ServerStore = useCs2ServerStore()
 
 const inputText = ref('')
 const isFocused = ref(false)
 const lastAddedTitle = ref<string | null>(null)
 const successTimer = ref<any>(null)
+
 
 // Parse draft on the fly as user types
 const parsedDraft = computed<ParsedLineupDraft | null>(() => {
@@ -142,6 +147,19 @@ async function handlePasteClipboard() {
   } catch (e) {}
 }
 
+async function handleServerAutoCapture() {
+  const customTitle = inputText.value.trim() || undefined
+  const captured = await cs2ServerStore.autoCaptureLineup(customTitle)
+  if (captured) {
+    lastAddedTitle.value = captured.title
+    inputText.value = ''
+    if (successTimer.value) clearTimeout(successTimer.value)
+    successTimer.value = setTimeout(() => {
+      lastAddedTitle.value = null
+    }, 4000)
+  }
+}
+
 function handleOpenFullModal() {
   lineupStore.isAddModalOpen = true
 }
@@ -195,21 +213,37 @@ function handleOpenFullModal() {
         </div>
       </div>
 
-      <!-- 1-CLICK INSTANT ADD ACTION BUTTON -->
-      <button
-        @click="handleInstantAdd"
-        :disabled="!parsedDraft"
-        :class="[
-          'px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer shrink-0',
-          parsedDraft 
-            ? 'bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 hover:scale-[1.02] active:scale-95 shadow-amber-500/25 ring-2 ring-amber-400/50' 
-            : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/60'
-        ]"
-      >
-        <Plus class="w-4 h-4 stroke-[3]" />
-        <span>Push to Add</span>
-      </button>
+      <!-- BUTTONS GROUP -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <!-- 1-CLICK INSTANT ADD ACTION BUTTON -->
+        <button
+          @click="handleInstantAdd"
+          :disabled="!parsedDraft"
+          :class="[
+            'px-3.5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer',
+            parsedDraft 
+              ? 'bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 hover:scale-[1.02] active:scale-95 shadow-amber-500/25 ring-2 ring-amber-400/50' 
+              : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/60'
+          ]"
+        >
+          <Plus class="w-4 h-4 stroke-[3]" />
+          <span>Push to Add</span>
+        </button>
+
+        <!-- 1-CLICK CS2 SERVER AUTO-CAPTURE -->
+        <button
+          @click="handleServerAutoCapture"
+          :disabled="cs2ServerStore.isCapturing"
+          class="px-3.5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer bg-slate-950 hover:bg-slate-850 text-amber-400 border border-amber-500/50 hover:border-amber-400 hover:scale-[1.02] active:scale-95"
+          title="Auto-capture current position & angles from your private CS2 practice server"
+        >
+          <RefreshCw v-if="cs2ServerStore.isCapturing" class="w-3.5 h-3.5 animate-spin" />
+          <Server v-else class="w-3.5 h-3.5 text-amber-400" />
+          <span class="hidden sm:inline">Sync Server</span>
+        </button>
+      </div>
     </div>
+
 
     <!-- LIVE DETECTED TAGS / INTENT PREVIEW (WHEN TYPING) -->
     <div v-if="parsedDraft" class="flex items-center gap-1.5 flex-wrap p-2 bg-slate-950/80 border border-slate-800 rounded-xl text-[11px] animate-fade-in">

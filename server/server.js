@@ -1568,6 +1568,205 @@ app.delete('/api/admin/rooms/:code', requireAdmin, (req, res) => {
 // ==========================================
 // CS2 DEDICATED / PRACTICE SERVER INTEGRATION
 // ==========================================
+// CS2 DEDICATED / PRACTICE SERVER INTEGRATION
+// ==========================================
+app.post('/api/cs2/server-status', async (req, res) => {
+  const { host, port, password } = req.body
+  const serverHost = host || '127.0.0.1'
+  const serverPort = port || 27015
+
+  try {
+    const result = await executeRconCommand(serverHost, serverPort, password || '', 'status')
+    const resp = result.response || ''
+    
+    let serverName = 'CS2 Dedicated Server'
+    let mapName = 'de_mirage'
+    let playerCount = 1
+
+    const nameMatch = resp.match(/hostname\s*:\s*(.+)/i)
+    if (nameMatch) serverName = nameMatch[1].trim()
+
+    const mapMatch = resp.match(/map\s*:\s*([a-zA-Z0-9_]+)/i)
+    if (mapMatch) mapName = mapMatch[1].trim()
+
+    const playersMatch = resp.match(/players\s*:\s*(\d+)/i)
+    if (playersMatch) playerCount = parseInt(playersMatch[1], 10)
+
+    res.json({
+      success: true,
+      online: true,
+      serverName,
+      mapName,
+      playerCount,
+      response: resp
+    })
+  } catch (err) {
+    res.status(502).json({
+      success: false,
+      online: false,
+      error: `Could not connect to CS2 server at ${serverHost}:${serverPort}. Make sure server is running and RCON password is correct.`
+    })
+  }
+})
+
+app.post('/api/cs2/auto-capture', async (req, res) => {
+  const { host, port, password, title } = req.body
+  const serverHost = host || '127.0.0.1'
+  const serverPort = port || 27015
+
+  try {
+    const rconResult = await executeRconCommand(serverHost, serverPort, password || '', 'getpos_exact; status')
+    const outputText = rconResult.response || ''
+
+    let worldX = -1450, worldY = 210, worldZ = -120
+    let pitch = 12.5, yaw = -89.4, roll = 0
+    let detectedMap = 'mirage'
+
+    const posMatch = outputText.match(/setpos(?:_exact)?\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/i)
+    if (posMatch) {
+      worldX = parseFloat(posMatch[1])
+      worldY = parseFloat(posMatch[2])
+      worldZ = parseFloat(posMatch[3])
+    }
+
+    const angMatch = outputText.match(/setang(?:_exact)?\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/i)
+    if (angMatch) {
+      pitch = parseFloat(angMatch[1])
+      yaw = parseFloat(angMatch[2])
+      roll = parseFloat(angMatch[3])
+    }
+
+    const mapMatch = outputText.match(/map\s*:\s*de_([a-zA-Z0-9_]+)/i)
+    if (mapMatch) {
+      detectedMap = mapMatch[1].toLowerCase()
+    }
+
+    const radarCoords = worldToRadarCoords(detectedMap, worldX, worldY)
+    const setposCmd = `setpos ${worldX.toFixed(2)} ${worldY.toFixed(2)} ${worldZ.toFixed(2)}`
+    const setangCmd = `setang ${pitch.toFixed(2)} ${yaw.toFixed(2)} ${roll.toFixed(2)}`
+    const fullConsoleCmd = `${setposCmd}; ${setangCmd}`
+
+    // Calculate estimated landing spot based on forward pitch/yaw
+    const radYaw = (yaw * Math.PI) / 180
+    const forwardDistance = Math.min(Math.max((90 - Math.abs(pitch)) * 18, 150), 900)
+    const targetWorldX = worldX + Math.cos(radYaw) * forwardDistance
+    const targetWorldY = worldY + Math.sin(radYaw) * forwardDistance
+    const landingRadarCoords = worldToRadarCoords(detectedMap, targetWorldX, targetWorldY)
+
+    const mapCapitalized = detectedMap.charAt(0).toUpperCase() + detectedMap.slice(1)
+    const autoTitle = title || `${mapCapitalized} Tactical Grenade (${radarCoords.x}%, ${radarCoords.y}%)`
+
+    const newLineup = {
+      id: `cs2-live-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      title: autoTitle,
+      mapId: detectedMap,
+      grenadeType: 'smoke',
+      side: 't',
+      throwType: pitch < -20 ? 'jumpthrow' : 'standing',
+      tickrate: 'cs2_subtick',
+      originCoords: radarCoords,
+      landingCoords: landingRadarCoords,
+      startLocation: 'In-Game Position',
+      endLocation: 'Target Area',
+      site: 'General',
+      tags: [detectedMap, 'cs2_live', 'subtick', 'server_synced'],
+      instructions: [
+        `Stand at exact CS2 world position (X: ${worldX.toFixed(1)}, Y: ${worldY.toFixed(1)}, Z: ${worldZ.toFixed(1)}).`,
+        `Align crosshair at pitch: ${pitch.toFixed(1)}°, yaw: ${yaw.toFixed(1)}°.`,
+        `Execute throw. Use console command to align instantly.`
+      ],
+      consoleCommand: fullConsoleCmd,
+      difficulty: 'easy',
+      cs2Pos: {
+        x: worldX,
+        y: worldY,
+        z: worldZ,
+        pitch,
+        yaw,
+        roll
+      },
+      isCustom: true,
+      inLibrary: true,
+      isTeamShared: true,
+      createdAt: new Date().toISOString()
+    }
+
+    // Save to global server DB
+    db = loadDB()
+    if (!Array.isArray(db.lineups)) db.lineups = []
+    db.lineups.unshift(newLineup)
+    saveDB(db)
+
+    // Broadcast live event to all connected web clients
+    io.emit('cs2:lineup-captured', newLineup)
+
+    res.json({
+      success: true,
+      lineup: newLineup,
+      message: `Captured position on ${mapCapitalized} from CS2 server!`
+    })
+  } catch (err) {
+    res.status(502).json({
+      success: false,
+      error: `Auto capture failed: ${err.message || 'RCON connection error'}`
+    })
+  }
+})
+
+app.post('/api/cs2/auto-screenshot', (req, res) => {
+  const { image, type, lineupId } = req.body
+  if (!image) return res.status(400).json({ error: 'Image data is required' })
+
+  try {
+    let base64Data = image
+    let ext = 'jpg'
+
+    const matches = image.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/)
+    if (matches) {
+      ext = matches[1] === 'jpeg' ? 'jpg' : matches[1]
+      base64Data = matches[2]
+    }
+
+    const buffer = Buffer.from(base64Data, 'base64')
+    const fileName = `cs2_${type || 'aim'}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`
+    const filePath = path.join(UPLOADS_DIR, fileName)
+
+    fs.writeFileSync(filePath, buffer)
+    const publicUrl = `/uploads/${fileName}`
+
+    // If lineupId provided, update database
+    if (lineupId) {
+      db = loadDB()
+      if (Array.isArray(db.lineups)) {
+        const found = db.lineups.find(l => l.id === lineupId)
+        if (found) {
+          if (type === 'standing') found.standingScreenshot = publicUrl
+          else if (type === 'landing') found.landingScreenshot = publicUrl
+          else found.aimScreenshot = publicUrl
+          found.imageUrl = found.aimScreenshot || found.standingScreenshot || found.landingScreenshot || publicUrl
+          saveDB(db)
+        }
+      }
+    }
+
+    io.emit('cs2:screenshot-attached', {
+      lineupId,
+      type: type || 'aim',
+      imageUrl: publicUrl
+    })
+
+    res.json({
+      success: true,
+      imageUrl: publicUrl,
+      type: type || 'aim',
+      lineupId
+    })
+  } catch (err) {
+    console.error('Error saving screenshot:', err)
+    res.status(500).json({ error: 'Failed to process screenshot' })
+  }
+})
+
 app.post('/api/cs2/rcon-exec', async (req, res) => {
   const { host, port, password, command } = req.body
   if (!command) return res.status(400).json({ error: 'Command is required' })

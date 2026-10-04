@@ -4,6 +4,7 @@ import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { pctToWorldCoords, generateSetposCommand } from '../../utils/cs2Coords'
+import { useCs2ServerStore } from '../../stores/cs2ServerStore'
 import { 
   X, 
   Gamepad2, 
@@ -20,7 +21,15 @@ import {
   ExternalLink,
   Code2,
   Play,
-  RotateCcw
+  RotateCcw,
+  Zap,
+  Camera,
+  Upload,
+  Image as ImageIcon,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  Trash2
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -34,12 +43,21 @@ const emit = defineEmits<{
 const mapStore = useMapStore()
 const lineupStore = useLineupStore()
 const themeStore = useThemeStore()
+const cs2ServerStore = useCs2ServerStore()
 
-const activeTab = ref<'cfg' | 'dedicated' | 'setpos' | 'gsi'>('cfg')
+const activeTab = ref<'sync' | 'cfg' | 'setpos' | 'dedicated' | 'gsi'>('sync')
 const copiedCfg = ref(false)
 const copiedDocker = ref(false)
 const copiedSetpos = ref(false)
 const copiedGsi = ref(false)
+const copiedServerSetpos = ref(false)
+
+// ── LIVE SERVER SYNC STATE ──────────────────────────────────
+const syncLineupTitle = ref('')
+const selectedScreenshotType = ref<'aim' | 'standing' | 'landing'>('aim')
+const isUploadingScreenshot = ref(false)
+const screenshotFeedback = ref<string | null>(null)
+
 
 // ── PRACTICE CFG OPTIONS ────────────────────────────────────
 const cfgOptions = reactive({
@@ -207,6 +225,76 @@ const generatedGsiConfig = computed(() => {
 }`
 })
 
+// ── LIVE SERVER SYNC ACTION HANDLERS ───────────────────────
+async function handleTestConnection() {
+  await cs2ServerStore.testConnection()
+}
+
+async function handleAutoCapture() {
+  const title = syncLineupTitle.value.trim() || undefined
+  const captured = await cs2ServerStore.autoCaptureLineup(title)
+  if (captured) {
+    syncLineupTitle.value = ''
+    screenshotFeedback.value = `Captured: ${captured.title} (${captured.mapId})`
+    setTimeout(() => (screenshotFeedback.value = null), 4000)
+  }
+}
+
+async function handleScreenshotFileSelected(e: Event, type: 'aim' | 'standing' | 'landing') {
+  const input = e.target as HTMLInputElement
+  if (!input.files || input.files.length === 0) return
+  const file = input.files[0]
+  
+  isUploadingScreenshot.value = true
+  try {
+    const res = await cs2ServerStore.uploadAndAttachScreenshot(file, type)
+    if (res) {
+      screenshotFeedback.value = `✓ Attached ${type} screenshot successfully!`
+      setTimeout(() => (screenshotFeedback.value = null), 3500)
+    }
+  } catch (err: any) {
+    screenshotFeedback.value = `Upload error: ${err.message}`
+  } finally {
+    isUploadingScreenshot.value = false
+    input.value = ''
+  }
+}
+
+async function handlePasteEvent(e: ClipboardEvent) {
+  if (activeTab.value !== 'sync') return
+  const items = e.clipboardData?.items
+  if (!items) return
+
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') !== -1) {
+      const file = items[i].getAsFile()
+      if (file) {
+        e.preventDefault()
+        isUploadingScreenshot.value = true
+        try {
+          const res = await cs2ServerStore.uploadAndAttachScreenshot(file, selectedScreenshotType.value)
+          if (res) {
+            screenshotFeedback.value = `✓ Pasted and attached ${selectedScreenshotType.value} screenshot!`
+            setTimeout(() => (screenshotFeedback.value = null), 3500)
+          }
+        } catch (err: any) {
+          screenshotFeedback.value = `Paste error: ${err.message}`
+        } finally {
+          isUploadingScreenshot.value = false
+        }
+      }
+      break
+    }
+  }
+}
+
+async function handleTeleportToServer(lineupId?: string) {
+  const targetLineup = lineupStore.allLineups.find(l => l.id === (lineupId || cs2ServerStore.lastCapturedLineup?.id || selectedLineupId.value))
+  if (targetLineup) {
+    await cs2ServerStore.teleportToServer(targetLineup)
+  }
+}
+
 // ── ACTION HANDLERS ─────────────────────────────────────────
 function downloadFile(filename: string, content: string) {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
@@ -228,7 +316,7 @@ function handleDownloadGsi() {
   downloadFile('gamestate_integration_cs2nades.cfg', generatedGsiConfig.value)
 }
 
-async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' | 'gsi') {
+async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' | 'gsi' | 'serverSetpos') {
   try {
     await navigator.clipboard.writeText(text)
     if (type === 'cfg') {
@@ -243,11 +331,24 @@ async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' |
     } else if (type === 'gsi') {
       copiedGsi.value = true
       setTimeout(() => (copiedGsi.value = false), 2500)
+    } else if (type === 'serverSetpos') {
+      copiedServerSetpos.value = true
+      setTimeout(() => (copiedServerSetpos.value = false), 2500)
     }
   } catch (err) {
     console.error('Failed to copy', err)
   }
 }
+
+import { onMounted, onUnmounted } from 'vue'
+
+onMounted(() => {
+  window.addEventListener('paste', handlePasteEvent)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('paste', handlePasteEvent)
+})
 </script>
 
 <template>
@@ -274,20 +375,33 @@ async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' |
             <div>
               <div class="flex items-center gap-2">
                 <h2 class="text-base font-black uppercase text-white tracking-wide">
-                  CS2 Practice Server & Config Studio
+                  CS2 Server Sync & Practice Studio
                 </h2>
-                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-black uppercase tracking-wider">
-                  Live Generator
+                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-mono font-black uppercase tracking-wider flex items-center gap-1">
+                  <Zap class="w-3 h-3 fill-current" />
+                  Auto-Sync & Capture
                 </span>
               </div>
               <p class="text-xs text-slate-400 mt-0.5">
-                Generate tailored practice scripts, deploy dedicated CS2 servers on Docker/LXC, and export precision teleport binds.
+                Auto-sync lineups and screenshots with your self-hosted/private CS2 server, generate practice scripts, and teleport.
               </p>
             </div>
           </div>
 
           <!-- TAB SWITCHER -->
-          <div class="flex items-center gap-1 p-1 bg-slate-900/90 rounded-xl border border-slate-800">
+          <div class="flex items-center gap-1 p-1 bg-slate-900/90 rounded-xl border border-slate-800 flex-wrap">
+            <button
+              @click="activeTab = 'sync'"
+              :class="[
+                'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                activeTab === 'sync' ? 'font-black shadow' : 'text-slate-400 hover:text-white'
+              ]"
+              :style="activeTab === 'sync' ? { backgroundColor: themeStore.customAccentColor, color: '#020617' } : {}"
+            >
+              <Zap class="w-3.5 h-3.5 fill-current" />
+              <span>Live Server Sync</span>
+            </button>
+
             <button
               @click="activeTab = 'cfg'"
               :class="[
@@ -333,7 +447,7 @@ async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' |
               :style="activeTab === 'gsi' ? { backgroundColor: themeStore.customAccentColor, color: '#020617' } : {}"
             >
               <Radio class="w-3.5 h-3.5" />
-              <span>GSI Live Sync</span>
+              <span>GSI Config</span>
             </button>
 
             <button 
@@ -345,9 +459,377 @@ async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' |
           </div>
         </div>
 
+
         <!-- BODY CONTENT -->
         <div class="flex-1 overflow-y-auto p-5 sm:p-6 flex flex-col gap-6 text-xs scrollbar-thin">
           
+          <!-- ============================================================ -->
+          <!-- TAB 0: LIVE SERVER SYNC & AUTO-CAPTURE -->
+          <!-- ============================================================ -->
+          <div v-if="activeTab === 'sync'" class="flex flex-col gap-6">
+            
+            <!-- SERVER CONNECTION CONFIG & STATUS -->
+            <div class="p-4 bg-slate-950/90 border border-slate-800 rounded-2xl flex flex-col gap-4 shadow-xl">
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                  <Server class="w-4 h-4 text-amber-400" />
+                  <span class="font-black uppercase tracking-wider text-white text-xs">CS2 Server RCON & Live Sync Connection</span>
+                </div>
+                
+                <!-- STATUS BADGE -->
+                <div class="flex items-center gap-2">
+                  <div 
+                    v-if="cs2ServerStore.isConnected" 
+                    class="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg font-mono text-[11px] font-bold"
+                  >
+                    <CheckCircle2 class="w-3.5 h-3.5" />
+                    <span>Connected: {{ cs2ServerStore.serverMap }} ({{ cs2ServerStore.serverPlayers }} player)</span>
+                  </div>
+                  <div 
+                    v-else-if="cs2ServerStore.isTesting" 
+                    class="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg font-mono text-[11px] font-bold"
+                  >
+                    <RefreshCw class="w-3.5 h-3.5 animate-spin" />
+                    <span>Testing Connection...</span>
+                  </div>
+                  <div 
+                    v-else 
+                    class="flex items-center gap-1.5 px-2.5 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg font-mono text-[11px] font-bold"
+                  >
+                    <AlertCircle class="w-3.5 h-3.5" />
+                    <span>Not Connected</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- INPUTS ROW -->
+              <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div class="flex flex-col gap-1 sm:col-span-2">
+                  <label class="text-[10px] font-bold text-slate-400 uppercase">Server IP / Hostname:</label>
+                  <input 
+                    v-model="cs2ServerStore.serverHost" 
+                    type="text" 
+                    placeholder="127.0.0.1 or 192.168.0.194" 
+                    class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div class="flex flex-col gap-1">
+                  <label class="text-[10px] font-bold text-slate-400 uppercase">RCON Port:</label>
+                  <input 
+                    v-model.number="cs2ServerStore.serverPort" 
+                    type="number" 
+                    placeholder="27015" 
+                    class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div class="flex flex-col gap-1">
+                  <label class="text-[10px] font-bold text-slate-400 uppercase">RCON Password:</label>
+                  <input 
+                    v-model="cs2ServerStore.rconPassword" 
+                    type="password" 
+                    placeholder="rcon_password" 
+                    class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+                <span class="text-[11px] text-slate-400">
+                  {{ cs2ServerStore.connectionMessage || 'Enter your dedicated CS2 server details to enable instant auto-capture and teleporting.' }}
+                </span>
+
+                <button
+                  @click="handleTestConnection"
+                  :disabled="cs2ServerStore.isTesting"
+                  class="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow"
+                >
+                  <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': cs2ServerStore.isTesting }" />
+                  <span>Test Connection</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- AUTO-CAPTURE ACTION ZONE -->
+            <div class="p-5 bg-gradient-to-br from-amber-500/10 via-slate-950 to-slate-950 border-2 border-amber-500/40 rounded-3xl flex flex-col gap-4 shadow-xl">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <div class="p-2 bg-amber-500 text-slate-950 rounded-xl font-black shadow">
+                    <Zap class="w-4 h-4 fill-current" />
+                  </div>
+                  <div>
+                    <h3 class="font-black text-sm text-white uppercase tracking-wider">
+                      1-Click: Auto-Capture In-Game Lineup
+                    </h3>
+                    <p class="text-[11px] text-slate-400">
+                      Stand in your throw spot in CS2, aim at your target, and push the button to auto-extract coordinates and crosshair angles.
+                    </p>
+                  </div>
+                </div>
+
+                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono text-[10px] font-bold">
+                  Zero Typing Needed
+                </span>
+              </div>
+
+              <!-- CAPTURE FORM ROW -->
+              <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <input 
+                  v-model="syncLineupTitle"
+                  @keyup.enter="handleAutoCapture"
+                  placeholder="Optional title (e.g. Mirage Window Smoke from T Spawn)..."
+                  class="flex-1 bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 font-medium"
+                />
+
+                <button
+                  @click="handleAutoCapture"
+                  :disabled="cs2ServerStore.isCapturing"
+                  class="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 hover:scale-[1.02] active:scale-95 cursor-pointer shrink-0"
+                >
+                  <RefreshCw v-if="cs2ServerStore.isCapturing" class="w-4 h-4 animate-spin" />
+                  <Zap v-else class="w-4 h-4 fill-current" />
+                  <span>{{ cs2ServerStore.isCapturing ? 'Capturing Coords...' : '⚡ Capture from Server' }}</span>
+                </button>
+              </div>
+
+              <!-- CAPTURED FEEDBACK CARD -->
+              <div 
+                v-if="cs2ServerStore.lastCapturedLineup" 
+                class="p-4 bg-slate-950 border border-emerald-500/40 rounded-2xl flex flex-col gap-3 shadow-inner animate-fade-in"
+              >
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <strong class="text-white text-xs font-black">{{ cs2ServerStore.lastCapturedLineup.title }}</strong>
+                    <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] uppercase font-bold">
+                      🗺️ {{ cs2ServerStore.lastCapturedLineup.mapId }}
+                    </span>
+                    <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] uppercase font-bold">
+                      {{ cs2ServerStore.lastCapturedLineup.grenadeType }}
+                    </span>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <button
+                      @click="handleTeleportToServer(cs2ServerStore.lastCapturedLineup.id)"
+                      class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-black rounded-lg text-[11px] transition-all flex items-center gap-1 cursor-pointer shadow"
+                    >
+                      <Play class="w-3 h-3 fill-current" />
+                      <span>Teleport CS2 Server</span>
+                    </button>
+
+                    <button
+                      v-if="cs2ServerStore.lastCapturedLineup.consoleCommand"
+                      @click="copyToClipboard(cs2ServerStore.lastCapturedLineup.consoleCommand, 'serverSetpos')"
+                      class="px-3 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <Check v-if="copiedServerSetpos" class="w-3 h-3 text-emerald-400" />
+                      <Copy v-else class="w-3 h-3" />
+                      <span>{{ copiedServerSetpos ? 'Copied!' : 'Copy setpos' }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="p-2.5 bg-slate-900/80 rounded-xl font-mono text-[11px] text-emerald-300 border border-slate-800 break-all select-all">
+                  {{ cs2ServerStore.lastCapturedLineup.consoleCommand || `setpos_exact ${cs2ServerStore.lastCapturedLineup.cs2Pos?.x} ${cs2ServerStore.lastCapturedLineup.cs2Pos?.y} ${cs2ServerStore.lastCapturedLineup.cs2Pos?.z}` }}
+                </div>
+              </div>
+            </div>
+
+            <!-- IN-GAME SCREENSHOT ATTACHMENT ZONE -->
+            <div class="p-5 bg-slate-950/90 border border-slate-800 rounded-3xl flex flex-col gap-4 shadow-xl">
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                  <Camera class="w-4 h-4 text-sky-400" />
+                  <span class="font-black uppercase tracking-wider text-white text-xs">
+                    📸 In-Game Screenshots (Aim, Standing & Landing)
+                  </span>
+                </div>
+                <div class="flex items-center gap-2 text-[11px] text-slate-400 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+                  <span>Press <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono font-bold text-[10px]">Ctrl+V</kbd> to paste clipboard screenshot</span>
+                </div>
+              </div>
+
+              <!-- SCREENSHOT TYPE SELECTOR FOR PASTE -->
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] text-slate-400 font-bold">Active Slot for Clipboard Paste (<kbd class="text-amber-400 font-mono">Ctrl+V</kbd>):</span>
+                <div class="flex items-center gap-1 p-1 bg-slate-900 rounded-xl border border-slate-800">
+                  <button
+                    @click="selectedScreenshotType = 'aim'"
+                    :class="[
+                      'px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1',
+                      selectedScreenshotType === 'aim' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                    ]"
+                  >
+                    🎯 Aim / Crosshair
+                  </button>
+                  <button
+                    @click="selectedScreenshotType = 'standing'"
+                    :class="[
+                      'px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1',
+                      selectedScreenshotType === 'standing' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                    ]"
+                  >
+                    🧍 Standing Spot
+                  </button>
+                  <button
+                    @click="selectedScreenshotType = 'landing'"
+                    :class="[
+                      'px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1',
+                      selectedScreenshotType === 'landing' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                    ]"
+                  >
+                    💥 Landing Result
+                  </button>
+                </div>
+              </div>
+
+              <!-- 3 SCREENSHOT DROP / UPLOAD CARDS -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <!-- 1. AIM SPOT -->
+                <div class="p-3 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col gap-2 relative">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-white text-[11px] flex items-center gap-1">
+                      🎯 Aim Crosshair
+                    </span>
+                    <span v-if="selectedScreenshotType === 'aim'" class="text-[9px] font-bold text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
+                      Paste Active
+                    </span>
+                  </div>
+
+                  <div v-if="cs2ServerStore.lastCapturedLineup?.aimScreenshot" class="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
+                    <img :src="cs2ServerStore.lastCapturedLineup.aimScreenshot" class="w-full h-full object-cover" />
+                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <a :href="cs2ServerStore.lastCapturedLineup.aimScreenshot" target="_blank" class="p-1.5 bg-slate-800 rounded-lg text-white hover:bg-slate-700">
+                        <ExternalLink class="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+
+                  <label 
+                    v-else 
+                    class="aspect-video rounded-xl border-2 border-dashed border-slate-700 hover:border-amber-400 bg-slate-950/60 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors p-2 text-center"
+                  >
+                    <Upload class="w-5 h-5 text-slate-500" />
+                    <span class="text-[10px] text-slate-400 font-bold">Browse or Paste</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      class="hidden" 
+                      @change="(e) => handleScreenshotFileSelected(e, 'aim')" 
+                    />
+                  </label>
+                </div>
+
+                <!-- 2. STANDING SPOT -->
+                <div class="p-3 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col gap-2 relative">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-white text-[11px] flex items-center gap-1">
+                      🧍 Standing Spot
+                    </span>
+                    <span v-if="selectedScreenshotType === 'standing'" class="text-[9px] font-bold text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
+                      Paste Active
+                    </span>
+                  </div>
+
+                  <div v-if="cs2ServerStore.lastCapturedLineup?.standingScreenshot" class="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
+                    <img :src="cs2ServerStore.lastCapturedLineup.standingScreenshot" class="w-full h-full object-cover" />
+                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <a :href="cs2ServerStore.lastCapturedLineup.standingScreenshot" target="_blank" class="p-1.5 bg-slate-800 rounded-lg text-white hover:bg-slate-700">
+                        <ExternalLink class="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+
+                  <label 
+                    v-else 
+                    class="aspect-video rounded-xl border-2 border-dashed border-slate-700 hover:border-amber-400 bg-slate-950/60 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors p-2 text-center"
+                  >
+                    <Upload class="w-5 h-5 text-slate-500" />
+                    <span class="text-[10px] text-slate-400 font-bold">Browse or Paste</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      class="hidden" 
+                      @change="(e) => handleScreenshotFileSelected(e, 'standing')" 
+                    />
+                  </label>
+                </div>
+
+                <!-- 3. LANDING SPOT -->
+                <div class="p-3 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col gap-2 relative">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-white text-[11px] flex items-center gap-1">
+                      💥 Landing Result
+                    </span>
+                    <span v-if="selectedScreenshotType === 'landing'" class="text-[9px] font-bold text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
+                      Paste Active
+                    </span>
+                  </div>
+
+                  <div v-if="cs2ServerStore.lastCapturedLineup?.landingScreenshot" class="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
+                    <img :src="cs2ServerStore.lastCapturedLineup.landingScreenshot" class="w-full h-full object-cover" />
+                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <a :href="cs2ServerStore.lastCapturedLineup.landingScreenshot" target="_blank" class="p-1.5 bg-slate-800 rounded-lg text-white hover:bg-slate-700">
+                        <ExternalLink class="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+
+                  <label 
+                    v-else 
+                    class="aspect-video rounded-xl border-2 border-dashed border-slate-700 hover:border-amber-400 bg-slate-950/60 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors p-2 text-center"
+                  >
+                    <Upload class="w-5 h-5 text-slate-500" />
+                    <span class="text-[10px] text-slate-400 font-bold">Browse or Paste</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      class="hidden" 
+                      @change="(e) => handleScreenshotFileSelected(e, 'landing')" 
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <!-- FEEDBACK MESSAGE -->
+              <div v-if="screenshotFeedback" class="p-2.5 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 class="w-4 h-4" />
+                <span>{{ screenshotFeedback }}</span>
+              </div>
+            </div>
+
+            <!-- SERVER TELEPORT CONTROLS -->
+            <div class="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div class="flex flex-col">
+                <strong class="text-white text-xs">🎮 Teleport Server to Lineup</strong>
+                <span class="text-[11px] text-slate-400">Choose any lineup on {{ mapStore.currentMap?.name || 'active map' }} and teleport your CS2 player instantly:</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <select 
+                  v-model="selectedLineupId" 
+                  class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-500 focus:outline-none"
+                >
+                  <option value="">-- Choose Lineup to Teleport --</option>
+                  <option v-for="l in availableLineupsForMap" :key="l.id" :value="l.id">
+                    {{ l.title }} ({{ l.startLocation }} → {{ l.endLocation }})
+                  </option>
+                </select>
+
+                <button
+                  @click="handleTeleportToServer(selectedLineupId)"
+                  :disabled="!selectedLineupId || cs2ServerStore.isTeleporting"
+                  class="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 text-slate-950 disabled:text-slate-600 font-black rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shrink-0"
+                >
+                  Teleport Server
+                </button>
+              </div>
+            </div>
+
+          </div>
+
           <!-- ============================================================ -->
           <!-- TAB 1: PRACTICE CFG BUILDER -->
           <!-- ============================================================ -->
