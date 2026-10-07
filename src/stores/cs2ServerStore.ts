@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import axios from 'axios'
 import { useLineupStore } from './lineupStore'
 import { useMapStore } from './mapStore'
+import { useGameRoomStore } from './gameRoomStore'
 import type { Lineup, GrenadeType, TeamSide, ThrowType } from '../types'
 import { worldToRadarCoords, parseCS2Pos } from '../utils/coordinateMapper'
 
@@ -11,6 +12,7 @@ export interface ServerConnectionConfig {
   port: number
   password?: string
   autoSyncGsi: boolean
+  autoSyncMapWithGsi?: boolean
   lastConnected?: string
 }
 
@@ -24,6 +26,11 @@ export interface LivePlayerState {
   playerName?: string
   team?: string
   weapon?: string
+  health?: number
+  armor?: number
+  hasHelmet?: boolean
+  money?: number
+  activity?: string
   radarCoords?: { x: number; y: number }
   timestamp: number
 }
@@ -33,6 +40,7 @@ const STORAGE_KEY = 'cs2_server_sync_config'
 export const useCs2ServerStore = defineStore('cs2Server', () => {
   const lineupStore = useLineupStore()
   const mapStore = useMapStore()
+  const gameRoomStore = useGameRoomStore()
 
   // Saved Server Connection Details
   const savedConfig = localStorage.getItem(STORAGE_KEY)
@@ -40,13 +48,15 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
     host: typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1',
     port: 27015,
     password: '',
-    autoSyncGsi: true
+    autoSyncGsi: true,
+    autoSyncMapWithGsi: true
   }
 
   const serverHost = ref<string>(defaultConfig.host)
   const serverPort = ref<number>(defaultConfig.port)
   const rconPassword = ref<string>(defaultConfig.password || '')
   const autoSyncGsi = ref<boolean>(defaultConfig.autoSyncGsi)
+  const autoSyncMapWithGsi = ref<boolean>(defaultConfig.autoSyncMapWithGsi ?? true)
 
   const isTesting = ref<boolean>(false)
   const isCapturing = ref<boolean>(false)
@@ -58,8 +68,14 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
   const lastCaptureTime = ref<number>(0)
   const lastCapturedLineup = ref<Lineup | null>(null)
 
-  // Live GSI position from server
+  // Live GSI state & telemetry from server
   const livePlayer = ref<LivePlayerState | null>(null)
+  const gsiTelemetry = ref<any | null>(null)
+  const lastGsiPacketTime = ref<number>(0)
+
+  const isGsiActive = computed(() => {
+    return lastGsiPacketTime.value > 0 && (Date.now() - lastGsiPacketTime.value < 35000)
+  })
 
   function saveConfig() {
     const cfg: ServerConnectionConfig = {
@@ -67,6 +83,7 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
       port: Number(serverPort.value) || 27015,
       password: rconPassword.value,
       autoSyncGsi: autoSyncGsi.value,
+      autoSyncMapWithGsi: autoSyncMapWithGsi.value,
       lastConnected: isConnected.value ? new Date().toISOString() : undefined
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg))
@@ -74,6 +91,105 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
 
   function getApiUrl(path: string): string {
     return path
+  }
+
+  /**
+   * Listen to real-time GSI telemetry via Socket.IO
+   */
+  function initGsiListeners() {
+    const socket = gameRoomStore.getSocket()
+    if (!socket) return
+
+    socket.off('cs2:gsi-update')
+    socket.off('cs2:live-pos')
+
+    socket.on('cs2:gsi-update', (data: any) => {
+      lastGsiPacketTime.value = Date.now()
+      gsiTelemetry.value = data
+      if (data && data.player) {
+        livePlayer.value = {
+          ...data.player,
+          mapName: data.map?.name || 'mirage',
+          timestamp: Date.now()
+        }
+      }
+
+      // Auto-sync map with active CS2 match if enabled
+      if (autoSyncMapWithGsi.value && data?.map?.name) {
+        const clean = data.map.name.replace('de_', '').replace('cs_', '').toLowerCase()
+        if (clean && clean !== mapStore.currentMapId) {
+          const exists = mapStore.availableMaps.some(m => m.id === clean)
+          if (exists) {
+            mapStore.currentMapId = clean
+          }
+        }
+      }
+    })
+
+    socket.on('cs2:live-pos', (playerData: any) => {
+      lastGsiPacketTime.value = Date.now()
+      livePlayer.value = {
+        ...playerData,
+        timestamp: Date.now()
+      }
+    })
+  }
+
+  /**
+   * Check latest GSI status from server
+   */
+  async function fetchGsiStatus() {
+    try {
+      const res = await axios.get(getApiUrl('/api/cs2/gsi/status'))
+      if (res.data) {
+        if (res.data.lastPacketTime) {
+          lastGsiPacketTime.value = res.data.lastPacketTime
+        }
+        if (res.data.telemetry) {
+          gsiTelemetry.value = res.data.telemetry
+          if (res.data.telemetry.player) {
+            livePlayer.value = {
+              ...res.data.telemetry.player,
+              mapName: res.data.telemetry.map?.name || 'mirage',
+              timestamp: Date.now()
+            }
+          }
+        }
+      }
+    } catch (err) {}
+  }
+
+  /**
+   * Send test GSI ping to verify integration
+   */
+  async function sendTestGsiPing(mapId = mapStore.currentMapId || 'mirage'): Promise<boolean> {
+    try {
+      const res = await axios.post(getApiUrl('/api/cs2/gsi/test-ping'), {
+        mapId,
+        playerName: 'Practice Player'
+      })
+      if (res.data && res.data.telemetry) {
+        lastGsiPacketTime.value = Date.now()
+        gsiTelemetry.value = res.data.telemetry
+        if (res.data.telemetry.player) {
+          livePlayer.value = {
+            ...res.data.telemetry.player,
+            mapName: res.data.telemetry.map?.name || mapId,
+            timestamp: Date.now()
+          }
+        }
+        return true
+      }
+    } catch (err) {
+      console.error('Failed to send test GSI ping', err)
+    }
+    return false
+  }
+
+  // Initialize listeners & status check on store instantiation
+  if (typeof window !== 'undefined') {
+    initGsiListeners()
+    fetchGsiStatus()
   }
 
   /**
@@ -113,21 +229,89 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
 
   /**
    * 1-Click: Auto-Capture current player in-game position & crosshair to create a Lineup
+   * (Supports RCON query and GSI live coordinate stream fallback)
    */
   async function autoCaptureLineup(customTitle?: string): Promise<Lineup | null> {
     isCapturing.value = true
     saveConfig()
 
     try {
-      const res = await axios.post(getApiUrl('/api/cs2/auto-capture'), {
-        host: serverHost.value.trim(),
-        port: serverPort.value,
-        password: rconPassword.value,
-        title: customTitle
-      })
+      let captured: Lineup | null = null
 
-      if (res.data && res.data.success && res.data.lineup) {
-        const captured: Lineup = res.data.lineup
+      // Attempt 1: Query server via RCON
+      if (serverHost.value && rconPassword.value) {
+        try {
+          const res = await axios.post(getApiUrl('/api/cs2/auto-capture'), {
+            host: serverHost.value.trim(),
+            port: serverPort.value,
+            password: rconPassword.value,
+            title: customTitle
+          })
+          if (res.data && res.data.success && res.data.lineup) {
+            captured = res.data.lineup
+          }
+        } catch (e) {
+          // Fall through to GSI fallback
+        }
+      }
+
+      // Attempt 2: If RCON didn't return a lineup, use Live GSI Coordinates
+      if (!captured && livePlayer.value && livePlayer.value.x !== undefined) {
+        const p = livePlayer.value
+        const mapId = (p.mapName || mapStore.currentMapId || 'mirage').toLowerCase().replace('de_', '')
+        const radar = p.radarCoords || worldToRadarCoords(p.x, p.y, mapId)
+
+        // Determine grenade type from active weapon
+        let grenadeType: GrenadeType = 'smoke'
+        if (p.weapon?.includes('flash')) grenadeType = 'flash'
+        else if (p.weapon?.includes('molotov') || p.weapon?.includes('incgrenade')) grenadeType = 'molotov'
+        else if (p.weapon?.includes('hegrenade')) grenadeType = 'he'
+        else if (p.weapon?.includes('decoy')) grenadeType = 'decoy'
+
+        // Calculate forward landing point estimate
+        const yawRad = ((p.yaw || 0) * Math.PI) / 180
+        const pitchRad = ((p.pitch || 0) * Math.PI) / 180
+        const targetWorldX = p.x + Math.cos(pitchRad) * Math.cos(yawRad) * 1200
+        const targetWorldY = p.y + Math.cos(pitchRad) * Math.sin(yawRad) * 1200
+        const landingRadar = worldToRadarCoords(targetWorldX, targetWorldY, mapId)
+
+        const title = customTitle || `${mapId.toUpperCase()} ${grenadeType.toUpperCase()} (Live GSI Capture)`
+        const consoleCmd = `setpos_exact ${p.x.toFixed(2)} ${p.y.toFixed(2)} ${p.z.toFixed(2)}; setang ${(p.pitch || 0).toFixed(2)} ${(p.yaw || 0).toFixed(2)} 0.00`
+
+        captured = {
+          id: `gsi-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+          title,
+          mapId,
+          grenadeType,
+          side: (p.team?.toLowerCase() === 'ct' ? 'ct' : 't') as TeamSide,
+          throwType: 'jumpthrow',
+          tickrate: 'cs2_subtick',
+          originCoords: radar,
+          landingCoords: landingRadar,
+          startLocation: `${p.playerName || 'Player'} Spot`,
+          endLocation: 'Target Area',
+          tags: ['gsi-capture', mapId, grenadeType],
+          instructions: [
+            `Auto-captured via CS2 GameState Integration.`,
+            `Angle: pitch ${p.pitch?.toFixed(1)}°, yaw ${p.yaw?.toFixed(1)}°.`
+          ],
+          consoleCommand: consoleCmd,
+          difficulty: 'medium',
+          cs2Pos: {
+            x: p.x,
+            y: p.y,
+            z: p.z,
+            pitch: p.pitch,
+            yaw: p.yaw
+          },
+          isCustom: true,
+          inLibrary: true,
+          isTeamShared: true,
+          createdAt: new Date().toISOString()
+        }
+      }
+
+      if (captured) {
         lineupStore.addLineup(captured)
         lineupStore.openLineup(captured)
         
@@ -140,7 +324,7 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
         isConnected.value = true
         return captured
       } else {
-        connectionMessage.value = res.data?.error || 'Failed to capture position from server'
+        connectionMessage.value = 'Failed to capture: Please ensure CS2 GSI file is installed or CS2 Server RCON is connected.'
         return null
       }
     } catch (err: any) {
@@ -151,6 +335,7 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
       isCapturing.value = false
     }
   }
+
 
   /**
    * Auto-Upload and Attach In-Game Screenshot to a Lineup
@@ -243,6 +428,10 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
     serverPort,
     rconPassword,
     autoSyncGsi,
+    autoSyncMapWithGsi,
+    isGsiActive,
+    lastGsiPacketTime,
+    gsiTelemetry,
     isConnected,
     isTesting,
     isCapturing,
@@ -257,6 +446,10 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
     testConnection,
     autoCaptureLineup,
     uploadAndAttachScreenshot,
-    teleportToServer
+    teleportToServer,
+    initGsiListeners,
+    fetchGsiStatus,
+    sendTestGsiPing
   }
 })
+

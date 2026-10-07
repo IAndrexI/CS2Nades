@@ -1854,29 +1854,209 @@ app.post('/api/cs2/push-lineup', async (req, res) => {
 // ==========================================
 // CS2 GAME STATE INTEGRATION (GSI) & LIVE INGESTION
 // ==========================================
-app.post('/api/cs2/gsi', express.json(), (req, res) => {
+let latestGsiTelemetry = {
+  active: false,
+  timestamp: 0,
+  map: {
+    name: 'mirage',
+    rawName: 'de_mirage',
+    phase: 'live',
+    round: 1,
+    ctScore: 0,
+    tScore: 0
+  },
+  player: {
+    name: 'CS2 Player',
+    steamid: '',
+    team: 'T',
+    health: 100,
+    armor: 100,
+    hasHelmet: true,
+    money: 16000,
+    weapon: 'weapon_smokegrenade',
+    activity: 'playing',
+    position: { x: -1050, y: -450, z: -160 },
+    angles: { pitch: -15, yaw: 90, roll: 0 },
+    radarCoords: { x: 42.5, y: 72.8 }
+  }
+}
+let lastGsiPacketTime = 0
+
+app.post('/api/cs2/gsi', express.json({ limit: '10mb' }), (req, res) => {
   const payload = req.body
-  if (payload && payload.player && payload.player.position) {
-    const posParts = payload.player.position.split(',').map(s => parseFloat(s.trim()))
-    const fwdParts = payload.player.forward ? payload.player.forward.split(',').map(s => parseFloat(s.trim())) : [0, 0, 0]
-    const mapName = payload.map?.name ? payload.map.name.replace('de_', '').replace('cs_', '') : 'mirage'
-    
-    const liveData = {
-      x: posParts[0] || 0,
-      y: posParts[1] || 0,
-      z: posParts[2] || 0,
-      pitch: fwdParts[0] || 0,
-      yaw: fwdParts[1] || 0,
-      mapName,
-      playerName: payload.player.name || 'Player',
-      team: payload.player.team || 'CT',
-      timestamp: Date.now()
+  if (!payload || typeof payload !== 'object') {
+    return res.sendStatus(200)
+  }
+
+  try {
+    lastGsiPacketTime = Date.now()
+    const rawMap = payload.map?.name || latestGsiTelemetry.map.rawName || 'de_mirage'
+    const cleanMap = rawMap.replace('de_', '').replace('cs_', '').toLowerCase()
+
+    let pName = payload.player?.name || latestGsiTelemetry.player.name
+    let pTeam = payload.player?.team || latestGsiTelemetry.player.team
+    let pHealth = payload.player?.state?.health !== undefined ? payload.player.state.health : latestGsiTelemetry.player.health
+    let pArmor = payload.player?.state?.armor !== undefined ? payload.player.state.armor : latestGsiTelemetry.player.armor
+    let pMoney = payload.player?.state?.money !== undefined ? payload.player.state.money : latestGsiTelemetry.player.money
+    let pHelmet = !!payload.player?.state?.helmet
+    let pActivity = payload.player?.activity || 'playing'
+
+    // Detect Active Weapon
+    let activeWeapon = 'weapon_knife'
+    if (payload.player?.weapons && typeof payload.player.weapons === 'object') {
+      const weaponsList = Object.values(payload.player.weapons)
+      const activeW = weaponsList.find((w) => w && w.state === 'active')
+      if (activeW && activeW.name) {
+        activeWeapon = activeW.name
+      } else if (weaponsList.length > 0 && weaponsList[0]?.name) {
+        activeWeapon = weaponsList[0].name
+      }
     }
 
-    io.emit('cs2:live-pos', liveData)
+    // Extract Position and Angles
+    let worldX = latestGsiTelemetry.player.position.x
+    let worldY = latestGsiTelemetry.player.position.y
+    let worldZ = latestGsiTelemetry.player.position.z
+    let pitch = latestGsiTelemetry.player.angles.pitch
+    let yaw = latestGsiTelemetry.player.angles.yaw
+    let roll = latestGsiTelemetry.player.angles.roll
+
+    // Check payload.player.position
+    if (payload.player?.position && typeof payload.player.position === 'string') {
+      const parts = payload.player.position.split(',').map(s => parseFloat(s.trim()))
+      if (parts.length >= 3 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        worldX = parts[0]
+        worldY = parts[1]
+        worldZ = parts[2] || 0
+      }
+    } else if (payload.allplayers && typeof payload.allplayers === 'object') {
+      // Fallback to allplayers
+      const mySteamId = payload.player?.steamid || payload.provider?.steamid
+      const matched = mySteamId ? payload.allplayers[mySteamId] : Object.values(payload.allplayers)[0]
+      if (matched && matched.position && typeof matched.position === 'string') {
+        const parts = matched.position.split(',').map(s => parseFloat(s.trim()))
+        if (parts.length >= 3 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          worldX = parts[0]
+          worldY = parts[1]
+          worldZ = parts[2] || 0
+        }
+        if (matched.name) pName = matched.name
+        if (matched.team) pTeam = matched.team
+      }
+    }
+
+    // Check payload.player.forward
+    if (payload.player?.forward && typeof payload.player.forward === 'string') {
+      const fwd = payload.player.forward.split(',').map(s => parseFloat(s.trim()))
+      if (fwd.length >= 2 && !isNaN(fwd[0]) && !isNaN(fwd[1])) {
+        pitch = fwd[0]
+        yaw = fwd[1]
+        roll = fwd[2] || 0
+      }
+    }
+
+    const radar = worldToRadarCoords(cleanMap, worldX, worldY)
+
+    latestGsiTelemetry = {
+      active: true,
+      timestamp: Date.now(),
+      map: {
+        name: cleanMap,
+        rawName: rawMap,
+        phase: payload.map?.phase || 'live',
+        round: payload.map?.round || 1,
+        ctScore: payload.map?.team_ct?.score || 0,
+        tScore: payload.map?.team_t?.score || 0
+      },
+      player: {
+        name: pName,
+        steamid: payload.player?.steamid || '',
+        team: pTeam,
+        health: pHealth,
+        armor: pArmor,
+        hasHelmet: pHelmet,
+        money: pMoney,
+        weapon: activeWeapon,
+        activity: pActivity,
+        position: { x: worldX, y: worldY, z: worldZ },
+        angles: { pitch, yaw, roll },
+        radarCoords: radar
+      },
+      provider: payload.provider || null
+    }
+
+    // Broadcast over Socket.IO to all open tabs and radars
+    io.emit('cs2:gsi-update', latestGsiTelemetry)
+    io.emit('cs2:live-pos', {
+      ...latestGsiTelemetry.player,
+      mapName: cleanMap,
+      timestamp: Date.now()
+    })
+  } catch (err) {
+    console.error('[GSI Ingestion Error]', err)
   }
+
   res.sendStatus(200)
 })
+
+// CS2 GSI Status Query
+app.get('/api/cs2/gsi/status', (req, res) => {
+  const isCurrentlyActive = lastGsiPacketTime > 0 && (Date.now() - lastGsiPacketTime < 35000)
+  res.json({
+    active: isCurrentlyActive,
+    lastPacketSecondsAgo: lastGsiPacketTime > 0 ? Math.round((Date.now() - lastGsiPacketTime) / 1000) : null,
+    lastPacketTime: lastGsiPacketTime || null,
+    telemetry: latestGsiTelemetry
+  })
+})
+
+// CS2 GSI Test Simulation Ping (Allows UI to verify integration without launching game)
+app.post('/api/cs2/gsi/test-ping', (req, res) => {
+  lastGsiPacketTime = Date.now()
+  const mapName = req.body.mapId || 'mirage'
+  
+  latestGsiTelemetry = {
+    active: true,
+    timestamp: Date.now(),
+    map: {
+      name: mapName,
+      rawName: `de_${mapName}`,
+      phase: 'live',
+      round: 3,
+      ctScore: 2,
+      tScore: 1
+    },
+    player: {
+      name: req.body.playerName || 'Practice Player',
+      steamid: '76561198000000000',
+      team: 'T',
+      health: 100,
+      armor: 100,
+      hasHelmet: true,
+      money: 16000,
+      weapon: 'weapon_smokegrenade',
+      activity: 'playing',
+      position: { x: -1050, y: -450, z: -160 },
+      angles: { pitch: -12.5, yaw: 88.0, roll: 0 },
+      radarCoords: worldToRadarCoords(mapName, -1050, -450)
+    },
+    provider: { name: 'Counter-Strike 2 GSI Test Ping', appid: 730 }
+  }
+
+  io.emit('cs2:gsi-update', latestGsiTelemetry)
+  io.emit('cs2:live-pos', {
+    ...latestGsiTelemetry.player,
+    mapName,
+    timestamp: Date.now()
+  })
+
+  res.json({
+    success: true,
+    simulated: true,
+    telemetry: latestGsiTelemetry
+  })
+})
+
 
 app.post('/api/users/:id/follow', requireAuth, (req, res) => {
   db = loadDB()

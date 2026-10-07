@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
+import { useCs2ServerStore } from '../../stores/cs2ServerStore'
 import VectorMapBlueprint from './VectorMapBlueprint.vue'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup, GrenadeType } from '../../types'
@@ -25,14 +26,26 @@ import {
   Users,
   PlusCircle,
   Tag,
-  CheckCircle2
+  CheckCircle2,
+  Radio,
+  Zap
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
 const lineupStore = useLineupStore()
+const cs2ServerStore = useCs2ServerStore()
+
+const liveGsiPlayerOnCurrentMap = computed(() => {
+  if (!cs2ServerStore.isGsiActive || !cs2ServerStore.livePlayer) return null
+  const currentMap = mapStore.currentMapId.toLowerCase().replace('de_', '').replace('cs_', '')
+  const playerMap = (cs2ServerStore.livePlayer.mapName || '').toLowerCase().replace('de_', '').replace('cs_', '')
+  if (playerMap && playerMap !== currentMap) return null
+  return cs2ServerStore.livePlayer
+})
 
 const mapContainer = ref<HTMLDivElement | null>(null)
 const svgElement = ref<SVGSVGElement | null>(null)
+
 
 // Pan & Zoom state
 const isDragging = ref(false)
@@ -650,8 +663,105 @@ onUnmounted(() => {
               </g>
             </g>
           </g>
+
+          <!-- LAYER 6: CS2 LIVE GSI IN-GAME PLAYER POSITION & DIRECTION -->
+          <g v-if="liveGsiPlayerOnCurrentMap && liveGsiPlayerOnCurrentMap.radarCoords" class="cs2-gsi-live-player-layer">
+            <g :transform="getPinTransform(liveGsiPlayerOnCurrentMap.radarCoords)">
+              <!-- PULSING RADAR RING -->
+              <circle 
+                cx="0" 
+                cy="0" 
+                r="22" 
+                fill="none" 
+                :stroke="liveGsiPlayerOnCurrentMap.team === 'T' ? '#f59e0b' : '#38bdf8'" 
+                stroke-width="2.5" 
+                opacity="0.8"
+                class="animate-ping" 
+                style="transform-origin: center; animation-duration: 2.2s;"
+                pointer-events="none"
+              />
+              
+              <!-- FORWARD VIEW CONE (ROTATED BY YAW) -->
+              <g :transform="`rotate(${- (liveGsiPlayerOnCurrentMap.yaw || 0)})`" pointer-events="none">
+                <polygon 
+                  points="0,-8 48,-26 48,26" 
+                  :fill="liveGsiPlayerOnCurrentMap.team === 'T' ? 'rgba(245, 158, 11, 0.28)' : 'rgba(56, 189, 248, 0.28)'" 
+                  :stroke="liveGsiPlayerOnCurrentMap.team === 'T' ? '#f59e0b' : '#38bdf8'" 
+                  stroke-width="1.4"
+                  stroke-dasharray="3 2"
+                />
+                <!-- DIRECTION ARROW -->
+                <line x1="0" y1="0" x2="36" y2="0" :stroke="liveGsiPlayerOnCurrentMap.team === 'T' ? '#fbbf24' : '#7dd3fc'" stroke-width="2.5" stroke-linecap="round" />
+              </g>
+
+              <!-- PLAYER CORE DOT (TEAM COLORED) -->
+              <circle 
+                cx="0" 
+                cy="0" 
+                r="10.5" 
+                :fill="liveGsiPlayerOnCurrentMap.team === 'T' ? '#d97706' : '#0284c7'" 
+                stroke="#ffffff" 
+                stroke-width="2.5" 
+                class="drop-shadow-lg"
+                pointer-events="none"
+              />
+
+              <!-- INNER BLIP -->
+              <circle cx="0" cy="0" r="3.5" fill="#ffffff" pointer-events="none" />
+
+              <!-- LIVE PLAYER TAG -->
+              <g transform="translate(0, -18)" pointer-events="none">
+                <rect 
+                  x="-50" 
+                  y="-16" 
+                  width="100" 
+                  height="16" 
+                  rx="8" 
+                  fill="#020617" 
+                  fill-opacity="0.95" 
+                  :stroke="liveGsiPlayerOnCurrentMap.team === 'T' ? '#f59e0b' : '#38bdf8'" 
+                  stroke-width="1.2"
+                />
+                <text 
+                  x="0" 
+                  y="-5" 
+                  font-size="9" 
+                  font-weight="bold" 
+                  fill="#ffffff" 
+                  text-anchor="middle"
+                  font-family="monospace"
+                >
+                  {{ liveGsiPlayerOnCurrentMap.playerName || 'CS2 Player' }} ({{ liveGsiPlayerOnCurrentMap.health || 100 }}HP)
+                </text>
+              </g>
+            </g>
+          </g>
         </svg>
       </div>
+
+      <!-- LIVE GSI BOTTOM STATUS OVERLAY -->
+      <div 
+        v-if="cs2ServerStore.isGsiActive && cs2ServerStore.livePlayer" 
+        class="absolute bottom-3 left-3 z-30 flex items-center gap-2.5 bg-slate-950/90 border border-emerald-500/50 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-2xl animate-fade-in"
+      >
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+        <div class="flex flex-col">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] font-mono font-black uppercase text-emerald-400 flex items-center gap-1">
+              <Radio class="w-3 h-3" />
+              GSI Live Sync
+            </span>
+            <span class="text-[10px] font-bold text-white">{{ cs2ServerStore.livePlayer.playerName || 'CS2 Player' }}</span>
+            <span v-if="cs2ServerStore.livePlayer.weapon" class="text-[9px] px-1.5 py-0.2 bg-slate-800 text-amber-300 rounded font-mono font-bold">
+              {{ cs2ServerStore.livePlayer.weapon.replace('weapon_', '') }}
+            </span>
+          </div>
+          <span class="text-[9px] font-mono text-slate-400">
+            {{ cs2ServerStore.livePlayer.mapName?.toUpperCase() }} | Pos: X: {{ cs2ServerStore.livePlayer.x?.toFixed(0) }}, Y: {{ cs2ServerStore.livePlayer.y?.toFixed(0) }} ({{ cs2ServerStore.livePlayer.radarCoords?.x }}%, {{ cs2ServerStore.livePlayer.radarCoords?.y }}%)
+          </span>
+        </div>
+      </div>
+
 
       <!-- RIGHT-CLICK CONTEXT MENU -->
       <div 
