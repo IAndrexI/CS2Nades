@@ -338,6 +338,73 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
 
 
   /**
+   * Capture a single high-resolution screenshot frame directly from the user's CS2 game window
+   */
+  async function captureScreenFrame(): Promise<string | null> {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert('Screen capture API is not supported in this browser environment.')
+        return null
+      }
+
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          displaySurface: 'window',
+          cursor: 'always'
+        } as any,
+        audio: false
+      })
+
+      const video = document.createElement('video')
+      video.srcObject = stream
+      video.muted = true
+      await video.play()
+
+      // Allow a moment for frame decoding
+      await new Promise((r) => setTimeout(r, 150))
+
+      const canvas = document.createElement('canvas')
+      canvas.width = video.videoWidth || 1920
+      canvas.height = video.videoHeight || 1080
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      }
+
+      // Stop stream tracks immediately
+      stream.getTracks().forEach((track) => track.stop())
+
+      return canvas.toDataURL('image/jpeg', 0.92)
+    } catch (err: any) {
+      if (err.name !== 'NotAllowedError') {
+        console.warn('Screen capture cancelled or failed:', err)
+      }
+      return null
+    }
+  }
+
+  /**
+   * 1-Click Auto-Insert Full Lineup from CS2 with Optional Live Screen Snap
+   */
+  async function autoInsertFullLineup(options: {
+    captureSnap?: boolean
+    snapType?: 'aim' | 'standing' | 'landing'
+    customTitle?: string
+  } = {}): Promise<Lineup | null> {
+    let snapData: string | null = null
+    if (options.captureSnap) {
+      snapData = await captureScreenFrame()
+    }
+
+    const lineup = await autoCaptureLineup(options.customTitle)
+    if (lineup && snapData) {
+      const type = options.snapType || 'aim'
+      await uploadAndAttachScreenshot(snapData, type, lineup.id)
+    }
+    return lineup
+  }
+
+  /**
    * Auto-Upload and Attach In-Game Screenshot to a Lineup
    */
   async function uploadAndAttachScreenshot(
@@ -497,6 +564,8 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
     saveConfig,
     testConnection,
     autoCaptureLineup,
+    captureScreenFrame,
+    autoInsertFullLineup,
     uploadAndAttachScreenshot,
     uploadAndAttachVideo,
     teleportToServer,

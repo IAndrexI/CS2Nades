@@ -15,12 +15,17 @@ export const MAP_OVERVIEW_CONFIGS: Record<string, MapOverviewConfig> = {
   dust2: { pos_x: -2476, pos_y: 3239, scale: 4.40 },
   inferno: { pos_x: -2087, pos_y: 3870, scale: 4.90 },
   nuke: { pos_x: -3453, pos_y: 2887, scale: 7.00 },
-  ancient: { pos_x: -2953, pos_y: 2164, scale: 4.50 },
+  ancient: { pos_x: -2953, pos_y: 2164, scale: 5.00 },
   anubis: { pos_x: -2796, pos_y: 3328, scale: 5.22 },
   vertigo: { pos_x: -3168, pos_y: 1762, scale: 4.00 },
-  overpass: { pos_x: -4820, pos_y: 1781, scale: 5.20 },
-  train: { pos_x: -2477, pos_y: 2392, scale: 4.70 },
-  cache: { pos_x: -2000, pos_y: 3250, scale: 5.50 }
+  overpass: { pos_x: -4831, pos_y: 1781, scale: 5.20 },
+  train: { pos_x: -2477, pos_y: 2554, scale: 4.70 },
+  office: { pos_x: -1838, pos_y: 1858, scale: 4.10 },
+  italy: { pos_x: -2647, pos_y: 2592, scale: 4.60 },
+  cache: { pos_x: -2000, pos_y: 3250, scale: 5.50 },
+  boulder: { pos_x: -3000, pos_y: 3000, scale: 5.00 },
+  fachwerk: { pos_x: -2500, pos_y: 2500, scale: 5.00 },
+  shelter: { pos_x: -3000, pos_y: 3000, scale: 5.00 }
 }
 
 export interface ParsedCS2Pos {

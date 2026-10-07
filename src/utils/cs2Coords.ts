@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Official CS2 Overview Map Coordinate Calibration Data
  * Maps world coordinates (Hammer units) <-> Radar Percentage (0-100%)
  */
@@ -15,7 +15,7 @@ export const CS2_MAP_CALIBRATION: Record<string, MapOverviewCalibration> = {
   inferno: { pos_x: -2087, pos_y: 3870, scale: 4.9, defaultZ: 128 },
   cache: { pos_x: -2000, pos_y: 3250, scale: 5.5, defaultZ: 0 },
   ancient: { pos_x: -2953, pos_y: 2164, scale: 5.0, defaultZ: 100 },
-  nuke: { pos_x: -3453, pos_y: 2887, scale: 6.2, defaultZ: -380 },
+  nuke: { pos_x: -3453, pos_y: 2887, scale: 7.0, defaultZ: -380 },
   anubis: { pos_x: -2796, pos_y: 3328, scale: 5.22, defaultZ: 50 },
   overpass: { pos_x: -4831, pos_y: 1781, scale: 5.2, defaultZ: 250 },
   vertigo: { pos_x: -3168, pos_y: 1762, scale: 4.0, defaultZ: 11700 },
@@ -31,7 +31,8 @@ export const CS2_MAP_CALIBRATION: Record<string, MapOverviewCalibration> = {
  * Convert Radar percentage coords (0-100) to CS2 in-game world coordinates
  */
 export function pctToWorldCoords(mapId: string, coords: { x: number; y: number }, z?: number) {
-  const calib = CS2_MAP_CALIBRATION[mapId] || { pos_x: -3000, pos_y: 3000, scale: 5.0, defaultZ: 0 }
+  const cleanMap = (mapId || 'mirage').toLowerCase().replace('de_', '').replace('cs_', '')
+  const calib = CS2_MAP_CALIBRATION[cleanMap] || CS2_MAP_CALIBRATION.mirage
   const totalWorldSpan = 1024 * calib.scale
   
   const worldX = Math.round(calib.pos_x + (coords.x / 100) * totalWorldSpan)
@@ -45,7 +46,8 @@ export function pctToWorldCoords(mapId: string, coords: { x: number; y: number }
  * Convert CS2 in-game world coordinates (from getpos or GSI) to Radar percentage coords (0-100)
  */
 export function worldToPctCoords(mapId: string, world: { x: number; y: number }) {
-  const calib = CS2_MAP_CALIBRATION[mapId] || { pos_x: -3000, pos_y: 3000, scale: 5.0, defaultZ: 0 }
+  const cleanMap = (mapId || 'mirage').toLowerCase().replace('de_', '').replace('cs_', '')
+  const calib = CS2_MAP_CALIBRATION[cleanMap] || CS2_MAP_CALIBRATION.mirage
   const totalWorldSpan = 1024 * calib.scale
 
   const pctX = ((world.x - calib.pos_x) / totalWorldSpan) * 100

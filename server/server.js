@@ -1426,8 +1426,13 @@ const CS2_RADAR_CONFIGS = {
   ancient: { pos_x: -2953, pos_y: 2164, scale: 5.00 },
   vertigo: { pos_x: -3168, pos_y: 1762, scale: 4.00 },
   overpass: { pos_x: -4831, pos_y: 1781, scale: 5.20 },
+  train: { pos_x: -2477, pos_y: 2554, scale: 4.70 },
   office: { pos_x: -1838, pos_y: 1858, scale: 4.10 },
-  italy: { pos_x: -2647, pos_y: 2592, scale: 4.60 }
+  italy: { pos_x: -2647, pos_y: 2592, scale: 4.60 },
+  cache: { pos_x: -2000, pos_y: 3250, scale: 5.50 },
+  boulder: { pos_x: -3000, pos_y: 3000, scale: 5.00 },
+  fachwerk: { pos_x: -2500, pos_y: 2500, scale: 5.00 },
+  shelter: { pos_x: -3000, pos_y: 3000, scale: 5.00 }
 }
 
 function worldToRadarCoords(mapName, worldX, worldY) {

@@ -7,6 +7,7 @@ import VectorMapBlueprint from './VectorMapBlueprint.vue'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup, GrenadeType } from '../../types'
 import { clientToPct, pctToSvg, trajectoryPath } from '../../utils/radarCoords'
+import { worldToRadarCoords } from '../../utils/coordinateMapper'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
 import { 
   ZoomIn, 
@@ -28,7 +29,9 @@ import {
   Tag,
   CheckCircle2,
   Radio,
-  Zap
+  Zap,
+  Camera,
+  RefreshCw
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -40,7 +43,16 @@ const liveGsiPlayerOnCurrentMap = computed(() => {
   const currentMap = mapStore.currentMapId.toLowerCase().replace('de_', '').replace('cs_', '')
   const playerMap = (cs2ServerStore.livePlayer.mapName || '').toLowerCase().replace('de_', '').replace('cs_', '')
   if (playerMap && playerMap !== currentMap) return null
-  return cs2ServerStore.livePlayer
+  
+  const p = cs2ServerStore.livePlayer
+  const radar = (p.x !== undefined && p.y !== undefined)
+    ? worldToRadarCoords(p.x, p.y, currentMap)
+    : (p.radarCoords || { x: 50, y: 50 })
+
+  return {
+    ...p,
+    radarCoords: radar
+  }
 })
 
 const mapContainer = ref<HTMLDivElement | null>(null)
@@ -435,13 +447,22 @@ function handleBackgroundMapClick() {
   contextMenuVisible.value = false
 }
 
+let gsiPollInterval: any = null
+
 onMounted(() => {
   window.addEventListener('mouseup', handleMouseUp)
+  cs2ServerStore.initGsiListeners()
+  cs2ServerStore.fetchGsiStatus()
+
+  gsiPollInterval = setInterval(() => {
+    cs2ServerStore.fetchGsiStatus()
+  }, 4000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('mouseup', handleMouseUp)
   if (hoverLeaveTimeout) clearTimeout(hoverLeaveTimeout)
+  if (gsiPollInterval) clearInterval(gsiPollInterval)
 })
 </script>
 
@@ -739,10 +760,10 @@ onUnmounted(() => {
         </svg>
       </div>
 
-      <!-- LIVE GSI BOTTOM STATUS OVERLAY -->
+      <!-- LIVE GSI BOTTOM STATUS OVERLAY WITH 1-CLICK AUTO-INSERT -->
       <div 
         v-if="cs2ServerStore.isGsiActive && cs2ServerStore.livePlayer" 
-        class="absolute bottom-3 left-3 z-30 flex items-center gap-2.5 bg-slate-950/90 border border-emerald-500/50 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-2xl animate-fade-in"
+        class="absolute bottom-3 left-3 z-30 flex flex-wrap items-center gap-2.5 bg-slate-950/95 border border-emerald-500/60 backdrop-blur-md px-3 py-2 rounded-xl shadow-2xl animate-fade-in"
       >
         <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
         <div class="flex flex-col">
@@ -757,8 +778,31 @@ onUnmounted(() => {
             </span>
           </div>
           <span class="text-[9px] font-mono text-slate-400">
-            {{ cs2ServerStore.livePlayer.mapName?.toUpperCase() }} | Pos: X: {{ cs2ServerStore.livePlayer.x?.toFixed(0) }}, Y: {{ cs2ServerStore.livePlayer.y?.toFixed(0) }} ({{ cs2ServerStore.livePlayer.radarCoords?.x }}%, {{ cs2ServerStore.livePlayer.radarCoords?.y }}%)
+            {{ cs2ServerStore.livePlayer.mapName?.toUpperCase() }} | X: {{ cs2ServerStore.livePlayer.x?.toFixed(0) }}, Y: {{ cs2ServerStore.livePlayer.y?.toFixed(0) }} ({{ cs2ServerStore.livePlayer.radarCoords?.x }}%, {{ cs2ServerStore.livePlayer.radarCoords?.y }}%)
           </span>
+        </div>
+
+        <div class="flex items-center gap-1.5 ml-2 border-l border-slate-800 pl-2">
+          <button
+            @click="cs2ServerStore.autoInsertFullLineup()"
+            :disabled="cs2ServerStore.isCapturing"
+            class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            title="Auto-insert lineup from your current CS2 player position & view angles"
+          >
+            <RefreshCw v-if="cs2ServerStore.isCapturing" class="w-3 h-3 animate-spin" />
+            <Zap v-else class="w-3 h-3 fill-current" />
+            <span>Auto-Insert</span>
+          </button>
+
+          <button
+            @click="cs2ServerStore.autoInsertFullLineup({ captureSnap: true })"
+            :disabled="cs2ServerStore.isCapturing"
+            class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/40 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            title="Capture CS2 Game Window screenshot and auto-insert lineup"
+          >
+            <Camera class="w-3 h-3 text-amber-400" />
+            <span>+ Screen Snap</span>
+          </button>
         </div>
       </div>
 

@@ -20,7 +20,8 @@ import {
   MapPin,
   Clipboard,
   Server,
-  RefreshCw
+  RefreshCw,
+  Camera
 } from 'lucide-vue-next'
 
 const lineupStore = useLineupStore()
@@ -149,7 +150,20 @@ async function handlePasteClipboard() {
 
 async function handleServerAutoCapture() {
   const customTitle = inputText.value.trim() || undefined
-  const captured = await cs2ServerStore.autoCaptureLineup(customTitle)
+  const captured = await cs2ServerStore.autoInsertFullLineup({ customTitle })
+  if (captured) {
+    lastAddedTitle.value = captured.title
+    inputText.value = ''
+    if (successTimer.value) clearTimeout(successTimer.value)
+    successTimer.value = setTimeout(() => {
+      lastAddedTitle.value = null
+    }, 4000)
+  }
+}
+
+async function handleAutoInsertWithSnap() {
+  const customTitle = inputText.value.trim() || undefined
+  const captured = await cs2ServerStore.autoInsertFullLineup({ captureSnap: true, customTitle })
   if (captured) {
     lastAddedTitle.value = captured.title
     inputText.value = ''
@@ -179,7 +193,7 @@ function handleOpenFullModal() {
             <span>⚡ Quick-Add Lineup</span>
             <span class="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-mono font-bold">1-Type / 1-Push</span>
           </span>
-          <span class="text-[10px] text-slate-400">Type nade name, paste setpos, or click a preset below:</span>
+          <span class="text-[10px] text-slate-400">Type nade name, paste setpos, or 1-click auto-insert from CS2:</span>
         </div>
       </div>
 
@@ -214,17 +228,12 @@ function handleOpenFullModal() {
       </div>
 
       <!-- BUTTONS GROUP -->
-      <div class="flex items-center gap-1.5 shrink-0">
-        <!-- 1-CLICK INSTANT ADD ACTION BUTTON -->
+      <div class="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap">
+        <!-- 1-CLICK INSTANT ADD ACTION BUTTON (IF TYPING) -->
         <button
+          v-if="parsedDraft"
           @click="handleInstantAdd"
-          :disabled="!parsedDraft"
-          :class="[
-            'px-3.5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer',
-            parsedDraft 
-              ? 'bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 hover:scale-[1.02] active:scale-95 shadow-amber-500/25 ring-2 ring-amber-400/50' 
-              : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/60'
-          ]"
+          class="px-3.5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 hover:scale-[1.02] active:scale-95 shadow-amber-500/25 ring-2 ring-amber-400/50"
         >
           <Plus class="w-4 h-4 stroke-[3]" />
           <span>Push to Add</span>
@@ -234,12 +243,23 @@ function handleOpenFullModal() {
         <button
           @click="handleServerAutoCapture"
           :disabled="cs2ServerStore.isCapturing"
-          class="px-3.5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer bg-slate-950 hover:bg-slate-850 text-amber-400 border border-amber-500/50 hover:border-amber-400 hover:scale-[1.02] active:scale-95"
-          title="Auto-capture current position & angles from your private CS2 practice server"
+          class="px-3 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer bg-slate-950 hover:bg-slate-850 text-amber-400 border border-amber-500/50 hover:border-amber-400 hover:scale-[1.02] active:scale-95"
+          title="Auto-capture current position & angles from CS2 / Live GSI"
         >
           <RefreshCw v-if="cs2ServerStore.isCapturing" class="w-3.5 h-3.5 animate-spin" />
-          <Server v-else class="w-3.5 h-3.5 text-amber-400" />
-          <span class="hidden sm:inline">Sync Server</span>
+          <Zap v-else class="w-3.5 h-3.5 fill-current text-amber-400" />
+          <span>Auto-Insert</span>
+        </button>
+
+        <!-- 1-CLICK CS2 SNAP & INSERT -->
+        <button
+          @click="handleAutoInsertWithSnap"
+          :disabled="cs2ServerStore.isCapturing"
+          class="px-3 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer bg-amber-500 hover:bg-amber-400 text-slate-950 hover:scale-[1.02] active:scale-95 shadow-amber-500/20"
+          title="Grab screen frame from CS2 window and auto-insert lineup"
+        >
+          <Camera class="w-3.5 h-3.5 text-slate-950" />
+          <span>+ Snap</span>
         </button>
       </div>
     </div>
