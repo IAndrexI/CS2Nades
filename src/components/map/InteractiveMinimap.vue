@@ -773,6 +773,14 @@ onUnmounted(() => {
               GSI Live Sync
             </span>
             <span class="text-[10px] font-bold text-white">{{ cs2ServerStore.livePlayer.playerName || 'CS2 Player' }}</span>
+            <span 
+              :class="[
+                'text-[9px] px-1.5 py-0.2 rounded font-mono font-black uppercase border',
+                cs2ServerStore.livePlayer.team === 'CT' ? 'bg-sky-500/20 text-sky-400 border-sky-500/40' : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+              ]"
+            >
+              {{ cs2ServerStore.livePlayer.team || 'T' }}
+            </span>
             <span v-if="cs2ServerStore.livePlayer.weapon" class="text-[9px] px-1.5 py-0.2 bg-slate-800 text-amber-300 rounded font-mono font-bold">
               {{ cs2ServerStore.livePlayer.weapon.replace('weapon_', '') }}
             </span>

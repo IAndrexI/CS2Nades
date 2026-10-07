@@ -1886,9 +1886,18 @@ onUnmounted(() => {
 
                 <div class="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col gap-1">
                   <span class="text-[10px] text-slate-400 font-bold uppercase">Player / Team:</span>
-                  <span class="text-xs font-mono font-bold text-white truncate">
-                    {{ cs2ServerStore.livePlayer?.playerName || 'Not in Match' }} 
-                    <span v-if="cs2ServerStore.livePlayer?.team" class="text-amber-400">({{ cs2ServerStore.livePlayer.team }})</span>
+                  <span class="text-xs font-mono font-bold text-white flex items-center gap-1.5 truncate">
+                    <span>{{ cs2ServerStore.livePlayer?.playerName || 'CS2 Player' }}</span>
+                    <span 
+                      :class="[
+                        'px-1.5 py-0.2 rounded text-[10px] font-black uppercase font-mono border',
+                        cs2ServerStore.livePlayer?.team === 'CT' 
+                          ? 'bg-sky-500/20 text-sky-400 border-sky-500/40' 
+                          : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                      ]"
+                    >
+                      {{ cs2ServerStore.livePlayer?.team || 'T' }}
+                    </span>
                   </span>
                 </div>
 

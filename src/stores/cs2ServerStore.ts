@@ -93,6 +93,34 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
     return path
   }
 
+  function normalizePlayerState(rawPlayer: any, mapName = 'mirage'): LivePlayerState {
+    const x = rawPlayer.x !== undefined ? Number(rawPlayer.x) : (rawPlayer.position?.x !== undefined ? Number(rawPlayer.position.x) : 0)
+    const y = rawPlayer.y !== undefined ? Number(rawPlayer.y) : (rawPlayer.position?.y !== undefined ? Number(rawPlayer.position.y) : 0)
+    const z = rawPlayer.z !== undefined ? Number(rawPlayer.z) : (rawPlayer.position?.z !== undefined ? Number(rawPlayer.position.z) : 0)
+    const pitch = rawPlayer.pitch !== undefined ? Number(rawPlayer.pitch) : (rawPlayer.angles?.pitch !== undefined ? Number(rawPlayer.angles.pitch) : 0)
+    const yaw = rawPlayer.yaw !== undefined ? Number(rawPlayer.yaw) : (rawPlayer.angles?.yaw !== undefined ? Number(rawPlayer.angles.yaw) : 0)
+    const roll = rawPlayer.roll !== undefined ? Number(rawPlayer.roll) : (rawPlayer.angles?.roll !== undefined ? Number(rawPlayer.angles.roll) : 0)
+
+    const cleanMap = (mapName || 'mirage').toLowerCase().replace('de_', '').replace('cs_', '')
+    const radar = (x !== 0 || y !== 0) ? worldToRadarCoords(x, y, cleanMap) : (rawPlayer.radarCoords || { x: 50, y: 50 })
+
+    return {
+      ...rawPlayer,
+      playerName: rawPlayer.playerName || rawPlayer.name || 'CS2 Player',
+      team: rawPlayer.team || 'T',
+      weapon: rawPlayer.weapon || 'weapon_knife',
+      x,
+      y,
+      z,
+      pitch,
+      yaw,
+      roll,
+      mapName: cleanMap,
+      radarCoords: radar,
+      timestamp: Date.now()
+    }
+  }
+
   /**
    * Listen to real-time GSI telemetry via Socket.IO
    */
@@ -107,11 +135,7 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
       lastGsiPacketTime.value = Date.now()
       gsiTelemetry.value = data
       if (data && data.player) {
-        livePlayer.value = {
-          ...data.player,
-          mapName: data.map?.name || 'mirage',
-          timestamp: Date.now()
-        }
+        livePlayer.value = normalizePlayerState(data.player, data.map?.name || 'mirage')
       }
 
       // Auto-sync map with active CS2 match if enabled
@@ -128,10 +152,7 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
 
     socket.on('cs2:live-pos', (playerData: any) => {
       lastGsiPacketTime.value = Date.now()
-      livePlayer.value = {
-        ...playerData,
-        timestamp: Date.now()
-      }
+      livePlayer.value = normalizePlayerState(playerData, playerData?.mapName || 'mirage')
     })
   }
 
@@ -148,11 +169,7 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
         if (res.data.telemetry) {
           gsiTelemetry.value = res.data.telemetry
           if (res.data.telemetry.player) {
-            livePlayer.value = {
-              ...res.data.telemetry.player,
-              mapName: res.data.telemetry.map?.name || 'mirage',
-              timestamp: Date.now()
-            }
+            livePlayer.value = normalizePlayerState(res.data.telemetry.player, res.data.telemetry.map?.name || 'mirage')
           }
         }
       }
@@ -172,11 +189,7 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
         lastGsiPacketTime.value = Date.now()
         gsiTelemetry.value = res.data.telemetry
         if (res.data.telemetry.player) {
-          livePlayer.value = {
-            ...res.data.telemetry.player,
-            mapName: res.data.telemetry.map?.name || mapId,
-            timestamp: Date.now()
-          }
+          livePlayer.value = normalizePlayerState(res.data.telemetry.player, res.data.telemetry.map?.name || mapId)
         }
         return true
       }

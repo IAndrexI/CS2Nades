@@ -1919,9 +1919,94 @@ app.post('/api/cs2/push-lineup', async (req, res) => {
   }
 })
 
-// ==========================================
-// CS2 GAME STATE INTEGRATION (GSI) & LIVE INGESTION
-// ==========================================
+// Helper: Robust Vector3 Parser (Supports 'x, y, z', 'x y z', arrays, and objects)
+function parseVector3(val) {
+  if (!val) return null
+  if (typeof val === 'object') {
+    if (Array.isArray(val) && val.length >= 2) {
+      return { x: Number(val[0]), y: Number(val[1]), z: Number(val[2] || 0) }
+    }
+    if (val.x !== undefined && val.y !== undefined) {
+      return { x: Number(val.x), y: Number(val.y), z: Number(val.z || 0) }
+    }
+  }
+  if (typeof val === 'string') {
+    const nums = val.replace(/[,;]/g, ' ').match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g)
+    if (nums && nums.length >= 2) {
+      return {
+        x: parseFloat(nums[0]),
+        y: parseFloat(nums[1]),
+        z: nums.length >= 3 ? parseFloat(nums[2]) : 0
+      }
+    }
+  }
+  return null
+}
+
+// Helper: Direction Vector or Pitch/Yaw Parser
+function parseForwardOrAngles(forwardVal, anglesVal) {
+  const ang = parseVector3(anglesVal)
+  if (ang) {
+    return { pitch: ang.x, yaw: ang.y, roll: ang.z }
+  }
+
+  const fwd = parseVector3(forwardVal)
+  if (fwd) {
+    // If fwd is a normalized direction vector (-1.0 to 1.0)
+    if (Math.abs(fwd.x) <= 1.05 && Math.abs(fwd.y) <= 1.05 && Math.abs(fwd.z) <= 1.05 && (fwd.x !== 0 || fwd.y !== 0)) {
+      const yaw = Number(((Math.atan2(fwd.y, fwd.x) * 180) / Math.PI).toFixed(2))
+      const horizDist = Math.sqrt(fwd.x * fwd.x + fwd.y * fwd.y)
+      const pitch = Number(((-Math.atan2(fwd.z, horizDist) * 180) / Math.PI).toFixed(2))
+      return { pitch, yaw, roll: 0 }
+    } else {
+      return { pitch: fwd.x, yaw: fwd.y, roll: fwd.z }
+    }
+  }
+
+  return null
+}
+
+// Helper: Resolve Team (Handles direct, allplayers, weapon inference)
+function resolveTeam(playerObj, allPlayersObj, providerSteamId, activeWeapon) {
+  if (playerObj?.team) {
+    const t = String(playerObj.team).trim().toUpperCase()
+    if (t === 'T' || t === 'TERRORIST' || t === 'TERRORISTS') return 'T'
+    if (t === 'CT' || t === 'COUNTER-TERRORIST' || t === 'COUNTERTERRORIST' || t === 'CTS') return 'CT'
+  }
+
+  if (allPlayersObj && typeof allPlayersObj === 'object') {
+    const targetSteamId = playerObj?.steamid || providerSteamId
+    if (targetSteamId && allPlayersObj[targetSteamId]?.team) {
+      const t = String(allPlayersObj[targetSteamId].team).trim().toUpperCase()
+      if (t === 'T' || t === 'TERRORIST') return 'T'
+      if (t === 'CT' || t === 'COUNTERTERRORIST') return 'CT'
+    }
+    for (const p of Object.values(allPlayersObj)) {
+      if (p && p.team) {
+        const t = String(p.team).trim().toUpperCase()
+        if (t === 'T' || t === 'TERRORIST') return 'T'
+        if (t === 'CT' || t === 'COUNTERTERRORIST') return 'CT'
+      }
+    }
+  }
+
+  if (activeWeapon) {
+    const w = activeWeapon.toLowerCase()
+    if (w.includes('ak47') || w.includes('knife_t') || w.includes('glock') || w.includes('galil') || w.includes('molotov') || w.includes('c4') || w.includes('sg556') || w.includes('tec9')) {
+      return 'T'
+    }
+    if (w.includes('m4a1') || w.includes('m4a4') || w.includes('usp') || w.includes('famas') || w.includes('incgrenade') || w.includes('hkp2000') || w.includes('aug') || w.includes('knife_ct') || w.includes('fiveseven')) {
+      return 'CT'
+    }
+  }
+
+  if (playerObj?.state?.defusekit) {
+    return 'CT'
+  }
+
+  return 'T'
+}
+
 let latestGsiTelemetry = {
   active: false,
   timestamp: 0,
@@ -1935,6 +2020,7 @@ let latestGsiTelemetry = {
   },
   player: {
     name: 'CS2 Player',
+    playerName: 'CS2 Player',
     steamid: '',
     team: 'T',
     health: 100,
@@ -1943,6 +2029,12 @@ let latestGsiTelemetry = {
     money: 16000,
     weapon: 'weapon_smokegrenade',
     activity: 'playing',
+    x: -1050,
+    y: -450,
+    z: -160,
+    pitch: -15,
+    yaw: 90,
+    roll: 0,
     position: { x: -1050, y: -450, z: -160 },
     angles: { pitch: -15, yaw: 90, roll: 0 },
     radarCoords: { x: 42.5, y: 72.8 }
@@ -1962,7 +2054,6 @@ app.post('/api/cs2/gsi', express.json({ limit: '10mb' }), (req, res) => {
     const cleanMap = rawMap.replace('de_', '').replace('cs_', '').toLowerCase()
 
     let pName = payload.player?.name || latestGsiTelemetry.player.name
-    let pTeam = payload.player?.team || latestGsiTelemetry.player.team
     let pHealth = payload.player?.state?.health !== undefined ? payload.player.state.health : latestGsiTelemetry.player.health
     let pArmor = payload.player?.state?.armor !== undefined ? payload.player.state.armor : latestGsiTelemetry.player.armor
     let pMoney = payload.player?.state?.money !== undefined ? payload.player.state.money : latestGsiTelemetry.player.money
@@ -1981,45 +2072,59 @@ app.post('/api/cs2/gsi', express.json({ limit: '10mb' }), (req, res) => {
       }
     }
 
-    // Extract Position and Angles
-    let worldX = latestGsiTelemetry.player.position.x
-    let worldY = latestGsiTelemetry.player.position.y
-    let worldZ = latestGsiTelemetry.player.position.z
-    let pitch = latestGsiTelemetry.player.angles.pitch
-    let yaw = latestGsiTelemetry.player.angles.yaw
-    let roll = latestGsiTelemetry.player.angles.roll
+    // Resolve Team Side
+    const pTeam = resolveTeam(payload.player, payload.allplayers, payload.provider?.steamid, activeWeapon)
 
-    // Check payload.player.position
-    if (payload.player?.position && typeof payload.player.position === 'string') {
-      const parts = payload.player.position.split(',').map(s => parseFloat(s.trim()))
-      if (parts.length >= 3 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        worldX = parts[0]
-        worldY = parts[1]
-        worldZ = parts[2] || 0
-      }
+    // Extract Position
+    let worldX = latestGsiTelemetry.player.x
+    let worldY = latestGsiTelemetry.player.y
+    let worldZ = latestGsiTelemetry.player.z
+
+    const posParsed = parseVector3(payload.player?.position || payload.player?.origin || payload.player?.pos)
+    if (posParsed) {
+      worldX = posParsed.x
+      worldY = posParsed.y
+      worldZ = posParsed.z
     } else if (payload.allplayers && typeof payload.allplayers === 'object') {
-      // Fallback to allplayers
       const mySteamId = payload.player?.steamid || payload.provider?.steamid
-      const matched = mySteamId ? payload.allplayers[mySteamId] : Object.values(payload.allplayers)[0]
-      if (matched && matched.position && typeof matched.position === 'string') {
-        const parts = matched.position.split(',').map(s => parseFloat(s.trim()))
-        if (parts.length >= 3 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-          worldX = parts[0]
-          worldY = parts[1]
-          worldZ = parts[2] || 0
+      let matched = mySteamId ? payload.allplayers[mySteamId] : null
+      if (!matched) {
+        matched = Object.values(payload.allplayers).find(p => p && (p.position || p.origin)) || Object.values(payload.allplayers)[0]
+      }
+      if (matched) {
+        const allPos = parseVector3(matched.position || matched.origin || matched.pos)
+        if (allPos) {
+          worldX = allPos.x
+          worldY = allPos.y
+          worldZ = allPos.z
         }
         if (matched.name) pName = matched.name
-        if (matched.team) pTeam = matched.team
       }
     }
 
-    // Check payload.player.forward
-    if (payload.player?.forward && typeof payload.player.forward === 'string') {
-      const fwd = payload.player.forward.split(',').map(s => parseFloat(s.trim()))
-      if (fwd.length >= 2 && !isNaN(fwd[0]) && !isNaN(fwd[1])) {
-        pitch = fwd[0]
-        yaw = fwd[1]
-        roll = fwd[2] || 0
+    // Extract Angles / Direction
+    let pitch = latestGsiTelemetry.player.pitch
+    let yaw = latestGsiTelemetry.player.yaw
+    let roll = latestGsiTelemetry.player.roll
+
+    const angParsed = parseForwardOrAngles(payload.player?.forward, payload.player?.angles || payload.player?.viewangles)
+    if (angParsed) {
+      pitch = angParsed.pitch
+      yaw = angParsed.yaw
+      roll = angParsed.roll
+    } else if (payload.allplayers && typeof payload.allplayers === 'object') {
+      const mySteamId = payload.player?.steamid || payload.provider?.steamid
+      let matched = mySteamId ? payload.allplayers[mySteamId] : null
+      if (!matched) {
+        matched = Object.values(payload.allplayers).find(p => p && p.forward)
+      }
+      if (matched) {
+        const allAng = parseForwardOrAngles(matched.forward, matched.angles)
+        if (allAng) {
+          pitch = allAng.pitch
+          yaw = allAng.yaw
+          roll = allAng.roll
+        }
       }
     }
 
@@ -2038,7 +2143,8 @@ app.post('/api/cs2/gsi', express.json({ limit: '10mb' }), (req, res) => {
       },
       player: {
         name: pName,
-        steamid: payload.player?.steamid || '',
+        playerName: pName,
+        steamid: payload.player?.steamid || payload.provider?.steamid || '',
         team: pTeam,
         health: pHealth,
         armor: pArmor,
@@ -2046,6 +2152,12 @@ app.post('/api/cs2/gsi', express.json({ limit: '10mb' }), (req, res) => {
         money: pMoney,
         weapon: activeWeapon,
         activity: pActivity,
+        x: worldX,
+        y: worldY,
+        z: worldZ,
+        pitch: pitch,
+        yaw: yaw,
+        roll: roll,
         position: { x: worldX, y: worldY, z: worldZ },
         angles: { pitch, yaw, roll },
         radarCoords: radar
