@@ -16,19 +16,23 @@ import {
   Trash2, 
   Check, 
   Video, 
-  Image as ImageIcon,
-  Share2,
-  Lock,
-  Terminal,
-  Upload,
-  Clipboard,
-  Eye,
-  Sliders,
-  Sparkles,
-  Layers,
-  FileText,
-  Zap,
-  ArrowRight
+  Image as ImageIcon, 
+  Share2, 
+  Lock, 
+  Terminal, 
+  Upload, 
+  Clipboard, 
+  Eye, 
+  Sliders, 
+  Sparkles, 
+  Layers, 
+  FileText, 
+  Zap, 
+  ArrowRight,
+  Play,
+  Film,
+  HelpCircle,
+  ExternalLink
 } from 'lucide-vue-next'
 import { parseQuickLineupInput } from '../../utils/quickLineupParser'
 
@@ -217,6 +221,54 @@ async function handleImageFile(file: File, slot: 'aim' | 'standing' | 'landing' 
   } catch (err) {
     console.error('Error handling screenshot:', err)
     isUploadingImage.value = false
+  }
+}
+
+const isUploadingVideo = ref(false)
+const showClipSoftwareGuide = ref(false)
+
+async function handleVideoFile(file: File) {
+  if (!file) return
+  isUploadingVideo.value = true
+  try {
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const base64Data = e.target?.result as string
+      let finalUrl = base64Data
+
+      try {
+        const res = await axios.post('/api/upload', {
+          video: base64Data,
+          filename: file.name
+        })
+        if (res.data?.url) {
+          finalUrl = res.data.url
+        }
+      } catch (uploadErr) {
+        console.warn('Server upload failed, using local base64 video', uploadErr)
+      }
+
+      formData.videoUrl = finalUrl
+      isUploadingVideo.value = false
+    }
+    reader.readAsDataURL(file)
+  } catch (err) {
+    console.error('Error handling video file:', err)
+    isUploadingVideo.value = false
+  }
+}
+
+function handleVideoFileInputChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files[0]) {
+    handleVideoFile(target.files[0])
+  }
+}
+
+function handleVideoDrop(e: DragEvent) {
+  e.preventDefault()
+  if (e.dataTransfer?.files && e.dataTransfer.files[0]) {
+    handleVideoFile(e.dataTransfer.files[0])
   }
 }
 
@@ -949,31 +1001,155 @@ function resetForm() {
 
             </div>
 
-            <!-- OPTIONAL VIDEO / EXTERNAL IMAGE URL -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-              <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300 flex items-center gap-1.5">
-                  <Video class="w-3.5 h-3.5 text-rose-400" />
-                  <span>Video URL (YouTube Embed / MP4)</span>
-                </label>
-                <input 
-                  v-model="formData.videoUrl" 
-                  type="text" 
-                  placeholder="https://www.youtube.com/embed/..." 
-                  class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
-                />
+            <!-- VIDEO CLIP & RECORDING SECTION (PRIORITY 2: VIDEO OPTION) -->
+            <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-3 mt-2">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <div class="p-1.5 bg-rose-500/20 text-rose-400 rounded-lg">
+                    <Video class="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span class="font-bold text-xs text-white uppercase tracking-wider flex items-center gap-2">
+                      Lineup Throw Video Clip
+                      <span class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">Secondary Option</span>
+                    </span>
+                    <p class="text-[10px] text-slate-400">
+                      Lineups prioritize high-res screenshots first, then video clips as a secondary motion guide.
+                    </p>
+                  </div>
+                </div>
+
+                <!-- SOFTWARE GUIDE BUTTON -->
+                <button
+                  type="button"
+                  @click="showClipSoftwareGuide = !showClipSoftwareGuide"
+                  class="px-2.5 py-1 bg-slate-900 hover:bg-slate-850 border border-amber-500/40 text-amber-300 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow"
+                >
+                  <HelpCircle class="w-3.5 h-3.5 text-amber-400" />
+                  <span>{{ showClipSoftwareGuide ? 'Hide Clip Guide' : '🎥 Best Clip Software Guide' }}</span>
+                </button>
               </div>
 
-              <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300 flex items-center gap-1.5">
-                  <ImageIcon class="w-3.5 h-3.5 text-sky-400" />
-                  <span>External Image URL</span>
+              <!-- RECOMMENDED RECORDING & CLIPPING SOFTWARE GUIDE (COLLAPSIBLE) -->
+              <div v-if="showClipSoftwareGuide" class="p-3.5 bg-slate-900/90 border border-amber-500/30 rounded-xl flex flex-col gap-3 text-xs animate-fade-in">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span class="font-black text-amber-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <Film class="w-3.5 h-3.5" />
+                    Top Recommended Software to Clip CS2 Lineups
+                  </span>
+                  <span class="text-[10px] font-mono text-slate-400">Optimal settings: 1080p60 • MP4 • 15s</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-[11px]">
+                  <!-- 1. NVIDIA SHADOWPLAY -->
+                  <div class="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-1">
+                    <span class="font-black text-emerald-400">1. NVIDIA ShadowPlay</span>
+                    <p class="text-slate-400 text-[10px] leading-tight">
+                      Built into GeForce Experience / NVIDIA App. Zero FPS drop.
+                    </p>
+                    <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">
+                      Hotkey: <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700">Alt + F10</kbd>
+                    </span>
+                  </div>
+
+                  <!-- 2. OBS REPLAY BUFFER -->
+                  <div class="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-1">
+                    <span class="font-black text-cyan-400">2. OBS Replay Buffer</span>
+                    <p class="text-slate-400 text-[10px] leading-tight">
+                      100% Free & Open Source. Set 15s buffer in Settings &gt; Output &gt; Replay Buffer.
+                    </p>
+                    <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">
+                      Hotkey: Custom (e.g. <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700">F8</kbd>)
+                    </span>
+                  </div>
+
+                  <!-- 3. AMD RADEON RELIVE -->
+                  <div class="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-1">
+                    <span class="font-black text-rose-400">3. AMD Radeon ReLive</span>
+                    <p class="text-slate-400 text-[10px] leading-tight">
+                      Built into AMD Software: Adrenalin. High quality GPU hardware encoder.
+                    </p>
+                    <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">
+                      Hotkey: <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700">Ctrl+Shift+S</kbd>
+                    </span>
+                  </div>
+
+                  <!-- 4. MEDAL.TV / STEELSERIES -->
+                  <div class="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-1">
+                    <span class="font-black text-amber-400">4. Medal.tv / Moments</span>
+                    <p class="text-slate-400 text-[10px] leading-tight">
+                      Automatic CS2 bookmarking & 1-click cloud sharing/trimming.
+                    </p>
+                    <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">
+                      Hotkey: <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700">F8</kbd>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VIDEO DROPZONE & PREVIEW -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-stretch">
+                <!-- VIDEO UPLOAD DROPZONE -->
+                <div 
+                  @dragover.prevent 
+                  @drop="handleVideoDrop"
+                  class="flex flex-col gap-2 p-3 bg-slate-900/60 border-2 border-dashed border-slate-800 hover:border-rose-500/50 rounded-xl transition-all justify-center"
+                >
+                  <label class="flex flex-col items-center justify-center gap-1.5 p-3 text-center cursor-pointer">
+                    <Upload class="w-5 h-5 text-rose-400" />
+                    <span class="text-xs font-bold text-slate-200">
+                      {{ isUploadingVideo ? 'Uploading Video File...' : 'Upload Video File (MP4, WebM, MOV)' }}
+                    </span>
+                    <span class="text-[10px] text-slate-500">Drag & drop 15-30s CS2 throw clip or click to browse</span>
+                    <input type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska" class="hidden" @change="handleVideoFileInputChange" />
+                  </label>
+                </div>
+
+                <!-- VIDEO PREVIEW OR LINK INPUT -->
+                <div class="flex flex-col gap-2 p-3 bg-slate-900/60 border border-slate-800 rounded-xl justify-between">
+                  <div v-if="formData.videoUrl" class="relative aspect-video w-full rounded-lg overflow-hidden bg-black border border-slate-700 group">
+                    <video 
+                      :src="formData.videoUrl" 
+                      controls 
+                      autoplay 
+                      loop 
+                      muted 
+                      playsinline 
+                      class="w-full h-full object-contain"
+                    ></video>
+                    <button 
+                      type="button" 
+                      @click="formData.videoUrl = ''" 
+                      class="absolute top-1.5 right-1.5 p-1.5 bg-rose-600/90 hover:bg-rose-500 text-white rounded-lg transition-colors cursor-pointer shadow"
+                      title="Remove Video"
+                    >
+                      <Trash2 class="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div v-else class="flex flex-col gap-1.5">
+                    <label class="text-[11px] font-bold text-slate-300">Or Paste Video URL / YouTube Embed:</label>
+                    <input 
+                      v-model="formData.videoUrl" 
+                      type="text" 
+                      placeholder="https://www.youtube.com/embed/... or direct MP4 link" 
+                      class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- EXTERNAL IMAGE URL ASSET -->
+              <div class="flex flex-col gap-1 pt-1 border-t border-slate-800/80">
+                <label class="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                  <ImageIcon class="w-3 h-3 text-sky-400" />
+                  <span>External Image Thumbnail URL (Optional):</span>
                 </label>
                 <input 
                   v-model="formData.imageUrl" 
                   type="text" 
                   placeholder="https://... image link" 
-                  class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-amber-500 font-mono"
                 />
               </div>
             </div>

@@ -205,7 +205,8 @@ saveDB(db)
 console.log('[Auth] Sanitized accounts: Andrex (Admin) and chips (Player). All other accounts deleted.')
 
 app.use(cors())
-app.use(express.json({ limit: '20mb' }))
+app.use(express.json({ limit: '100mb' }))
+app.use(express.urlencoded({ extended: true, limit: '100mb' }))
 
 // Auth Middleware
 function authenticateToken(req, res, next) {
@@ -256,39 +257,48 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 app.use('/uploads', express.static(UPLOADS_DIR))
 
-// Upload Base64 Screenshot Endpoint
+// Upload Base64 Image/Video Endpoint
 app.post('/api/upload', (req, res) => {
   try {
-    const { image, filename } = req.body
-    if (!image) return res.status(400).json({ error: 'No image data provided' })
+    const { image, video, file, filename } = req.body
+    const payload = image || video || file
+    if (!payload) return res.status(400).json({ error: 'No media data provided' })
     
     // If it's already a full URL or existing path, return it directly
-    if (image.startsWith('http://') || image.startsWith('https://') || image.startsWith('/uploads/')) {
-      return res.json({ url: image })
+    if (payload.startsWith('http://') || payload.startsWith('https://') || payload.startsWith('/uploads/')) {
+      return res.json({ url: payload })
     }
 
-    // Parse base64 data url
-    const matches = image.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/)
+    // Parse base64 data url (image or video)
+    const matches = payload.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/)
     if (!matches || matches.length !== 3) {
-      return res.status(400).json({ error: 'Invalid base64 image data' })
+      return res.status(400).json({ error: 'Invalid base64 media data' })
     }
 
     const mime = matches[1].toLowerCase()
     let ext = 'png'
-    if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg'
-    else if (mime.includes('webp')) ext = 'webp'
-    else if (mime.includes('gif')) ext = 'gif'
+    let prefix = 'media'
 
-    const uniqueName = `screenshot_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`
+    if (mime.includes('video/mp4')) { ext = 'mp4'; prefix = 'video'; }
+    else if (mime.includes('video/webm')) { ext = 'webm'; prefix = 'video'; }
+    else if (mime.includes('video/quicktime') || mime.includes('mov')) { ext = 'mov'; prefix = 'video'; }
+    else if (mime.includes('video/ogg')) { ext = 'ogv'; prefix = 'video'; }
+    else if (mime.includes('video/x-matroska') || mime.includes('mkv')) { ext = 'mkv'; prefix = 'video'; }
+    else if (mime.includes('jpeg') || mime.includes('jpg')) { ext = 'jpg'; prefix = 'screenshot'; }
+    else if (mime.includes('webp')) { ext = 'webp'; prefix = 'screenshot'; }
+    else if (mime.includes('gif')) { ext = 'gif'; prefix = 'screenshot'; }
+    else if (mime.includes('png')) { ext = 'png'; prefix = 'screenshot'; }
+
+    const uniqueName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`
     const filePath = path.join(UPLOADS_DIR, uniqueName)
     const buffer = Buffer.from(matches[2], 'base64')
     
     fs.writeFileSync(filePath, buffer)
     const publicUrl = `/uploads/${uniqueName}`
-    return res.json({ url: publicUrl, filename: uniqueName })
+    return res.json({ url: publicUrl, filename: uniqueName, isVideo: prefix === 'video' })
   } catch (err) {
-    console.error('[Upload] Image upload error:', err)
-    return res.status(500).json({ error: 'Failed to save uploaded image' })
+    console.error('[Upload] Media upload error:', err)
+    return res.status(500).json({ error: 'Failed to save uploaded media' })
   }
 })
 app.use(authenticateToken)
@@ -1764,6 +1774,59 @@ app.post('/api/cs2/auto-screenshot', (req, res) => {
   } catch (err) {
     console.error('Error saving screenshot:', err)
     res.status(500).json({ error: 'Failed to process screenshot' })
+  }
+})
+
+app.post('/api/cs2/auto-video', (req, res) => {
+  const { video, lineupId } = req.body
+  if (!video) return res.status(400).json({ error: 'Video data is required' })
+
+  try {
+    let base64Data = video
+    let ext = 'mp4'
+
+    const matches = video.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/)
+    if (matches) {
+      const mime = matches[1].toLowerCase()
+      if (mime.includes('webm')) ext = 'webm'
+      else if (mime.includes('quicktime') || mime.includes('mov')) ext = 'mov'
+      else if (mime.includes('ogg')) ext = 'ogv'
+      else if (mime.includes('matroska') || mime.includes('mkv')) ext = 'mkv'
+      else ext = 'mp4'
+      base64Data = matches[2]
+    }
+
+    const buffer = Buffer.from(base64Data, 'base64')
+    const fileName = `cs2_video_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`
+    const filePath = path.join(UPLOADS_DIR, fileName)
+
+    fs.writeFileSync(filePath, buffer)
+    const publicUrl = `/uploads/${fileName}`
+
+    if (lineupId) {
+      db = loadDB()
+      if (Array.isArray(db.lineups)) {
+        const found = db.lineups.find(l => l.id === lineupId)
+        if (found) {
+          found.videoUrl = publicUrl
+          saveDB(db)
+        }
+      }
+    }
+
+    io.emit('cs2:video-attached', {
+      lineupId,
+      videoUrl: publicUrl
+    })
+
+    res.json({
+      success: true,
+      videoUrl: publicUrl,
+      lineupId
+    })
+  } catch (err) {
+    console.error('Error saving video:', err)
+    res.status(500).json({ error: 'Failed to process video file' })
   }
 })
 

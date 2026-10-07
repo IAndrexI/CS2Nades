@@ -397,6 +397,58 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
   }
 
   /**
+   * Auto-Upload and Attach In-Game Video Clip to a Lineup
+   */
+  async function uploadAndAttachVideo(
+    videoSource: string | File,
+    lineupId?: string
+  ): Promise<string | null> {
+    try {
+      let base64Data = ''
+      if (videoSource instanceof File) {
+        base64Data = await new Promise((resolve) => {
+          const reader = new FileReader()
+          reader.onload = (e) => resolve(e.target?.result as string)
+          reader.readAsDataURL(videoSource)
+        })
+      } else {
+        base64Data = videoSource
+      }
+
+      const targetId = lineupId || lastCapturedLineup.value?.id || lineupStore.activeLineup?.id
+      if (!targetId) {
+        throw new Error('No active lineup selected to attach video')
+      }
+
+      const res = await axios.post(getApiUrl('/api/cs2/auto-video'), {
+        video: base64Data,
+        lineupId: targetId
+      })
+
+      if (res.data && res.data.success && res.data.videoUrl) {
+        const publicUrl = res.data.videoUrl
+        
+        // Update lineup in local store
+        const found = lineupStore.customLineups.find(l => l.id === targetId)
+        if (found) {
+          found.videoUrl = publicUrl
+          lineupStore.updateLineup(found)
+        }
+
+        if (lineupStore.activeLineup && lineupStore.activeLineup.id === targetId) {
+          lineupStore.activeLineup.videoUrl = publicUrl
+        }
+
+        return publicUrl
+      }
+      return null
+    } catch (err: any) {
+      console.error('Failed to attach video:', err)
+      return null
+    }
+  }
+
+  /**
    * Teleport player in-game on the CS2 server to lineup coords
    */
   async function teleportToServer(lineup: Lineup): Promise<boolean> {
@@ -446,6 +498,7 @@ export const useCs2ServerStore = defineStore('cs2Server', () => {
     testConnection,
     autoCaptureLineup,
     uploadAndAttachScreenshot,
+    uploadAndAttachVideo,
     teleportToServer,
     initGsiListeners,
     fetchGsiStatus,

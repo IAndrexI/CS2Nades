@@ -3,8 +3,9 @@ import { ref, reactive, computed } from 'vue'
 import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useThemeStore } from '../../stores/themeStore'
-import { pctToWorldCoords, generateSetposCommand } from '../../utils/cs2Coords'
 import { useCs2ServerStore } from '../../stores/cs2ServerStore'
+import { pctToWorldCoords, generateSetposCommand } from '../../utils/cs2Coords'
+import { captureScreenFrame, extractImageFromClipboard } from '../../utils/screenCapture'
 import { 
   X, 
   Gamepad2, 
@@ -17,19 +18,28 @@ import {
   Radio, 
   Sparkles, 
   Sliders, 
-  HelpCircle,
-  ExternalLink,
-  Code2,
-  Play,
-  RotateCcw,
-  Zap,
-  Camera,
-  Upload,
-  Image as ImageIcon,
-  CheckCircle2,
-  AlertCircle,
-  RefreshCw,
-  Trash2
+  HelpCircle, 
+  ExternalLink, 
+  Code2, 
+  Play, 
+  RotateCcw, 
+  Zap, 
+  Camera, 
+  Upload, 
+  Image as ImageIcon, 
+  CheckCircle2, 
+  AlertCircle, 
+  RefreshCw, 
+  Trash2,
+  Monitor,
+  Cpu,
+  ShieldAlert,
+  Clipboard,
+  FileCode2,
+  FolderOpen,
+  Eye,
+  Video,
+  Film
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -51,12 +61,22 @@ const copiedDocker = ref(false)
 const copiedSetpos = ref(false)
 const copiedGsi = ref(false)
 const copiedServerSetpos = ref(false)
+const copiedWindowsInstaller = ref(false)
+const copiedWindowsStart = ref(false)
+
+// ── DEDICATED HOSTING PLATFORM ──────────────────────────────
+const serverHostingPlatform = ref<'windows' | 'docker'>('windows')
+const approvedWindowsSelfInstall = ref(false)
 
 // ── LIVE SERVER SYNC STATE ──────────────────────────────────
 const syncLineupTitle = ref('')
 const selectedScreenshotType = ref<'aim' | 'standing' | 'landing'>('aim')
 const isUploadingScreenshot = ref(false)
+const isUploadingVideo = ref(false)
+const isCapturingScreen = ref(false)
+const showSyncClipGuide = ref(false)
 const screenshotFeedback = ref<string | null>(null)
+
 
 
 // ── PRACTICE CFG OPTIONS ────────────────────────────────────
@@ -194,12 +214,152 @@ services:
       - "${dedicatedConfig.serverPort}:${dedicatedConfig.serverPort}/tcp"
       - "${dedicatedConfig.serverPort}:${dedicatedConfig.serverPort}/udp"
     volumes:
-      - cs2-server-data:/home/steam/cs2-dedicated
-
-volumes:
-  cs2-server-data:
-    name: cs2-server-data`
+      - cs2-server-data:/home/steam/cs2-dedicated`
 })
+
+// ── GENERATE WINDOWS DEDICATED SERVER SELF-INSTALLER ─────────
+const generatedWindowsInstallerScript = computed(() => {
+  const p = dedicatedConfig.serverPort || 27015
+  const map = dedicatedConfig.startMap || 'de_mirage'
+  const pass = dedicatedConfig.rconPassword || 'cs2practice'
+  const name = dedicatedConfig.serverName || 'CS2 Local Practice Server'
+
+  return `@echo off
+title CS2 Dedicated Server - Windows Auto Installer
+color 0A
+echo =======================================================================
+echo  [CS2 Nades] Windows Local Dedicated Server Installer & Auto-Setup
+echo =======================================================================
+echo.
+echo Target Installation Directory: C:\\CS2_Dedicated_Server
+echo.
+mkdir C:\\CS2_Dedicated_Server\\steamcmd 2>nul
+mkdir C:\\CS2_Dedicated_Server\\cs2 2>nul
+
+echo [1/4] Downloading SteamCMD client...
+powershell -Command "Invoke-WebRequest -Uri 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip' -OutFile 'C:\\CS2_Dedicated_Server\\steamcmd\\steamcmd.zip'"
+powershell -Command "Expand-Archive -Path 'C:\\CS2_Dedicated_Server\\steamcmd\\steamcmd.zip' -DestinationPath 'C:\\CS2_Dedicated_Server\\steamcmd' -Force"
+del C:\\CS2_Dedicated_Server\\steamcmd\\steamcmd.zip 2>nul
+
+echo.
+echo [2/4] Downloading Counter-Strike 2 Dedicated Server (App ID 730)...
+echo (This will download ~30-35 GB directly from Steam servers. Please be patient...)
+C:\\CS2_Dedicated_Server\\steamcmd\\steamcmd.exe +force_install_dir C:\\CS2_Dedicated_Server\\cs2 +login anonymous +app_update 730 validate +quit
+
+echo.
+echo [3/4] Installing Practice Config & Rules...
+mkdir "C:\\CS2_Dedicated_Server\\cs2\\game\\csgo\\cfg" 2>nul
+(
+echo // CS2 Nades Practice Configuration
+echo sv_cheats 1
+echo bot_kick
+echo mp_warmup_end
+echo mp_freezetime 0
+echo mp_roundtime_defuse 60
+echo mp_maxmoney 65535
+echo mp_startmoney 65535
+echo mp_afterroundmoney 65535
+echo mp_buytime 60000
+echo mp_buy_anywhere 1
+echo sv_infinite_ammo 1
+echo ammo_grenade_limit_total 6
+echo sv_grenade_trajectory_prac_pipreview 1
+echo sv_grenade_trajectory_prac_trailtime 15
+echo cl_grenadepreview 1
+echo sv_showimpacts 1
+echo sv_regeneration_force_on 1
+echo bind "alt" "noclip"
+echo bind "h" "sv_rethrow_last_grenade"
+echo mp_restartgame 1
+) > "C:\\CS2_Dedicated_Server\\cs2\\game\\csgo\\cfg\\practice.cfg"
+
+echo.
+echo [4/4] Generating Server Start Launcher (start_server.bat)...
+(
+echo @echo off
+echo title CS2 Dedicated Practice Server - ${name}
+echo cd /d "C:\\CS2_Dedicated_Server\\cs2\\game\\bin\\win64"
+echo cs2.exe -dedicated -console +ip 0.0.0.0 -port ${p} +map ${map} +game_type 0 +game_mode 1 +mapgroup mg_active +sv_cheats 1 +rcon_password "${pass}" +exec practice.cfg
+) > "C:\\CS2_Dedicated_Server\\start_server.bat"
+
+echo.
+echo =======================================================================
+echo  SUCCESS! CS2 Dedicated Server is now fully installed on your PC.
+echo  To launch your server anytime, double-click:
+echo  C:\\CS2_Dedicated_Server\\start_server.bat
+echo =======================================================================
+pause`
+})
+
+const generatedWindowsStartScript = computed(() => {
+  const p = dedicatedConfig.serverPort || 27015
+  const map = dedicatedConfig.startMap || 'de_mirage'
+  const pass = dedicatedConfig.rconPassword || 'cs2practice'
+  const name = dedicatedConfig.serverName || 'CS2 Local Practice Server'
+
+  return `@echo off
+title CS2 Dedicated Practice Server - ${name}
+cd /d "C:\\CS2_Dedicated_Server\\cs2\\game\\bin\\win64"
+echo Starting CS2 Dedicated Server on Port ${p} (Map: ${map})...
+cs2.exe -dedicated -console +ip 0.0.0.0 -port ${p} +map ${map} +game_type 0 +game_mode 1 +mapgroup mg_active +sv_cheats 1 +rcon_password "${pass}" +exec practice.cfg
+pause`
+})
+
+function handleDownloadWindowsInstaller() {
+  downloadFile('install_cs2_server_windows.bat', generatedWindowsInstallerScript.value)
+}
+
+function handleDownloadWindowsStart() {
+  downloadFile('start_cs2_server.bat', generatedWindowsStartScript.value)
+}
+
+// ── SCREEN CAPTURE & CLIPBOARD ACTION HANDLERS ───────────────
+async function handleDirectScreenCapture(type: 'aim' | 'standing' | 'landing') {
+  isCapturingScreen.value = true
+  try {
+    const frame = await captureScreenFrame()
+    if (frame) {
+      isUploadingScreenshot.value = true
+      const res = await cs2ServerStore.uploadAndAttachScreenshot(frame.dataUrl, type)
+      if (res) {
+        screenshotFeedback.value = `✓ Snapped & attached ${type} screenshot from screen!`
+        setTimeout(() => (screenshotFeedback.value = null), 3500)
+        // Auto-advance slot
+        if (type === 'aim') selectedScreenshotType.value = 'standing'
+        else if (type === 'standing') selectedScreenshotType.value = 'landing'
+      }
+    }
+  } catch (err: any) {
+    screenshotFeedback.value = `Screen capture error: ${err.message}`
+  } finally {
+    isCapturingScreen.value = false
+    isUploadingScreenshot.value = false
+  }
+}
+
+async function handlePasteFromClipboardButton(type: 'aim' | 'standing' | 'landing') {
+  try {
+    const imgData = await extractImageFromClipboard()
+    if (imgData) {
+      isUploadingScreenshot.value = true
+      const res = await cs2ServerStore.uploadAndAttachScreenshot(imgData, type)
+      if (res) {
+        screenshotFeedback.value = `✓ Attached ${type} screenshot from clipboard!`
+        setTimeout(() => (screenshotFeedback.value = null), 3500)
+        if (type === 'aim') selectedScreenshotType.value = 'standing'
+        else if (type === 'standing') selectedScreenshotType.value = 'landing'
+      }
+    } else {
+      screenshotFeedback.value = 'No image found on clipboard. Press Win+Shift+S in CS2 first.'
+      setTimeout(() => (screenshotFeedback.value = null), 3500)
+    }
+  } catch (err: any) {
+    screenshotFeedback.value = `Clipboard error: ${err.message}`
+  } finally {
+    isUploadingScreenshot.value = false
+  }
+}
+
 
 // ── GENERATE GSI CONFIG ─────────────────────────────────────
 const gsiCustomUri = ref(typeof window !== 'undefined' ? `${window.location.origin}/api/cs2/gsi` : 'http://192.168.0.194:8080/api/cs2/gsi')
@@ -297,6 +457,26 @@ async function handleScreenshotFileSelected(e: Event, type: 'aim' | 'standing' |
   }
 }
 
+async function handleVideoFileSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files || input.files.length === 0) return
+  const file = input.files[0]
+
+  isUploadingVideo.value = true
+  try {
+    const res = await cs2ServerStore.uploadAndAttachVideo(file)
+    if (res) {
+      screenshotFeedback.value = `✓ Uploaded and attached video clip successfully!`
+      setTimeout(() => (screenshotFeedback.value = null), 3500)
+    }
+  } catch (err: any) {
+    screenshotFeedback.value = `Video upload error: ${err.message}`
+  } finally {
+    isUploadingVideo.value = false
+    input.value = ''
+  }
+}
+
 async function handlePasteEvent(e: ClipboardEvent) {
   if (activeTab.value !== 'sync') return
   const items = e.clipboardData?.items
@@ -353,7 +533,7 @@ function handleDownloadGsi() {
   downloadFile('gamestate_integration_cs2nades.cfg', generatedGsiConfig.value)
 }
 
-async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' | 'gsi' | 'serverSetpos' | 'gsiPath') {
+async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' | 'gsi' | 'serverSetpos' | 'gsiPath' | 'windowsInstaller' | 'windowsStart') {
   try {
     await navigator.clipboard.writeText(text)
     if (type === 'cfg') {
@@ -374,11 +554,18 @@ async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' |
     } else if (type === 'gsiPath') {
       copiedGsiPath.value = true
       setTimeout(() => (copiedGsiPath.value = false), 2500)
+    } else if (type === 'windowsInstaller') {
+      copiedWindowsInstaller.value = true
+      setTimeout(() => (copiedWindowsInstaller.value = false), 2500)
+    } else if (type === 'windowsStart') {
+      copiedWindowsStart.value = true
+      setTimeout(() => (copiedWindowsStart.value = false), 2500)
     }
   } catch (err) {
     console.error('Failed to copy', err)
   }
 }
+
 
 
 import { onMounted, onUnmounted } from 'vue'
@@ -741,26 +928,61 @@ onUnmounted(() => {
 
                   <div v-if="cs2ServerStore.lastCapturedLineup?.aimScreenshot" class="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
                     <img :src="cs2ServerStore.lastCapturedLineup.aimScreenshot" class="w-full h-full object-cover" />
-                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                      <a :href="cs2ServerStore.lastCapturedLineup.aimScreenshot" target="_blank" class="p-1.5 bg-slate-800 rounded-lg text-white hover:bg-slate-700">
+                    <div class="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
+                      <button 
+                        @click="handleDirectScreenCapture('aim')"
+                        :disabled="isCapturingScreen"
+                        class="p-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[10px] flex items-center gap-1 transition-all cursor-pointer shadow"
+                        title="Re-snap from CS2 Screen"
+                      >
+                        <Camera class="w-3.5 h-3.5" />
+                        <span>Snap</span>
+                      </button>
+                      <button 
+                        @click="handlePasteFromClipboardButton('aim')"
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-[10px] flex items-center gap-1 transition-all cursor-pointer"
+                        title="Paste new from Clipboard"
+                      >
+                        <Clipboard class="w-3.5 h-3.5" />
+                      </button>
+                      <a :href="cs2ServerStore.lastCapturedLineup.aimScreenshot" target="_blank" class="p-1.5 bg-slate-800 rounded-lg text-white hover:bg-slate-700" title="Open Fullscreen">
                         <ExternalLink class="w-3.5 h-3.5" />
                       </a>
                     </div>
                   </div>
 
-                  <label 
-                    v-else 
-                    class="aspect-video rounded-xl border-2 border-dashed border-slate-700 hover:border-amber-400 bg-slate-950/60 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors p-2 text-center"
-                  >
-                    <Upload class="w-5 h-5 text-slate-500" />
-                    <span class="text-[10px] text-slate-400 font-bold">Browse or Paste</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      class="hidden" 
-                      @change="(e) => handleScreenshotFileSelected(e, 'aim')" 
-                    />
-                  </label>
+                  <div v-else class="flex flex-col gap-1.5">
+                    <div class="grid grid-cols-2 gap-1.5">
+                      <button
+                        @click="handleDirectScreenCapture('aim')"
+                        :disabled="isCapturingScreen"
+                        class="py-2.5 px-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-amber-200 rounded-xl text-[10px] font-black uppercase tracking-wider flex flex-col items-center justify-center gap-1 transition-all cursor-pointer shadow active:scale-95"
+                      >
+                        <Camera class="w-4 h-4 stroke-[2.5]" />
+                        <span>📸 Snap Screen</span>
+                      </button>
+                      <button
+                        @click="handlePasteFromClipboardButton('aim')"
+                        class="py-2.5 px-2 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95"
+                      >
+                        <Clipboard class="w-4 h-4" />
+                        <span>📋 Paste Win+S</span>
+                      </button>
+                    </div>
+
+                    <label 
+                      class="py-1.5 px-2 rounded-xl border border-dashed border-slate-700 hover:border-slate-500 bg-slate-950/60 flex items-center justify-center gap-1.5 cursor-pointer transition-colors text-center"
+                    >
+                      <Upload class="w-3 h-3 text-slate-400" />
+                      <span class="text-[10px] text-slate-400 font-medium">or Browse Image file</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        class="hidden" 
+                        @change="(e) => handleScreenshotFileSelected(e, 'aim')" 
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 <!-- 2. STANDING SPOT -->
@@ -776,26 +998,61 @@ onUnmounted(() => {
 
                   <div v-if="cs2ServerStore.lastCapturedLineup?.standingScreenshot" class="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
                     <img :src="cs2ServerStore.lastCapturedLineup.standingScreenshot" class="w-full h-full object-cover" />
-                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                      <a :href="cs2ServerStore.lastCapturedLineup.standingScreenshot" target="_blank" class="p-1.5 bg-slate-800 rounded-lg text-white hover:bg-slate-700">
+                    <div class="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
+                      <button 
+                        @click="handleDirectScreenCapture('standing')"
+                        :disabled="isCapturingScreen"
+                        class="p-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[10px] flex items-center gap-1 transition-all cursor-pointer shadow"
+                        title="Re-snap from CS2 Screen"
+                      >
+                        <Camera class="w-3.5 h-3.5" />
+                        <span>Snap</span>
+                      </button>
+                      <button 
+                        @click="handlePasteFromClipboardButton('standing')"
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-[10px] flex items-center gap-1 transition-all cursor-pointer"
+                        title="Paste new from Clipboard"
+                      >
+                        <Clipboard class="w-3.5 h-3.5" />
+                      </button>
+                      <a :href="cs2ServerStore.lastCapturedLineup.standingScreenshot" target="_blank" class="p-1.5 bg-slate-800 rounded-lg text-white hover:bg-slate-700" title="Open Fullscreen">
                         <ExternalLink class="w-3.5 h-3.5" />
                       </a>
                     </div>
                   </div>
 
-                  <label 
-                    v-else 
-                    class="aspect-video rounded-xl border-2 border-dashed border-slate-700 hover:border-amber-400 bg-slate-950/60 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors p-2 text-center"
-                  >
-                    <Upload class="w-5 h-5 text-slate-500" />
-                    <span class="text-[10px] text-slate-400 font-bold">Browse or Paste</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      class="hidden" 
-                      @change="(e) => handleScreenshotFileSelected(e, 'standing')" 
-                    />
-                  </label>
+                  <div v-else class="flex flex-col gap-1.5">
+                    <div class="grid grid-cols-2 gap-1.5">
+                      <button
+                        @click="handleDirectScreenCapture('standing')"
+                        :disabled="isCapturingScreen"
+                        class="py-2.5 px-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-amber-200 rounded-xl text-[10px] font-black uppercase tracking-wider flex flex-col items-center justify-center gap-1 transition-all cursor-pointer shadow active:scale-95"
+                      >
+                        <Camera class="w-4 h-4 stroke-[2.5]" />
+                        <span>📸 Snap Screen</span>
+                      </button>
+                      <button
+                        @click="handlePasteFromClipboardButton('standing')"
+                        class="py-2.5 px-2 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95"
+                      >
+                        <Clipboard class="w-4 h-4" />
+                        <span>📋 Paste Win+S</span>
+                      </button>
+                    </div>
+
+                    <label 
+                      class="py-1.5 px-2 rounded-xl border border-dashed border-slate-700 hover:border-slate-500 bg-slate-950/60 flex items-center justify-center gap-1.5 cursor-pointer transition-colors text-center"
+                    >
+                      <Upload class="w-3 h-3 text-slate-400" />
+                      <span class="text-[10px] text-slate-400 font-medium">or Browse Image file</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        class="hidden" 
+                        @change="(e) => handleScreenshotFileSelected(e, 'standing')" 
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 <!-- 3. LANDING SPOT -->
@@ -811,26 +1068,143 @@ onUnmounted(() => {
 
                   <div v-if="cs2ServerStore.lastCapturedLineup?.landingScreenshot" class="relative aspect-video rounded-xl overflow-hidden border border-slate-700 group">
                     <img :src="cs2ServerStore.lastCapturedLineup.landingScreenshot" class="w-full h-full object-cover" />
-                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                      <a :href="cs2ServerStore.lastCapturedLineup.landingScreenshot" target="_blank" class="p-1.5 bg-slate-800 rounded-lg text-white hover:bg-slate-700">
+                    <div class="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
+                      <button 
+                        @click="handleDirectScreenCapture('landing')"
+                        :disabled="isCapturingScreen"
+                        class="p-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[10px] flex items-center gap-1 transition-all cursor-pointer shadow"
+                        title="Re-snap from CS2 Screen"
+                      >
+                        <Camera class="w-3.5 h-3.5" />
+                        <span>Snap</span>
+                      </button>
+                      <button 
+                        @click="handlePasteFromClipboardButton('landing')"
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-[10px] flex items-center gap-1 transition-all cursor-pointer"
+                        title="Paste new from Clipboard"
+                      >
+                        <Clipboard class="w-3.5 h-3.5" />
+                      </button>
+                      <a :href="cs2ServerStore.lastCapturedLineup.landingScreenshot" target="_blank" class="p-1.5 bg-slate-800 rounded-lg text-white hover:bg-slate-700" title="Open Fullscreen">
                         <ExternalLink class="w-3.5 h-3.5" />
                       </a>
                     </div>
                   </div>
 
-                  <label 
-                    v-else 
-                    class="aspect-video rounded-xl border-2 border-dashed border-slate-700 hover:border-amber-400 bg-slate-950/60 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors p-2 text-center"
+                  <div v-else class="flex flex-col gap-1.5">
+                    <div class="grid grid-cols-2 gap-1.5">
+                      <button
+                        @click="handleDirectScreenCapture('landing')"
+                        :disabled="isCapturingScreen"
+                        class="py-2.5 px-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-amber-200 rounded-xl text-[10px] font-black uppercase tracking-wider flex flex-col items-center justify-center gap-1 transition-all cursor-pointer shadow active:scale-95"
+                      >
+                        <Camera class="w-4 h-4 stroke-[2.5]" />
+                        <span>📸 Snap Screen</span>
+                      </button>
+                      <button
+                        @click="handlePasteFromClipboardButton('landing')"
+                        class="py-2.5 px-2 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer active:scale-95"
+                      >
+                        <Clipboard class="w-4 h-4" />
+                        <span>📋 Paste Win+S</span>
+                      </button>
+                    </div>
+
+                    <label 
+                      class="py-1.5 px-2 rounded-xl border border-dashed border-slate-700 hover:border-slate-500 bg-slate-950/60 flex items-center justify-center gap-1.5 cursor-pointer transition-colors text-center"
+                    >
+                      <Upload class="w-3 h-3 text-slate-400" />
+                      <span class="text-[10px] text-slate-400 font-medium">or Browse Image file</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        class="hidden" 
+                        @change="(e) => handleScreenshotFileSelected(e, 'landing')" 
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VIDEO CLIP ATTACHMENT & CLIP SOFTWARE GUIDE -->
+              <div class="p-3.5 bg-slate-950/90 border border-slate-800 rounded-2xl flex flex-col gap-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <div class="p-1.5 bg-rose-500/20 text-rose-400 rounded-lg">
+                      <Video class="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span class="font-bold text-xs text-white uppercase tracking-wider flex items-center gap-2">
+                        Attach Lineup Throw Video Clip
+                        <span class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">Secondary Option</span>
+                      </span>
+                      <p class="text-[10px] text-slate-400">
+                        Upload an MP4/WebM clip of the throw motion (images remain prioritized in the UI).
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    @click="showSyncClipGuide = !showSyncClipGuide"
+                    class="px-2.5 py-1 bg-slate-900 hover:bg-slate-850 border border-amber-500/40 text-amber-300 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow"
                   >
-                    <Upload class="w-5 h-5 text-slate-500" />
-                    <span class="text-[10px] text-slate-400 font-bold">Browse or Paste</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      class="hidden" 
-                      @change="(e) => handleScreenshotFileSelected(e, 'landing')" 
-                    />
+                    <HelpCircle class="w-3.5 h-3.5 text-amber-400" />
+                    <span>{{ showSyncClipGuide ? 'Hide Clip Guide' : '🎥 Best Clip Software Guide' }}</span>
+                  </button>
+                </div>
+
+                <!-- RECOMMENDED RECORDING & CLIPPING SOFTWARE GUIDE -->
+                <div v-if="showSyncClipGuide" class="p-3 bg-slate-900 border border-amber-500/30 rounded-xl flex flex-col gap-2.5 text-xs animate-fade-in">
+                  <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span class="font-black text-amber-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <Film class="w-3.5 h-3.5" />
+                      Recommended Video Recording & Clip Software for CS2
+                    </span>
+                    <span class="text-[10px] font-mono text-slate-400">1080p60 • MP4 • 15s Buffer</span>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
+                    <div class="p-2 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-0.5">
+                      <span class="font-black text-emerald-400">1. NVIDIA ShadowPlay</span>
+                      <p class="text-slate-400 text-[10px]">GeForce Experience. 0 FPS loss.</p>
+                      <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">Hotkey: <kbd class="bg-slate-900 px-1 rounded text-white">Alt + F10</kbd></span>
+                    </div>
+
+                    <div class="p-2 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-0.5">
+                      <span class="font-black text-cyan-400">2. OBS Replay Buffer</span>
+                      <p class="text-slate-400 text-[10px]">Free & Open Source. 15s buffer.</p>
+                      <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">Hotkey: Custom (<kbd class="bg-slate-900 px-1 rounded text-white">F8</kbd>)</span>
+                    </div>
+
+                    <div class="p-2 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-0.5">
+                      <span class="font-black text-rose-400">3. AMD Radeon ReLive</span>
+                      <p class="text-slate-400 text-[10px]">Adrenalin software hardware encoder.</p>
+                      <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">Hotkey: <kbd class="bg-slate-900 px-1 rounded text-white">Ctrl+Shift+S</kbd></span>
+                    </div>
+
+                    <div class="p-2 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-0.5">
+                      <span class="font-black text-amber-400">4. Medal.tv / Moments</span>
+                      <p class="text-slate-400 text-[10px]">Auto-clip kills & round bookmarker.</p>
+                      <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">Hotkey: <kbd class="bg-slate-900 px-1 rounded text-white">F8</kbd></span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- VIDEO UPLOAD BOX -->
+                <div class="flex items-center gap-3">
+                  <label class="flex-1 py-2 px-3 rounded-xl border border-dashed border-slate-700 hover:border-rose-500 bg-slate-900/60 flex items-center justify-center gap-2 cursor-pointer transition-colors text-center">
+                    <Video class="w-4 h-4 text-rose-400" />
+                    <span class="text-xs font-bold text-slate-200">
+                      {{ isUploadingVideo ? 'Uploading Video Clip...' : 'Browse & Upload Video Clip (MP4, WebM, MOV)' }}
+                    </span>
+                    <input type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska" class="hidden" @change="handleVideoFileSelected" />
                   </label>
+
+                  <div v-if="cs2ServerStore.lastCapturedLineup?.videoUrl" class="flex items-center gap-2 px-3 py-1.5 bg-rose-500/20 text-rose-300 rounded-xl border border-rose-500/40 text-xs font-bold">
+                    <CheckCircle2 class="w-4 h-4" />
+                    <span>Video Attached</span>
+                  </div>
                 </div>
               </div>
 
@@ -1153,75 +1527,311 @@ onUnmounted(() => {
           </div>
 
           <!-- ============================================================ -->
-          <!-- TAB 3: DEDICATED CS2 SERVER (DOCKER / LXC HOSTING) -->
+          <!-- TAB 3: DEDICATED CS2 SERVER (WINDOWS PC & DOCKER / LXC HOSTING) -->
           <!-- ============================================================ -->
           <div v-else-if="activeTab === 'dedicated'" class="flex flex-col gap-5">
-            <div class="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl flex flex-col gap-2">
-              <div class="flex items-center justify-between">
-                <span class="font-black uppercase tracking-wider text-white text-xs flex items-center gap-1.5">
-                  <Server class="w-4 h-4 text-cyan-400" />
-                  Host a 24/7 Dedicated CS2 Practice Server (Docker / Proxmox LXC)
-                </span>
-                <span class="text-[10px] font-mono text-emerald-400">Linux / Docker Compose</span>
-              </div>
-              <p class="text-slate-300 text-xs leading-relaxed">
-                Deploy a dedicated Counter-Strike 2 server on your Proxmox LXC (<code class="text-amber-400 font-mono">192.168.0.194</code>) or home server so your whole team can join with <code class="text-emerald-400 font-mono">connect &lt;IP&gt;:27015</code> and practice together.
-              </p>
-            </div>
-
-            <!-- SERVER SETTINGS -->
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div class="flex flex-col gap-1 p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
-                <span class="text-[10px] text-slate-400 font-bold">Server Name:</span>
-                <input 
-                  v-model="dedicatedConfig.serverName" 
-                  type="text" 
-                  class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:border-amber-500 focus:outline-none"
-                />
+            
+            <!-- PLATFORM SELECTOR -->
+            <div class="flex items-center justify-between p-3.5 bg-slate-950/90 border border-slate-800 rounded-2xl flex-wrap gap-3">
+              <div class="flex items-center gap-2.5">
+                <div class="p-2 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl">
+                  <Server class="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 class="font-black text-xs text-white uppercase tracking-wider">
+                    Select Server Hosting Environment
+                  </h3>
+                  <p class="text-[11px] text-slate-400">
+                    Choose whether to run the dedicated server locally on your Windows Gaming PC or on a Linux Proxmox LXC.
+                  </p>
+                </div>
               </div>
 
-              <div class="flex flex-col gap-1 p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
-                <span class="text-[10px] text-slate-400 font-bold">RCON Password:</span>
-                <input 
-                  v-model="dedicatedConfig.rconPassword" 
-                  type="text" 
-                  class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
-                />
-              </div>
-
-              <div class="flex flex-col gap-1 p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
-                <span class="text-[10px] text-slate-400 font-bold">Default Starting Map:</span>
-                <select 
-                  v-model="dedicatedConfig.startMap" 
-                  class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:border-amber-500 focus:outline-none"
-                >
-                  <option value="de_mirage">de_mirage</option>
-                  <option value="de_dust2">de_dust2</option>
-                  <option value="de_inferno">de_inferno</option>
-                  <option value="de_nuke">de_nuke</option>
-                  <option value="de_ancient">de_ancient</option>
-                  <option value="de_anubis">de_anubis</option>
-                  <option value="de_vertigo">de_vertigo</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- DOCKER COMPOSE SNIPPET -->
-            <div class="flex flex-col gap-2">
-              <div class="flex items-center justify-between">
-                <span class="font-bold text-white text-xs">docker-compose.yml for your LXC:</span>
+              <div class="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
                 <button
-                  @click="copyToClipboard(generatedDockerCompose, 'docker')"
-                  class="px-3 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                  @click="serverHostingPlatform = 'windows'"
+                  :class="[
+                    'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                    serverHostingPlatform === 'windows' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+                  ]"
                 >
-                  <Check v-if="copiedDocker" class="w-3.5 h-3.5 text-emerald-400" />
-                  <Copy v-else class="w-3.5 h-3.5" />
-                  <span>{{ copiedDocker ? 'Copied!' : 'Copy Docker Compose' }}</span>
+                  <Monitor class="w-3.5 h-3.5" />
+                  <span>🪟 Windows PC (Local)</span>
+                </button>
+                <button
+                  @click="serverHostingPlatform = 'docker'"
+                  :class="[
+                    'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                    serverHostingPlatform === 'docker' ? 'bg-cyan-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+                  ]"
+                >
+                  <Server class="w-3.5 h-3.5" />
+                  <span>🐧 Linux Docker / Proxmox LXC</span>
                 </button>
               </div>
-
-              <pre class="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl font-mono text-[11px] text-cyan-300 overflow-x-auto scrollbar-thin leading-relaxed">{{ generatedDockerCompose }}</pre>
             </div>
+
+            <!-- ================= WINDOWS LOCAL HOSTING FLOW ================= -->
+            <div v-if="serverHostingPlatform === 'windows'" class="flex flex-col gap-4">
+              
+              <!-- WARNING & SYSTEM IMPACT CARD -->
+              <div class="p-4 bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl flex flex-col gap-3">
+                <div class="flex items-center gap-2 text-amber-400">
+                  <ShieldAlert class="w-5 h-5 stroke-[2.5]" />
+                  <span class="font-black uppercase tracking-wider text-xs">
+                    ⚠️ Hardware & Performance Notice for Windows Local Hosting
+                  </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-slate-300">
+                  <div class="p-2.5 bg-slate-950/70 rounded-xl border border-amber-500/20 flex flex-col gap-1">
+                    <span class="font-black text-amber-300 flex items-center gap-1">
+                      <Cpu class="w-3.5 h-3.5" /> RAM: 16 GB+ Required
+                    </span>
+                    <span class="text-[10px] text-slate-400">
+                      CS2 Dedicated Server uses ~4-6 GB RAM. Running CS2 client + Server on same PC needs at least 16GB (32GB recommended).
+                    </span>
+                  </div>
+
+                  <div class="p-2.5 bg-slate-950/70 rounded-xl border border-amber-500/20 flex flex-col gap-1">
+                    <span class="font-black text-amber-300 flex items-center gap-1">
+                      <Zap class="w-3.5 h-3.5" /> CPU / Subtick Load
+                    </span>
+                    <span class="text-[10px] text-slate-400">
+                      Calculates full tickrate & physics in background. If you experience in-game FPS drops, consider singleplayer or Proxmox LXC.
+                    </span>
+                  </div>
+
+                  <div class="p-2.5 bg-slate-950/70 rounded-xl border border-amber-500/20 flex flex-col gap-1">
+                    <span class="font-black text-amber-300 flex items-center gap-1">
+                      <FolderOpen class="w-3.5 h-3.5" /> ~35 GB Disk Space
+                    </span>
+                    <span class="text-[10px] text-slate-400">
+                      SteamCMD downloads the standalone CS2 dedicated server binaries into <code class="text-amber-300 font-mono">C:\CS2_Dedicated_Server</code>.
+                    </span>
+                  </div>
+                </div>
+
+                <!-- APPROVAL CHECKBOX -->
+                <label class="flex items-center gap-3 p-3 bg-slate-950/90 rounded-xl border border-amber-500/50 cursor-pointer select-none hover:bg-slate-900 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    v-model="approvedWindowsSelfInstall" 
+                    class="w-5 h-5 accent-amber-500 rounded cursor-pointer shrink-0"
+                  />
+                  <div class="flex flex-col">
+                    <span class="font-black text-white text-xs">
+                      I understand the system impact and approve self-installing the CS2 Dedicated Server on this Windows PC.
+                    </span>
+                    <span class="text-[10px] text-slate-400">
+                      Check this box to unlock 1-click installer scripts, automated SteamCMD setup, and server launchers.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              <!-- APPROVED WINDOWS INSTALLATION SUITE -->
+              <div v-if="approvedWindowsSelfInstall" class="flex flex-col gap-4 animate-fade-in">
+                
+                <!-- SERVER CONFIGURATION INPUTS -->
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div class="flex flex-col gap-1 p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                    <span class="text-[10px] text-slate-400 font-bold">Server Name:</span>
+                    <input 
+                      v-model="dedicatedConfig.serverName" 
+                      type="text" 
+                      class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div class="flex flex-col gap-1 p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                    <span class="text-[10px] text-slate-400 font-bold">Server Port:</span>
+                    <input 
+                      v-model.number="dedicatedConfig.serverPort" 
+                      type="number" 
+                      class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div class="flex flex-col gap-1 p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                    <span class="text-[10px] text-slate-400 font-bold">RCON Password:</span>
+                    <input 
+                      v-model="dedicatedConfig.rconPassword" 
+                      type="text" 
+                      class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div class="flex flex-col gap-1 p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                    <span class="text-[10px] text-slate-400 font-bold">Default Starting Map:</span>
+                    <select 
+                      v-model="dedicatedConfig.startMap" 
+                      class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:border-amber-500 focus:outline-none"
+                    >
+                      <option value="de_mirage">de_mirage</option>
+                      <option value="de_dust2">de_dust2</option>
+                      <option value="de_inferno">de_inferno</option>
+                      <option value="de_nuke">de_nuke</option>
+                      <option value="de_ancient">de_ancient</option>
+                      <option value="de_anubis">de_anubis</option>
+                      <option value="de_vertigo">de_vertigo</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- 1-CLICK DOWNLOAD ACTION BUTTONS -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <!-- DOWNLOAD INSTALLER -->
+                  <div class="p-4 bg-slate-950/90 border border-slate-800 rounded-2xl flex flex-col justify-between gap-3">
+                    <div class="flex flex-col gap-1">
+                      <span class="font-black text-xs text-white uppercase tracking-wide flex items-center gap-1.5">
+                        <FileCode2 class="w-4 h-4 text-amber-400" />
+                        1. Auto-Installer Batch Script
+                      </span>
+                      <p class="text-[11px] text-slate-400">
+                        Automatically downloads SteamCMD, pulls CS2 binaries, creates directory structure, and writes practice.cfg.
+                      </p>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <button
+                        @click="handleDownloadWindowsInstaller"
+                        class="flex-1 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+                      >
+                        <Download class="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>Download install_cs2_server_windows.bat</span>
+                      </button>
+
+                      <button
+                        @click="copyToClipboard(generatedWindowsInstallerScript, 'windowsInstaller')"
+                        class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 rounded-xl transition-colors cursor-pointer"
+                        title="Copy Script"
+                      >
+                        <Check v-if="copiedWindowsInstaller" class="w-4 h-4 text-emerald-400" />
+                        <Copy v-else class="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- DOWNLOAD LAUNCHER -->
+                  <div class="p-4 bg-slate-950/90 border border-slate-800 rounded-2xl flex flex-col justify-between gap-3">
+                    <div class="flex flex-col gap-1">
+                      <span class="font-black text-xs text-white uppercase tracking-wide flex items-center gap-1.5">
+                        <Play class="w-4 h-4 text-emerald-400" />
+                        2. Dedicated Server Startup Launcher
+                      </span>
+                      <p class="text-[11px] text-slate-400">
+                        1-click launcher to start your CS2 dedicated server on port {{ dedicatedConfig.serverPort }} with your configured map & practice rules.
+                      </p>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <button
+                        @click="handleDownloadWindowsStart"
+                        class="flex-1 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+                      >
+                        <Download class="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>Download start_cs2_server.bat</span>
+                      </button>
+
+                      <button
+                        @click="copyToClipboard(generatedWindowsStartScript, 'windowsStart')"
+                        class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 rounded-xl transition-colors cursor-pointer"
+                        title="Copy Script"
+                      >
+                        <Check v-if="copiedWindowsStart" class="w-4 h-4 text-emerald-400" />
+                        <Copy v-else class="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SCRIPT PREVIEW BOX -->
+                <div class="flex flex-col gap-2">
+                  <span class="font-bold text-white text-xs">Self-Installer Script Source (install_cs2_server_windows.bat):</span>
+                  <pre class="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl font-mono text-[11px] text-amber-300 overflow-x-auto scrollbar-thin leading-relaxed max-h-48">{{ generatedWindowsInstallerScript }}</pre>
+                </div>
+              </div>
+
+              <div v-else class="p-6 bg-slate-950/40 border border-slate-800/80 rounded-2xl flex flex-col items-center justify-center text-center gap-2">
+                <AlertCircle class="w-8 h-8 text-slate-600" />
+                <span class="text-xs font-bold text-slate-400">
+                  Please review the hardware notice and check the approval box above to unlock the Windows Self-Installer package.
+                </span>
+              </div>
+
+            </div>
+
+            <!-- ================= DOCKER / PROXMOX LXC FLOW ================= -->
+            <div v-else class="flex flex-col gap-4">
+              <div class="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                  <span class="font-black uppercase tracking-wider text-white text-xs flex items-center gap-1.5">
+                    <Server class="w-4 h-4 text-cyan-400" />
+                    Host a 24/7 Dedicated CS2 Practice Server (Docker / Proxmox LXC)
+                  </span>
+                  <span class="text-[10px] font-mono text-emerald-400">Linux / Docker Compose</span>
+                </div>
+                <p class="text-slate-300 text-xs leading-relaxed">
+                  Deploy a dedicated Counter-Strike 2 server on your Proxmox LXC (<code class="text-amber-400 font-mono">192.168.0.194</code>) or home server so your whole team can join with <code class="text-emerald-400 font-mono">connect &lt;IP&gt;:27015</code> and practice together.
+                </p>
+              </div>
+
+              <!-- SERVER SETTINGS -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="flex flex-col gap-1 p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                  <span class="text-[10px] text-slate-400 font-bold">Server Name:</span>
+                  <input 
+                    v-model="dedicatedConfig.serverName" 
+                    type="text" 
+                    class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div class="flex flex-col gap-1 p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                  <span class="text-[10px] text-slate-400 font-bold">RCON Password:</span>
+                  <input 
+                    v-model="dedicatedConfig.rconPassword" 
+                    type="text" 
+                    class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div class="flex flex-col gap-1 p-3 bg-slate-950/80 border border-slate-800 rounded-xl">
+                  <span class="text-[10px] text-slate-400 font-bold">Default Starting Map:</span>
+                  <select 
+                    v-model="dedicatedConfig.startMap" 
+                    class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:border-amber-500 focus:outline-none"
+                  >
+                    <option value="de_mirage">de_mirage</option>
+                    <option value="de_dust2">de_dust2</option>
+                    <option value="de_inferno">de_inferno</option>
+                    <option value="de_nuke">de_nuke</option>
+                    <option value="de_ancient">de_ancient</option>
+                    <option value="de_anubis">de_anubis</option>
+                    <option value="de_vertigo">de_vertigo</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- DOCKER COMPOSE SNIPPET -->
+              <div class="flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-white text-xs">docker-compose.yml for your LXC:</span>
+                  <button
+                    @click="copyToClipboard(generatedDockerCompose, 'docker')"
+                    class="px-3 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Check v-if="copiedDocker" class="w-3.5 h-3.5 text-emerald-400" />
+                    <Copy v-else class="w-3.5 h-3.5" />
+                    <span>{{ copiedDocker ? 'Copied!' : 'Copy Docker Compose' }}</span>
+                  </button>
+                </div>
+
+                <pre class="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl font-mono text-[11px] text-cyan-300 overflow-x-auto scrollbar-thin leading-relaxed">{{ generatedDockerCompose }}</pre>
+              </div>
+            </div>
+
           </div>
 
           <!-- ============================================================ -->

@@ -23,12 +23,18 @@ import {
   Sparkles,
   Eye,
   Maximize2,
-  Layers
+  Layers,
+  Upload,
+  Video,
+  Film,
+  HelpCircle
 } from 'lucide-vue-next'
 import { useConfirmDialog } from '../../composables/useConfirmDialog'
+import { useCs2ServerStore } from '../../stores/cs2ServerStore'
 
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
+const cs2ServerStore = useCs2ServerStore()
 const lineup = computed(() => lineupStore.activeLineup)
 const targetMap = computed(() => {
   if (!lineup.value) return mapStore.currentMap
@@ -39,6 +45,33 @@ const copiedCommand = ref(false)
 const activeMediaTab = ref<'aim' | 'standing' | 'landing' | 'radar' | 'video'>('aim')
 const isLightboxOpen = ref(false)
 const lightboxImageUrl = ref<string | null>(null)
+const isUploadingModalVideo = ref(false)
+const showModalClipGuide = ref(false)
+
+const isDirectVideo = computed(() => {
+  if (!lineup.value?.videoUrl) return false
+  const url = lineup.value.videoUrl.toLowerCase()
+  return url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov') || url.endsWith('.ogv') || url.endsWith('.mkv') || url.includes('/uploads/video_') || url.startsWith('data:video/')
+})
+
+async function handleModalVideoUpload(e: Event) {
+  const target = e.target as HTMLInputElement
+  if (!target.files || !target.files[0] || !lineup.value) return
+  const file = target.files[0]
+
+  isUploadingModalVideo.value = true
+  try {
+    const res = await cs2ServerStore.uploadAndAttachVideo(file, lineup.value.id)
+    if (res) {
+      activeMediaTab.value = 'video'
+    }
+  } catch (err) {
+    console.error('Failed to upload video in modal:', err)
+  } finally {
+    isUploadingModalVideo.value = false
+    target.value = ''
+  }
+}
 
 // Reset active media tab on lineup change
 watch(lineup, (newLineup) => {
@@ -256,7 +289,7 @@ onUnmounted(() => {
                 <span>Radar & Landing</span>
               </button>
 
-              <!-- VIDEO PLAYBACK TAB -->
+              <!-- VIDEO PLAYBACK TAB (PRIORITY 2: SECOND OPTION) -->
               <button 
                 v-if="lineup.videoUrl"
                 @click="activeMediaTab = 'video'"
@@ -266,21 +299,44 @@ onUnmounted(() => {
                 ]"
               >
                 <Play class="w-3.5 h-3.5 fill-current" />
-                <span>Video</span>
+                <span>Video Clip</span>
               </button>
+
+              <!-- ATTACH VIDEO BUTTON IF NONE EXISTS -->
+              <label 
+                v-else-if="lineup.isCustom"
+                class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-slate-400 hover:text-amber-400 hover:bg-slate-900 border border-dashed border-slate-800 hover:border-amber-500/40 transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                title="Attach an MP4/WebM video clip to this lineup"
+              >
+                <Video class="w-3.5 h-3.5 text-rose-400" />
+                <span>{{ isUploadingModalVideo ? 'Uploading...' : '+ Add Video' }}</span>
+                <input type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska" class="hidden" @change="handleModalVideoUpload" />
+              </label>
             </div>
 
             <!-- MEDIA CONTAINER -->
             <div class="relative w-full aspect-video bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-xl flex items-center justify-center group">
               
-              <!-- VIDEO PLAYER -->
-              <iframe 
-                v-if="activeMediaTab === 'video' && lineup.videoUrl"
-                :src="lineup.videoUrl" 
-                class="w-full h-full border-0" 
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                allowfullscreen
-              ></iframe>
+              <!-- VIDEO PLAYER (HTML5 FOR DIRECT MP4/WEBM OR IFRAME FOR EMBEDS) -->
+              <template v-if="activeMediaTab === 'video' && lineup.videoUrl">
+                <video 
+                  v-if="isDirectVideo"
+                  :src="lineup.videoUrl" 
+                  controls 
+                  autoplay 
+                  loop 
+                  muted 
+                  playsinline 
+                  class="w-full h-full object-contain bg-black"
+                ></video>
+                <iframe 
+                  v-else
+                  :src="lineup.videoUrl" 
+                  class="w-full h-full border-0" 
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                  allowfullscreen
+                ></iframe>
+              </template>
 
               <!-- RADAR & LANDING SPOT VIEW -->
               <div 
