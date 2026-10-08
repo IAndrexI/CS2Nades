@@ -55,11 +55,10 @@ const lineupStore = useLineupStore()
 const themeStore = useThemeStore()
 const cs2ServerStore = useCs2ServerStore()
 
-const activeTab = ref<'sync' | 'cfg' | 'setpos' | 'dedicated' | 'gsi'>('sync')
+const activeTab = ref<'sync' | 'cfg' | 'setpos' | 'dedicated'>('sync')
 const copiedCfg = ref(false)
 const copiedDocker = ref(false)
 const copiedSetpos = ref(false)
-const copiedGsi = ref(false)
 const copiedServerSetpos = ref(false)
 const copiedWindowsInstaller = ref(false)
 const copiedWindowsStart = ref(false)
@@ -361,67 +360,6 @@ async function handlePasteFromClipboardButton(type: 'aim' | 'standing' | 'landin
 }
 
 
-// ── GENERATE GSI CONFIG ─────────────────────────────────────
-const gsiCustomUri = ref(typeof window !== 'undefined' ? `${window.location.origin}/api/cs2/gsi` : 'http://192.168.0.194:8080/api/cs2/gsi')
-const copiedGsiPath = ref(false)
-const isTestingGsi = ref(false)
-const gsiTestFeedback = ref<string | null>(null)
-
-const generatedGsiConfig = computed(() => {
-  const uri = gsiCustomUri.value.trim() || (typeof window !== 'undefined' ? `${window.location.origin}/api/cs2/gsi` : 'http://192.168.0.194:8080/api/cs2/gsi')
-  return `"CS2Nades Integration"
-{
- "uri" "${uri}"
- "timeout" "5.0"
- "buffer"  "0.1"
- "throttle" "0.1"
- "heartbeat" "30.0"
- "data"
- {
-   "provider"               "1"
-   "map"                    "1"
-   "round"                  "1"
-   "player_id"              "1"
-   "player_state"           "1"
-   "player_weapons"         "1"
-   "player_match_stats"     "1"
-   "player_position"        "1"
-   "allplayers_id"          "1"
-   "allplayers_state"       "1"
-   "allplayers_match_stats" "1"
-   "allplayers_weapons"     "1"
-   "allplayers_position"    "1"
-   "phase_countdowns"       "1"
-   "bomb"                   "1"
- }
-}`
-})
-
-async function handleSendTestGsiPing() {
-  isTestingGsi.value = true
-  try {
-    const ok = await cs2ServerStore.sendTestGsiPing(mapStore.currentMapId)
-    if (ok) {
-      gsiTestFeedback.value = '✓ Test GSI Ping Received! Telemetry updated in real-time.'
-      setTimeout(() => (gsiTestFeedback.value = null), 4000)
-    }
-  } finally {
-    isTestingGsi.value = false
-  }
-}
-
-function setBrowserOriginGsiUri() {
-  if (typeof window !== 'undefined') {
-    gsiCustomUri.value = `${window.location.origin}/api/cs2/gsi`
-  }
-}
-
-function setLxcGsiUri() {
-  gsiCustomUri.value = 'http://192.168.0.194:8080/api/cs2/gsi'
-}
-
-
-
 // ── LIVE SERVER SYNC ACTION HANDLERS ───────────────────────
 async function handleTestConnection() {
   await cs2ServerStore.testConnection()
@@ -529,11 +467,7 @@ function handleDownloadCfg() {
   downloadFile('practice.cfg', generatedCfgScript.value)
 }
 
-function handleDownloadGsi() {
-  downloadFile('gamestate_integration_cs2nades.cfg', generatedGsiConfig.value)
-}
-
-async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' | 'gsi' | 'serverSetpos' | 'gsiPath' | 'windowsInstaller' | 'windowsStart') {
+async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' | 'serverSetpos' | 'windowsInstaller' | 'windowsStart') {
   try {
     await navigator.clipboard.writeText(text)
     if (type === 'cfg') {
@@ -545,15 +479,9 @@ async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' |
     } else if (type === 'setpos') {
       copiedSetpos.value = true
       setTimeout(() => (copiedSetpos.value = false), 2500)
-    } else if (type === 'gsi') {
-      copiedGsi.value = true
-      setTimeout(() => (copiedGsi.value = false), 2500)
     } else if (type === 'serverSetpos') {
       copiedServerSetpos.value = true
       setTimeout(() => (copiedServerSetpos.value = false), 2500)
-    } else if (type === 'gsiPath') {
-      copiedGsiPath.value = true
-      setTimeout(() => (copiedGsiPath.value = false), 2500)
     } else if (type === 'windowsInstaller') {
       copiedWindowsInstaller.value = true
       setTimeout(() => (copiedWindowsInstaller.value = false), 2500)
@@ -664,18 +592,6 @@ onUnmounted(() => {
             >
               <Server class="w-3.5 h-3.5" />
               <span>Dedicated Server</span>
-            </button>
-
-            <button
-              @click="activeTab = 'gsi'"
-              :class="[
-                'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
-                activeTab === 'gsi' ? 'font-black shadow' : 'text-slate-400 hover:text-white'
-              ]"
-              :style="activeTab === 'gsi' ? { backgroundColor: themeStore.customAccentColor, color: '#020617' } : {}"
-            >
-              <Radio class="w-3.5 h-3.5" />
-              <span>GSI Config</span>
             </button>
 
             <button 
@@ -1833,232 +1749,6 @@ onUnmounted(() => {
             </div>
 
           </div>
-
-          <!-- ============================================================ -->
-          <!-- TAB 4: GSI LIVE POSITION & NADE SYNC -->
-          <!-- ============================================================ -->
-          <div v-else-if="activeTab === 'gsi'" class="flex flex-col gap-6">
-            
-            <!-- GSI LIVE STATUS & TELEMETRY MONITOR -->
-            <div class="p-5 bg-slate-950/90 border border-slate-800 rounded-3xl flex flex-col gap-4 shadow-xl">
-              <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                <div class="flex items-center gap-2.5">
-                  <div class="p-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl">
-                    <Radio class="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 class="font-black text-sm text-white uppercase tracking-wider">
-                      CS2 GameState Integration (GSI) Live Telemetry
-                    </h3>
-                    <p class="text-[11px] text-slate-400">
-                      Streams live in-game coordinates, crosshair angles, active weapon, and map directly from CS2 without cheats.
-                    </p>
-                  </div>
-                </div>
-
-                <!-- LIVE STREAMING STATUS PILL -->
-                <div class="flex items-center gap-2">
-                  <div 
-                    v-if="cs2ServerStore.isGsiActive" 
-                    class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-xl font-mono text-xs font-black shadow-lg"
-                  >
-                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span>LIVE STREAMING FROM CS2</span>
-                  </div>
-                  <div 
-                    v-else 
-                    class="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-xl font-mono text-xs font-bold"
-                  >
-                    <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
-                    <span>WAITING FOR CS2 PACKETS</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- LIVE TELEMETRY CARDS (WHEN STREAMING OR TESTED) -->
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div class="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col gap-1">
-                  <span class="text-[10px] text-slate-400 font-bold uppercase">Active Map:</span>
-                  <span class="text-xs font-mono font-black text-amber-400">
-                    {{ cs2ServerStore.livePlayer?.mapName?.toUpperCase() || mapStore.currentMapId.toUpperCase() }}
-                  </span>
-                </div>
-
-                <div class="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col gap-1">
-                  <span class="text-[10px] text-slate-400 font-bold uppercase">Player / Team:</span>
-                  <span class="text-xs font-mono font-bold text-white flex items-center gap-1.5 truncate">
-                    <span>{{ cs2ServerStore.livePlayer?.playerName || 'CS2 Player' }}</span>
-                    <span 
-                      :class="[
-                        'px-1.5 py-0.2 rounded text-[10px] font-black uppercase font-mono border',
-                        cs2ServerStore.livePlayer?.team === 'CT' 
-                          ? 'bg-sky-500/20 text-sky-400 border-sky-500/40' 
-                          : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                      ]"
-                    >
-                      {{ cs2ServerStore.livePlayer?.team || 'T' }}
-                    </span>
-                  </span>
-                </div>
-
-                <div class="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col gap-1">
-                  <span class="text-[10px] text-slate-400 font-bold uppercase">Health / Weapon:</span>
-                  <span class="text-xs font-mono font-bold text-emerald-400 truncate">
-                    {{ cs2ServerStore.livePlayer?.health ?? 100 }} HP 
-                    <span v-if="cs2ServerStore.livePlayer?.weapon" class="text-slate-300">| {{ cs2ServerStore.livePlayer.weapon.replace('weapon_', '') }}</span>
-                  </span>
-                </div>
-
-                <div class="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col gap-1">
-                  <span class="text-[10px] text-slate-400 font-bold uppercase">Radar Coords:</span>
-                  <span class="text-xs font-mono font-bold text-sky-400">
-                    {{ cs2ServerStore.livePlayer?.radarCoords?.x ?? 50 }}%, {{ cs2ServerStore.livePlayer?.radarCoords?.y ?? 50 }}%
-                  </span>
-                </div>
-              </div>
-
-              <!-- ACTIONS: TEST PING & MAP AUTO SYNC -->
-              <div class="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800/80">
-                <label class="flex items-center gap-2 cursor-pointer select-none">
-                  <input 
-                    type="checkbox" 
-                    v-model="cs2ServerStore.autoSyncMapWithGsi" 
-                    class="w-4 h-4 accent-amber-500 rounded cursor-pointer"
-                  />
-                  <span class="text-xs text-slate-300 font-bold">
-                    Auto-switch website radar when changing map in CS2
-                  </span>
-                </label>
-
-                <div class="flex items-center gap-2">
-                  <button
-                    @click="handleSendTestGsiPing"
-                    :disabled="isTestingGsi"
-                    class="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-amber-500/40 text-amber-400 font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow"
-                  >
-                    <Zap class="w-3.5 h-3.5 fill-current" />
-                    <span>{{ isTestingGsi ? 'Sending Test...' : '⚡ Send Test GSI Ping' }}</span>
-                  </button>
-                </div>
-              </div>
-
-              <div v-if="gsiTestFeedback" class="p-2.5 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2">
-                <CheckCircle2 class="w-4 h-4" />
-                <span>{{ gsiTestFeedback }}</span>
-              </div>
-            </div>
-
-            <!-- GSI CONFIGURATION GENERATOR -->
-            <div class="p-5 bg-slate-950/90 border border-slate-800 rounded-3xl flex flex-col gap-4 shadow-xl">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <div class="flex items-center gap-2">
-                  <Code2 class="w-4 h-4 text-amber-400" />
-                  <span class="font-black uppercase tracking-wider text-white text-xs">
-                    GSI Config Builder (gamestate_integration_cs2nades.cfg)
-                  </span>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <button
-                    @click="copyToClipboard(generatedGsiConfig, 'gsi')"
-                    class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Check v-if="copiedGsi" class="w-3.5 h-3.5 text-emerald-400" />
-                    <Copy v-else class="w-3.5 h-3.5" />
-                    <span>{{ copiedGsi ? 'Copied!' : 'Copy Config' }}</span>
-                  </button>
-
-                  <button
-                    @click="handleDownloadGsi"
-                    class="px-4 py-1.5 font-black text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer hover:opacity-90 shadow-lg"
-                    :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
-                  >
-                    <Download class="w-3.5 h-3.5" />
-                    <span>Download .cfg File</span>
-                  </button>
-                </div>
-              </div>
-
-              <!-- URI INPUT & PRESETS -->
-              <div class="flex flex-col gap-2 p-3.5 bg-slate-900 rounded-2xl border border-slate-800">
-                <div class="flex items-center justify-between">
-                  <label class="text-[10px] font-bold text-slate-400 uppercase">Target Ingestion URI (HTTP):</label>
-                  <div class="flex items-center gap-1.5 text-[10px]">
-                    <button 
-                      @click="setBrowserOriginGsiUri" 
-                      class="text-amber-400 hover:underline cursor-pointer font-bold"
-                    >
-                      Use Current Browser Origin
-                    </button>
-                    <span class="text-slate-600">|</span>
-                    <button 
-                      @click="setLxcGsiUri" 
-                      class="text-slate-400 hover:text-white cursor-pointer font-bold"
-                    >
-                      Use LXC (192.168.0.194)
-                    </button>
-                  </div>
-                </div>
-
-                <input 
-                  v-model="gsiCustomUri" 
-                  type="text" 
-                  class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-500 focus:outline-none"
-                />
-              </div>
-
-              <!-- CONFIG PREVIEW BOX -->
-              <pre class="p-4 bg-slate-950 border border-slate-800 rounded-2xl font-mono text-[11px] text-amber-300 overflow-x-auto scrollbar-thin leading-relaxed">{{ generatedGsiConfig }}</pre>
-            </div>
-
-            <!-- STEP-BY-STEP INSTALLATION GUIDE -->
-            <div class="p-5 bg-slate-950/60 border border-slate-800 rounded-3xl flex flex-col gap-3 text-xs">
-              <div class="flex items-center gap-2">
-                <HelpCircle class="w-4 h-4 text-amber-400" />
-                <strong class="text-white text-xs font-black uppercase tracking-wide">
-                  How to Install in Counter-Strike 2 (3 Simple Steps)
-                </strong>
-              </div>
-
-              <div class="flex flex-col gap-2 text-slate-300 text-[11px]">
-                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 flex flex-col gap-1.5">
-                  <span class="font-bold text-white">Step 1: Download or save the file</span>
-                  <p class="text-slate-400">
-                    Click <strong>Download .cfg File</strong> above to get <code class="text-amber-300 font-mono">gamestate_integration_cs2nades.cfg</code>.
-                  </p>
-                </div>
-
-                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 flex flex-col gap-1.5">
-                  <div class="flex items-center justify-between">
-                    <span class="font-bold text-white">Step 2: Place in your CS2 cfg folder</span>
-                    <button 
-                      @click="copyToClipboard('C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\game\\csgo\\cfg\\', 'gsiPath')"
-                      class="text-[10px] text-amber-400 hover:underline flex items-center gap-1 cursor-pointer font-bold"
-                    >
-                      <Check v-if="copiedGsiPath" class="w-3 h-3 text-emerald-400" />
-                      <Copy v-else class="w-3 h-3" />
-                      <span>{{ copiedGsiPath ? 'Path Copied!' : 'Copy Folder Path' }}</span>
-                    </button>
-                  </div>
-                  <code class="p-2 bg-slate-950 rounded-lg text-emerald-300 font-mono text-[10px] break-all border border-slate-800">
-                    C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo\cfg\
-                  </code>
-                  <p class="text-[10px] text-amber-400/90 font-medium">
-                    ⚠️ Note: In CS2, make sure you put it inside the <strong>game\csgo\cfg\</strong> folder (NOT the old CS:GO folder).
-                  </p>
-                </div>
-
-                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 flex flex-col gap-1.5">
-                  <span class="font-bold text-white">Step 3: Launch CS2 or enter practice map</span>
-                  <p class="text-slate-400">
-                    Launch CS2 or type <code class="text-emerald-400 font-mono">map de_mirage</code> in console. CS2 will automatically start streaming your position, crosshair, and grenade throws to the website live!
-                  </p>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
 
         </div>
 

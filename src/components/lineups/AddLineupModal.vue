@@ -129,6 +129,64 @@ watch(() => formData.mapId, (newMapId) => {
   }
 })
 
+import { formatSetposCommand } from '../../utils/coordinateMapper'
+import { useCs2ServerStore } from '../../stores/cs2ServerStore'
+
+const cs2ServerStore = useCs2ServerStore()
+const coordInputMode = ref<'world' | 'radar'>('world')
+
+const worldCoords = reactive({
+  originX: 0,
+  originY: 0,
+  originZ: 0,
+  pitch: 0,
+  yaw: 0,
+  roll: 0,
+  landingX: 0,
+  landingY: 0,
+  landingZ: 0
+})
+
+function updateFromWorldOrigin() {
+  const radar = worldToRadarCoords(worldCoords.originX, worldCoords.originY, formData.mapId)
+  formData.originCoords = { x: radar.x, y: radar.y }
+  formData.cs2Pos = {
+    x: worldCoords.originX,
+    y: worldCoords.originY,
+    z: worldCoords.originZ,
+    pitch: worldCoords.pitch,
+    yaw: worldCoords.yaw,
+    roll: worldCoords.roll
+  }
+  formData.consoleCommand = formatSetposCommand(worldCoords.originX, worldCoords.originY, worldCoords.originZ, worldCoords.pitch, worldCoords.yaw, worldCoords.roll)
+}
+
+function updateFromWorldLanding() {
+  const radar = worldToRadarCoords(worldCoords.landingX, worldCoords.landingY, formData.mapId)
+  formData.landingCoords = { x: radar.x, y: radar.y }
+}
+
+function updateFromRadarOrigin() {
+  const world = radarToWorldCoords(formData.originCoords.x, formData.originCoords.y, formData.mapId, worldCoords.originZ)
+  worldCoords.originX = world.x
+  worldCoords.originY = world.y
+  formData.cs2Pos = {
+    x: world.x,
+    y: world.y,
+    z: worldCoords.originZ,
+    pitch: worldCoords.pitch,
+    yaw: worldCoords.yaw,
+    roll: worldCoords.roll
+  }
+  formData.consoleCommand = formatSetposCommand(world.x, world.y, worldCoords.originZ, worldCoords.pitch, worldCoords.yaw, worldCoords.roll)
+}
+
+function updateFromRadarLanding() {
+  const world = radarToWorldCoords(formData.landingCoords.x, formData.landingCoords.y, formData.mapId, worldCoords.landingZ)
+  worldCoords.landingX = world.x
+  worldCoords.landingY = world.y
+}
+
 // ── CS2 CONSOLE POS & SETPOS PARSING ──────────────────────────
 function processCS2PosInput(val: string) {
   if (!val.trim()) {
@@ -149,6 +207,13 @@ function processCS2PosInput(val: string) {
       yaw: parsed.angYaw,
       roll: parsed.angRoll
     }
+
+    worldCoords.originX = parsed.posX
+    worldCoords.originY = parsed.posY
+    worldCoords.originZ = parsed.posZ
+    worldCoords.pitch = parsed.angPitch || 0
+    worldCoords.yaw = parsed.angYaw || 0
+    worldCoords.roll = parsed.angRoll || 0
 
     parsedPosStatus.value = {
       success: true,
@@ -180,6 +245,29 @@ async function handlePastePosFromClipboard() {
     }
   } catch (err) {
     alert('Clipboard read permission denied. Please paste directly into the box with Ctrl+V.')
+  }
+}
+
+const isSnappingScreen = ref(false)
+
+async function handleDirectScreenSnap(slot: 'aim' | 'standing' | 'landing') {
+  isSnappingScreen.value = true
+  try {
+    const dataUrl = await cs2ServerStore.captureScreenFrame()
+    if (dataUrl) {
+      if (slot === 'aim') {
+        formData.aimScreenshot = dataUrl
+        formData.imageUrl = dataUrl
+      } else if (slot === 'standing') {
+        formData.standingScreenshot = dataUrl
+      } else if (slot === 'landing') {
+        formData.landingScreenshot = dataUrl
+      }
+    }
+  } catch (err) {
+    console.error('Screen snap failed:', err)
+  } finally {
+    isSnappingScreen.value = false
   }
 }
 
@@ -810,24 +898,116 @@ function resetForm() {
               </div>
 
               <!-- RIGHT: COORDINATES & CONSOLE COMMAND -->
-              <div class="flex flex-col gap-4">
-                <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-3">
-                  <span class="font-bold text-slate-300 text-xs">Radar Placement Coordinates (%)</span>
-                  
-                  <div class="grid grid-cols-2 gap-3">
-                    <div class="flex flex-col gap-1">
-                      <span class="text-amber-400 font-bold text-[11px]">📍 Standing Spot (Origin)</span>
-                      <div class="flex items-center gap-2">
-                        <input v-model.number="formData.originCoords.x" type="number" step="0.1" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white" />
-                        <input v-model.number="formData.originCoords.y" type="number" step="0.1" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white" />
+              <div class="flex flex-col gap-3">
+                
+                <!-- COORD MODE SWITCHER -->
+                <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-3 shadow-md">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+                      <Terminal class="w-3.5 h-3.5 text-amber-400" />
+                      <span>Type Coordinate Mode:</span>
+                    </span>
+
+                    <div class="flex items-center gap-1 p-0.5 bg-slate-900 rounded-lg border border-slate-800 text-[10px] font-bold">
+                      <button
+                        type="button"
+                        @click="coordInputMode = 'world'"
+                        :class="[
+                          'px-2 py-1 rounded transition-colors cursor-pointer',
+                          coordInputMode === 'world' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                        ]"
+                      >
+                        World Units (X, Y, Z)
+                      </button>
+                      <button
+                        type="button"
+                        @click="coordInputMode = 'radar'"
+                        :class="[
+                          'px-2 py-1 rounded transition-colors cursor-pointer',
+                          coordInputMode === 'radar' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                        ]"
+                      >
+                        Radar % (0-100)
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- WORLD COORDINATES INPUT (SOURCE 2 UNITS) -->
+                  <div v-if="coordInputMode === 'world'" class="flex flex-col gap-3 animate-fade-in">
+                    <!-- STANDING WORLD COORDS -->
+                    <div class="flex flex-col gap-1.5 p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
+                      <div class="flex items-center justify-between text-[11px] font-bold text-amber-400">
+                        <span>📍 Standing Position (World X, Y, Z):</span>
+                        <span class="text-[10px] font-mono text-slate-400">Radar: {{ formData.originCoords.x }}%, {{ formData.originCoords.y }}%</span>
+                      </div>
+                      <div class="grid grid-cols-3 gap-2">
+                        <div>
+                          <label class="text-[9px] text-slate-400 font-bold block">Pos X:</label>
+                          <input v-model.number="worldCoords.originX" @input="updateFromWorldOrigin" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-amber-300 font-mono" />
+                        </div>
+                        <div>
+                          <label class="text-[9px] text-slate-400 font-bold block">Pos Y:</label>
+                          <input v-model.number="worldCoords.originY" @input="updateFromWorldOrigin" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-amber-300 font-mono" />
+                        </div>
+                        <div>
+                          <label class="text-[9px] text-slate-400 font-bold block">Pos Z:</label>
+                          <input v-model.number="worldCoords.originZ" @input="updateFromWorldOrigin" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-amber-300 font-mono" />
+                        </div>
+                      </div>
+
+                      <!-- ANGLES -->
+                      <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
+                        <div>
+                          <label class="text-[9px] text-slate-400 font-bold block">Pitch Angle (°):</label>
+                          <input v-model.number="worldCoords.pitch" @input="updateFromWorldOrigin" type="number" step="0.1" placeholder="e.g. -12.4" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-emerald-300 font-mono" />
+                        </div>
+                        <div>
+                          <label class="text-[9px] text-slate-400 font-bold block">Yaw Angle (°):</label>
+                          <input v-model.number="worldCoords.yaw" @input="updateFromWorldOrigin" type="number" step="0.1" placeholder="e.g. 94.2" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-emerald-300 font-mono" />
+                        </div>
                       </div>
                     </div>
 
-                    <div class="flex flex-col gap-1">
-                      <span class="text-rose-400 font-bold text-[11px]">🎯 Landing Spot (Target)</span>
-                      <div class="flex items-center gap-2">
-                        <input v-model.number="formData.landingCoords.x" type="number" step="0.1" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white" />
-                        <input v-model.number="formData.landingCoords.y" type="number" step="0.1" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white" />
+                    <!-- LANDING WORLD COORDS -->
+                    <div class="flex flex-col gap-1.5 p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
+                      <div class="flex items-center justify-between text-[11px] font-bold text-rose-400">
+                        <span>🎯 Landing Target (World X, Y, Z):</span>
+                        <span class="text-[10px] font-mono text-slate-400">Radar: {{ formData.landingCoords.x }}%, {{ formData.landingCoords.y }}%</span>
+                      </div>
+                      <div class="grid grid-cols-3 gap-2">
+                        <div>
+                          <label class="text-[9px] text-slate-400 font-bold block">Target X:</label>
+                          <input v-model.number="worldCoords.landingX" @input="updateFromWorldLanding" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-rose-300 font-mono" />
+                        </div>
+                        <div>
+                          <label class="text-[9px] text-slate-400 font-bold block">Target Y:</label>
+                          <input v-model.number="worldCoords.landingY" @input="updateFromWorldLanding" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-rose-300 font-mono" />
+                        </div>
+                        <div>
+                          <label class="text-[9px] text-slate-400 font-bold block">Target Z:</label>
+                          <input v-model.number="worldCoords.landingZ" @input="updateFromWorldLanding" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-rose-300 font-mono" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- RADAR PERCENTAGE COORDS -->
+                  <div v-else class="flex flex-col gap-3 animate-fade-in">
+                    <div class="grid grid-cols-2 gap-3">
+                      <div class="flex flex-col gap-1 p-2 bg-slate-900 rounded-xl border border-slate-800">
+                        <span class="text-amber-400 font-bold text-[11px]">📍 Standing Spot (%)</span>
+                        <div class="flex items-center gap-1.5">
+                          <input v-model.number="formData.originCoords.x" @input="updateFromRadarOrigin" type="number" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono" />
+                          <input v-model.number="formData.originCoords.y" @input="updateFromRadarOrigin" type="number" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono" />
+                        </div>
+                      </div>
+
+                      <div class="flex flex-col gap-1 p-2 bg-slate-900 rounded-xl border border-slate-800">
+                        <span class="text-rose-400 font-bold text-[11px]">🎯 Landing Spot (%)</span>
+                        <div class="flex items-center gap-1.5">
+                          <input v-model.number="formData.landingCoords.x" @input="updateFromRadarLanding" type="number" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono" />
+                          <input v-model.number="formData.landingCoords.y" @input="updateFromRadarLanding" type="number" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono" />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -879,12 +1059,25 @@ function resetForm() {
                     <Crosshair class="w-3.5 h-3.5 text-amber-400" />
                     <span>Crosshair / Aim Spot *</span>
                   </span>
-                  <span v-if="formData.aimScreenshot" class="text-[10px] text-emerald-400 font-bold">Uploaded</span>
+                  
+                  <div class="flex items-center gap-1.5">
+                    <span v-if="formData.aimScreenshot" class="text-[10px] text-emerald-400 font-bold">Uploaded</span>
+                    <button
+                      type="button"
+                      @click="handleDirectScreenSnap('aim')"
+                      :disabled="isSnappingScreen"
+                      class="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                      title="Capture single frame from CS2 window"
+                    >
+                      <Camera class="w-3 h-3 text-amber-400" />
+                      <span>+ Snap</span>
+                    </button>
+                  </div>
                 </div>
 
                 <!-- PREVIEW OR DROPZONE -->
                 <div v-if="formData.aimScreenshot" class="relative aspect-video w-full rounded-xl overflow-hidden group border border-slate-800">
-                  <img :src="formData.aimScreenshot" class="w-full h-full object-cover" />
+                  <img :src="formData.aimScreenshot" loading="lazy" decoding="async" class="w-full h-full object-cover" />
                   <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <button 
                       type="button" 
@@ -923,12 +1116,25 @@ function resetForm() {
                     <MapPin class="w-3.5 h-3.5 text-sky-400" />
                     <span>Standing / Feet Spot</span>
                   </span>
-                  <span v-if="formData.standingScreenshot" class="text-[10px] text-emerald-400 font-bold">Uploaded</span>
+                  
+                  <div class="flex items-center gap-1.5">
+                    <span v-if="formData.standingScreenshot" class="text-[10px] text-emerald-400 font-bold">Uploaded</span>
+                    <button
+                      type="button"
+                      @click="handleDirectScreenSnap('standing')"
+                      :disabled="isSnappingScreen"
+                      class="px-2 py-0.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                      title="Capture single frame from CS2 window"
+                    >
+                      <Camera class="w-3 h-3 text-sky-400" />
+                      <span>+ Snap</span>
+                    </button>
+                  </div>
                 </div>
 
                 <!-- PREVIEW OR DROPZONE -->
                 <div v-if="formData.standingScreenshot" class="relative aspect-video w-full rounded-xl overflow-hidden group border border-slate-800">
-                  <img :src="formData.standingScreenshot" class="w-full h-full object-cover" />
+                  <img :src="formData.standingScreenshot" loading="lazy" decoding="async" class="w-full h-full object-cover" />
                   <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <button 
                       type="button" 
@@ -967,12 +1173,25 @@ function resetForm() {
                     <Sparkles class="w-3.5 h-3.5 text-rose-400" />
                     <span>Landing Result Spot</span>
                   </span>
-                  <span v-if="formData.landingScreenshot" class="text-[10px] text-emerald-400 font-bold">Uploaded</span>
+                  
+                  <div class="flex items-center gap-1.5">
+                    <span v-if="formData.landingScreenshot" class="text-[10px] text-emerald-400 font-bold">Uploaded</span>
+                    <button
+                      type="button"
+                      @click="handleDirectScreenSnap('landing')"
+                      :disabled="isSnappingScreen"
+                      class="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                      title="Capture single frame from CS2 window"
+                    >
+                      <Camera class="w-3 h-3 text-rose-400" />
+                      <span>+ Snap</span>
+                    </button>
+                  </div>
                 </div>
 
                 <!-- PREVIEW OR DROPZONE -->
                 <div v-if="formData.landingScreenshot" class="relative aspect-video w-full rounded-xl overflow-hidden group border border-slate-800">
-                  <img :src="formData.landingScreenshot" class="w-full h-full object-cover" />
+                  <img :src="formData.landingScreenshot" loading="lazy" decoding="async" class="w-full h-full object-cover" />
                   <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <button 
                       type="button" 

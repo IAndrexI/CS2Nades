@@ -429,6 +429,8 @@ onUnmounted(() => {
                 <img 
                   :src="lineup.standingScreenshot" 
                   alt="Standing Position"
+                  loading="lazy"
+                  decoding="async"
                   class="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
                 />
                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-3.5 pointer-events-none">
@@ -451,6 +453,8 @@ onUnmounted(() => {
                 <img 
                   :src="lineup.landingScreenshot" 
                   alt="Landing Result"
+                  loading="lazy"
+                  decoding="async"
                   class="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
                 />
                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-3.5 pointer-events-none">
@@ -473,6 +477,8 @@ onUnmounted(() => {
                 <img 
                   :src="lineup.aimScreenshot || lineup.imageUrl || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop&q=80'" 
                   :alt="lineup.title"
+                  loading="lazy"
+                  decoding="async"
                   class="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
                 />
                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-3.5 pointer-events-none">

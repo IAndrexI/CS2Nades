@@ -43,6 +43,8 @@ function handleToggleLibrary(e: MouseEvent) {
       <img 
         :src="lineup.imageUrl || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80'" 
         :alt="lineup.title"
+        loading="lazy"
+        decoding="async"
         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-80 group-hover:opacity-100"
       />
       

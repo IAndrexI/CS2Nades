@@ -244,7 +244,7 @@ function handleOpenFullModal() {
           @click="handleServerAutoCapture"
           :disabled="cs2ServerStore.isCapturing"
           class="px-3 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer bg-slate-950 hover:bg-slate-850 text-amber-400 border border-amber-500/50 hover:border-amber-400 hover:scale-[1.02] active:scale-95"
-          title="Auto-capture current position & angles from CS2 / Live GSI"
+          title="Auto-capture current position & angles from CS2 Server via RCON"
         >
           <RefreshCw v-if="cs2ServerStore.isCapturing" class="w-3.5 h-3.5 animate-spin" />
           <Zap v-else class="w-3.5 h-3.5 fill-current text-amber-400" />
