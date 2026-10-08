@@ -29,6 +29,46 @@
   }
 }
 
+/* ── PROTUTECH DASHBOARD PALETTES ────────────────────────── */
+[data-palette="adobe-classic"], html.palette-adobe-classic {
+  --color-bg-base: #18181b;
+  --color-bg-surface: #202024;
+  --color-bg-card: #27272a;
+  --color-bg-hover: #323238;
+  --color-accent-primary: #38bdf8;
+  --color-accent-secondary: #818cf8;
+  --color-accent-gradient: linear-gradient(135deg, #38bdf8, #818cf8);
+  --color-accent-glow: rgba(56, 189, 248, 0.3);
+  --color-cs-gold: #38bdf8;
+  --color-ct: #38bdf8;
+}
+
+[data-palette="cyber-emerald"], html.palette-cyber-emerald {
+  --color-bg-base: #05100e;
+  --color-bg-surface: #091a17;
+  --color-bg-card: #0f2824;
+  --color-bg-hover: #153832;
+  --color-accent-primary: #10b981;
+  --color-accent-secondary: #06b6d4;
+  --color-accent-gradient: linear-gradient(135deg, #10b981, #06b6d4);
+  --color-accent-glow: rgba(16, 185, 129, 0.3);
+  --color-cs-gold: #10b981;
+  --color-ct: #06b6d4;
+}
+
+[data-palette="sunset-ember"], html.palette-sunset-ember {
+  --color-bg-base: #120910;
+  --color-bg-surface: #1d0f1a;
+  --color-bg-card: #291525;
+  --color-bg-hover: #381c32;
+  --color-accent-primary: #f59e0b;
+  --color-accent-secondary: #f43f5e;
+  --color-accent-gradient: linear-gradient(135deg, #f59e0b, #f43f5e);
+  --color-accent-glow: rgba(245, 158, 11, 0.3);
+  --color-cs-gold: #f59e0b;
+  --color-ct: #f43f5e;
+}
+
 /* ── LIGHT THEME OVERRIDES ────────────────────────────────── */
 html.light-theme {
   --color-bg-base: #f8fafc;

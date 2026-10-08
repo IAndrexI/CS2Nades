@@ -20,10 +20,18 @@
         ""
       );
       console.log(
-        "%c[Theme Update]%c Applied Protutech Obsidian Palette (#080c16, #00f2fe cyan, #7f00ff violet)\n%c[Changelog]%c Integrated unified suite design tokens & automated LXC GitOps sync.",
+        "%c[Theme Update]%c Synced with Protutech Suite Themes (Obsidian, Adobe Classic, Cyber Emerald, Sunset Ember)\n%c[Changelog]%c Integrated unified suite design tokens & automated LXC GitOps sync.",
         "color: #00f2fe; font-weight: bold;", "color: #f8fafc;",
         "color: #7f00ff; font-weight: bold;", "color: #94a3b8;"
       );
+      try {
+        const savedTheme = localStorage.getItem('protutech_theme_mode') || 'dark';
+        const savedPalette = localStorage.getItem('protutech_theme_palette') || 'protutech-obsidian';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        document.documentElement.setAttribute('data-palette', savedPalette);
+        if (savedTheme === 'light') document.documentElement.classList.add('light-theme');
+        if (savedPalette) document.documentElement.classList.add('palette-' + savedPalette);
+      } catch (e) {}
     </script>
   </head>
   <body class="bg-slate-950 text-slate-100 select-none">
