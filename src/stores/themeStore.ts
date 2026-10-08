@@ -11,29 +11,43 @@ const RECENT_BG_KEY = 'cs2_stratbook_recent_bgs'
 const RECENT_MODAL_KEY = 'cs2_stratbook_recent_modals'
 const UNREAD_BADGE_KEY = 'cs2_stratbook_unread_badge_enabled'
 
+export const PROTUTECH_THEME_KEY = 'protutech_theme_mode'
+export const PROTUTECH_PALETTE_KEY = 'protutech_theme_palette'
+
 export type ThemeMode = 'dark' | 'light'
+export type ThemePalette = 'protutech-obsidian' | 'adobe-classic' | 'cyber-emerald' | 'sunset-ember'
 
 export const useThemeStore = defineStore('theme', () => {
   const theme = ref<ThemeMode>('dark')
+  const palette = ref<ThemePalette>('protutech-obsidian')
   const isPhoneMode = ref<boolean>(false)
   const windowWidth = ref<number>(typeof window !== 'undefined' ? window.innerWidth : 1200)
 
-  const customBgColor = ref<string>('#090d13')
-  const customAccentColor = ref<string>('#de9b35')
-  const customModalBgColor = ref<string>('#0f172a')
+  const customBgColor = ref<string>('#080c16')
+  const customAccentColor = ref<string>('#00f2fe')
+  const customModalBgColor = ref<string>('#121a2d')
 
-  const recentAccentColors = ref<string[]>(['#de9b35', '#f97316', '#0ea5e9', '#ef4444', '#22c55e', '#a855f7'])
-  const recentBgColors = ref<string[]>(['#090d13', '#05070a', '#10141d', '#0b1118', '#141824'])
-  const recentModalColors = ref<string[]>(['#0f172a', '#0a0f18', '#111827', '#181b26', '#141c2b'])
+  const recentAccentColors = ref<string[]>(['#00f2fe', '#7f00ff', '#38bdf8', '#10b981', '#f59e0b', '#ef4444'])
+  const recentBgColors = ref<string[]>(['#080c16', '#0d1322', '#121a2d', '#18181b', '#05100e'])
+  const recentModalColors = ref<string[]>(['#121a2d', '#18223b', '#202024', '#0f2824', '#291525'])
 
   const showUnreadNotificationBadge = ref<boolean>(true)
 
   // Initialize from localStorage
   function loadTheme() {
     try {
-      const storedTheme = localStorage.getItem(THEME_STORAGE_KEY)
-      if (storedTheme === 'light' || storedTheme === 'dark') {
-        theme.value = storedTheme
+      const storedPalette = localStorage.getItem(PROTUTECH_PALETTE_KEY) as ThemePalette | null
+      if (storedPalette) {
+        palette.value = storedPalette
+      }
+      const storedProtutechTheme = localStorage.getItem(PROTUTECH_THEME_KEY) as ThemeMode | null
+      if (storedProtutechTheme === 'light' || storedProtutechTheme === 'dark') {
+        theme.value = storedProtutechTheme
+      } else {
+        const storedTheme = localStorage.getItem(THEME_STORAGE_KEY)
+        if (storedTheme === 'light' || storedTheme === 'dark') {
+          theme.value = storedTheme
+        }
       }
       const storedPhone = localStorage.getItem(PHONE_MODE_STORAGE_KEY)
       if (storedPhone !== null) {
@@ -84,6 +98,11 @@ export const useThemeStore = defineStore('theme', () => {
       root.classList.add('dark')
     }
 
+    root.setAttribute('data-palette', palette.value)
+    root.setAttribute('data-theme', theme.value)
+    root.className = root.className.replace(/palette-\S+/g, '').trim()
+    root.classList.add('palette-' + palette.value)
+
     if (isPhoneMode.value) {
       root.classList.add('phone-mode-active')
     } else {
@@ -120,9 +139,16 @@ export const useThemeStore = defineStore('theme', () => {
     localStorage.setItem(storageKey, JSON.stringify(updated))
   }
 
+  function setPalette(newPalette: ThemePalette) {
+    palette.value = newPalette
+    localStorage.setItem(PROTUTECH_PALETTE_KEY, newPalette)
+    applyTheme()
+  }
+
   function setTheme(newTheme: ThemeMode) {
     theme.value = newTheme
     localStorage.setItem(THEME_STORAGE_KEY, newTheme)
+    localStorage.setItem(PROTUTECH_THEME_KEY, newTheme)
     applyTheme()
   }
 
@@ -186,11 +212,25 @@ export const useThemeStore = defineStore('theme', () => {
     return isPhoneMode.value || windowWidth.value < 768
   })
 
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+      if (e.key === PROTUTECH_PALETTE_KEY && e.newValue) {
+        palette.value = e.newValue as ThemePalette
+        applyTheme()
+      }
+      if (e.key === PROTUTECH_THEME_KEY && (e.newValue === 'light' || e.newValue === 'dark')) {
+        theme.value = e.newValue as ThemeMode
+        applyTheme()
+      }
+    })
+  }
+
   loadTheme()
   applyTheme()
 
   return {
     theme,
+    palette,
     isPhoneMode,
     windowWidth,
     isCompactMobile,
@@ -202,6 +242,7 @@ export const useThemeStore = defineStore('theme', () => {
     recentModalColors,
     showUnreadNotificationBadge,
     setTheme,
+    setPalette,
     setCustomBgColor,
     setCustomAccentColor,
     setCustomModalBgColor,

@@ -424,6 +424,30 @@ onUnmounted(() => {
           </svg>
         </a>
 
+        <!-- PROTUTECH THEME & PALETTE SWITCHER -->
+        <div class="hidden md:flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-xl shadow-sm">
+          <select 
+            :value="themeStore.palette"
+            @change="(e) => themeStore.setPalette((e.target as HTMLSelectElement).value as any)"
+            class="bg-transparent text-slate-200 text-xs font-semibold px-2 py-1 rounded-lg border border-slate-800 hover:border-slate-700 outline-none cursor-pointer"
+            title="Switch Theme Palette"
+          >
+            <option value="protutech-obsidian" class="bg-slate-900 text-white">Obsidian Neon</option>
+            <option value="adobe-classic" class="bg-slate-900 text-white">Adobe Classic</option>
+            <option value="cyber-emerald" class="bg-slate-900 text-white">Cyber Emerald</option>
+            <option value="sunset-ember" class="bg-slate-900 text-white">Sunset Ember</option>
+          </select>
+
+          <button
+            @click="themeStore.toggleTheme"
+            class="px-2 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700/60 transition-colors flex items-center gap-1 cursor-pointer"
+            :title="themeStore.theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
+          >
+            <span>{{ themeStore.theme === 'dark' ? '☀️' : '🌙' }}</span>
+            <span class="hidden xl:inline">{{ themeStore.theme === 'dark' ? 'Light' : 'Dark' }}</span>
+          </button>
+        </div>
+
         <!-- USER PROFILE / LOGIN BUTTON -->
         <div class="relative user-dropdown-container" style="z-index: 999999 !important;">
           <template v-if="authStore.isAuthenticated">
