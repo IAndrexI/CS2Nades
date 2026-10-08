@@ -1,0 +1,31 @@
+name: Deploy CS2Nades to LXC
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - name: Pull and rebuild CS2Nades in LXC
+        run: |
+          TARGET_DIR="/opt/CS2Nades"
+          if [ ! -d "$TARGET_DIR" ]; then
+            TARGET_DIR="$(pwd)"
+          fi
+          cd "$TARGET_DIR"
+          git fetch origin main
+          git reset --hard origin/main
+          if [ -f package.json ] && command -v npm >/dev/null 2>&1; then
+            npm install --production || true
+            npm run build || true
+          fi
+          if command -v docker >/dev/null 2>&1 && ([ -f "docker-compose.yml" ] || [ -f "compose.yaml" ]); then
+            docker compose up -d --build || true
+          fi
+          if systemctl is-active --quiet cs2nades 2>/dev/null; then
+            systemctl restart cs2nades
+          fi
