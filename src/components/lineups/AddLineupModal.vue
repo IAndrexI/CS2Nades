@@ -32,9 +32,12 @@ import {
   Play,
   Film,
   HelpCircle,
-  ExternalLink
+  ExternalLink,
+  Camera,
+  Scissors
 } from 'lucide-vue-next'
 import { parseQuickLineupInput } from '../../utils/quickLineupParser'
+import { openWindowsSnippingTool, extractImageFromClipboard } from '../../utils/screenCapture'
 
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
@@ -249,26 +252,22 @@ async function handlePastePosFromClipboard() {
 }
 
 const isSnappingScreen = ref(false)
+const activeSnapSlot = ref<'aim' | 'standing' | 'landing'>('aim')
+const snapNotification = ref<string | null>(null)
+let snapNotificationTimer: any = null
 
-async function handleDirectScreenSnap(slot: 'aim' | 'standing' | 'landing') {
-  isSnappingScreen.value = true
-  try {
-    const dataUrl = await cs2ServerStore.captureScreenFrame()
-    if (dataUrl) {
-      if (slot === 'aim') {
-        formData.aimScreenshot = dataUrl
-        formData.imageUrl = dataUrl
-      } else if (slot === 'standing') {
-        formData.standingScreenshot = dataUrl
-      } else if (slot === 'landing') {
-        formData.landingScreenshot = dataUrl
-      }
-    }
-  } catch (err) {
-    console.error('Screen snap failed:', err)
-  } finally {
-    isSnappingScreen.value = false
-  }
+function handleDirectScreenSnap(slot: 'aim' | 'standing' | 'landing') {
+  activeSnapSlot.value = slot
+  // Trigger native Windows Snipping Tool (ms-screenclip: / Win+Shift+S)
+  openWindowsSnippingTool()
+
+  const slotName = slot === 'aim' ? 'Crosshair / Aim Spot' : slot === 'standing' ? 'Standing Spot' : 'Landing Target'
+  snapNotification.value = `✂️ Windows Snipping Tool opened! Snip your CS2 screen, then press Ctrl+V to attach to ${slotName}.`
+  
+  if (snapNotificationTimer) clearTimeout(snapNotificationTimer)
+  snapNotificationTimer = setTimeout(() => {
+    snapNotification.value = null
+  }, 10000)
 }
 
 // ── IN-GAME SCREENSHOT DROP & PASTE (CTRL+V) ─────────────────
@@ -378,7 +377,6 @@ function handleDrop(e: DragEvent, slot: 'aim' | 'standing' | 'landing') {
 function handleGlobalPaste(e: ClipboardEvent) {
   if (!lineupStore.isAddModalOpen) return
   
-  // If user is pasting into text input, don't intercept unless it's an image
   const items = e.clipboardData?.items
   if (!items) return
 
@@ -387,17 +385,24 @@ function handleGlobalPaste(e: ClipboardEvent) {
       const blob = items[i].getAsFile()
       if (blob) {
         e.preventDefault()
-        // Auto-assign to first empty screenshot slot or aim slot
-        if (!formData.aimScreenshot) {
-          handleImageFile(blob, 'aim')
-        } else if (!formData.standingScreenshot) {
-          handleImageFile(blob, 'standing')
-        } else if (!formData.landingScreenshot) {
-          handleImageFile(blob, 'landing')
-        } else {
-          handleImageFile(blob, 'aim')
+        // Prioritize active snap slot or first empty slot
+        let targetSlot = activeSnapSlot.value
+        if (!targetSlot) {
+          if (!formData.aimScreenshot) targetSlot = 'aim'
+          else if (!formData.standingScreenshot) targetSlot = 'standing'
+          else if (!formData.landingScreenshot) targetSlot = 'landing'
+          else targetSlot = 'aim'
         }
+
+        handleImageFile(blob, targetSlot)
         activeTab.value = 'screenshots'
+        
+        const slotLabel = targetSlot === 'aim' ? 'Aim / Crosshair' : targetSlot === 'standing' ? 'Standing Spot' : 'Landing Target'
+        snapNotification.value = `✓ Pasted & attached screenshot to ${slotLabel}!`
+        if (snapNotificationTimer) clearTimeout(snapNotificationTimer)
+        snapNotificationTimer = setTimeout(() => {
+          snapNotification.value = null
+        }, 4000)
         break
       }
     }
@@ -1035,11 +1040,31 @@ function resetForm() {
           <!-- TAB 3: IN-GAME SCREENSHOTS -->
           <div v-show="activeTab === 'screenshots'" class="flex flex-col gap-5 animate-fade-in">
             
+            <!-- SNIP NOTIFICATION BANNER -->
+            <Transition name="fade">
+              <div 
+                v-if="snapNotification" 
+                class="p-3 bg-amber-500/20 border-2 border-amber-400 rounded-2xl flex items-center justify-between gap-3 text-xs text-amber-200 shadow-lg"
+              >
+                <div class="flex items-center gap-2">
+                  <Scissors class="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+                  <span class="font-bold">{{ snapNotification }}</span>
+                </div>
+                <button 
+                  type="button" 
+                  @click="snapNotification = null" 
+                  class="text-slate-400 hover:text-white p-1 cursor-pointer"
+                >
+                  <X class="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </Transition>
+
             <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 text-xs text-amber-300">
               <div class="flex items-center gap-2">
                 <Sparkles class="w-4 h-4 text-amber-400 shrink-0" />
                 <span>
-                  <strong>Tip:</strong> You can directly press <kbd class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]">Ctrl + V</kbd> anywhere on this screen to paste an in-game screenshot from your clipboard!
+                  <strong>Tip:</strong> Click <strong>+ Snap</strong> to launch Windows Snipping Tool (<kbd class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]">Win+Shift+S</kbd>), then press <kbd class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]">Ctrl + V</kbd> to paste!
                 </span>
               </div>
             </div>
@@ -1067,7 +1092,7 @@ function resetForm() {
                       @click="handleDirectScreenSnap('aim')"
                       :disabled="isSnappingScreen"
                       class="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                      title="Capture single frame from CS2 window"
+                      title="Open Windows Snipping Tool (Win+Shift+S)"
                     >
                       <Camera class="w-3 h-3 text-amber-400" />
                       <span>+ Snap</span>
@@ -1124,7 +1149,7 @@ function resetForm() {
                       @click="handleDirectScreenSnap('standing')"
                       :disabled="isSnappingScreen"
                       class="px-2 py-0.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                      title="Capture single frame from CS2 window"
+                      title="Open Windows Snipping Tool (Win+Shift+S)"
                     >
                       <Camera class="w-3 h-3 text-sky-400" />
                       <span>+ Snap</span>
@@ -1181,7 +1206,7 @@ function resetForm() {
                       @click="handleDirectScreenSnap('landing')"
                       :disabled="isSnappingScreen"
                       class="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                      title="Capture single frame from CS2 window"
+                      title="Open Windows Snipping Tool (Win+Shift+S)"
                     >
                       <Camera class="w-3 h-3 text-rose-400" />
                       <span>+ Snap</span>

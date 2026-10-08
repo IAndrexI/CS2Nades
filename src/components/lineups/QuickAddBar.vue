@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useMapStore } from '../../stores/mapStore'
-import { useCs2ServerStore } from '../../stores/cs2ServerStore'
 import { parseQuickLineupInput, type ParsedLineupDraft } from '../../utils/quickLineupParser'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup } from '../../types'
@@ -12,27 +11,18 @@ import {
   Sparkles, 
   Check, 
   ArrowRight, 
-  Layers, 
   Sliders, 
-  Terminal, 
   X,
-  Crosshair,
-  MapPin,
-  Clipboard,
-  Server,
-  RefreshCw,
-  Camera
+  Clipboard
 } from 'lucide-vue-next'
 
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
-const cs2ServerStore = useCs2ServerStore()
 
 const inputText = ref('')
 const isFocused = ref(false)
 const lastAddedTitle = ref<string | null>(null)
 const successTimer = ref<any>(null)
-
 
 // Parse draft on the fly as user types
 const parsedDraft = computed<ParsedLineupDraft | null>(() => {
@@ -148,32 +138,6 @@ async function handlePasteClipboard() {
   } catch (e) {}
 }
 
-async function handleServerAutoCapture() {
-  const customTitle = inputText.value.trim() || undefined
-  const captured = await cs2ServerStore.autoInsertFullLineup({ customTitle })
-  if (captured) {
-    lastAddedTitle.value = captured.title
-    inputText.value = ''
-    if (successTimer.value) clearTimeout(successTimer.value)
-    successTimer.value = setTimeout(() => {
-      lastAddedTitle.value = null
-    }, 4000)
-  }
-}
-
-async function handleAutoInsertWithSnap() {
-  const customTitle = inputText.value.trim() || undefined
-  const captured = await cs2ServerStore.autoInsertFullLineup({ captureSnap: true, customTitle })
-  if (captured) {
-    lastAddedTitle.value = captured.title
-    inputText.value = ''
-    if (successTimer.value) clearTimeout(successTimer.value)
-    successTimer.value = setTimeout(() => {
-      lastAddedTitle.value = null
-    }, 4000)
-  }
-}
-
 function handleOpenFullModal() {
   lineupStore.isAddModalOpen = true
 }
@@ -193,7 +157,7 @@ function handleOpenFullModal() {
             <span>⚡ Quick-Add Lineup</span>
             <span class="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-mono font-bold">1-Type / 1-Push</span>
           </span>
-          <span class="text-[10px] text-slate-400">Type nade name, paste setpos, or 1-click auto-insert from CS2:</span>
+          <span class="text-[10px] text-slate-400">Type lineup name, paste setpos command, or pick a preset:</span>
         </div>
       </div>
 
@@ -228,42 +192,33 @@ function handleOpenFullModal() {
       </div>
 
       <!-- BUTTONS GROUP -->
-      <div class="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap">
-        <!-- 1-CLICK INSTANT ADD ACTION BUTTON (IF TYPING) -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <!-- PUSH TO ADD ACTION BUTTON -->
         <button
-          v-if="parsedDraft"
           @click="handleInstantAdd"
-          class="px-3.5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 hover:scale-[1.02] active:scale-95 shadow-amber-500/25 ring-2 ring-amber-400/50"
+          :disabled="!parsedDraft"
+          :class="[
+            'px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all',
+            parsedDraft 
+              ? 'bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 hover:scale-[1.02] active:scale-95 shadow-amber-500/25 ring-2 ring-amber-400/50 cursor-pointer' 
+              : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
+          ]"
         >
           <Plus class="w-4 h-4 stroke-[3]" />
           <span>Push to Add</span>
         </button>
 
-        <!-- 1-CLICK CS2 SERVER AUTO-CAPTURE -->
+        <!-- FULL FORM MODAL OPENER -->
         <button
-          @click="handleServerAutoCapture"
-          :disabled="cs2ServerStore.isCapturing"
-          class="px-3 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer bg-slate-950 hover:bg-slate-850 text-amber-400 border border-amber-500/50 hover:border-amber-400 hover:scale-[1.02] active:scale-95"
-          title="Auto-capture current position & angles from CS2 Server via RCON"
+          @click="handleOpenFullModal"
+          class="px-3 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-950 hover:bg-slate-850 text-slate-300 border border-slate-800 hover:border-amber-500/40"
+          title="Open complete multi-tab creation studio"
         >
-          <RefreshCw v-if="cs2ServerStore.isCapturing" class="w-3.5 h-3.5 animate-spin" />
-          <Zap v-else class="w-3.5 h-3.5 fill-current text-amber-400" />
-          <span>Auto-Insert</span>
-        </button>
-
-        <!-- 1-CLICK CS2 SNAP & INSERT -->
-        <button
-          @click="handleAutoInsertWithSnap"
-          :disabled="cs2ServerStore.isCapturing"
-          class="px-3 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer bg-amber-500 hover:bg-amber-400 text-slate-950 hover:scale-[1.02] active:scale-95 shadow-amber-500/20"
-          title="Grab screen frame from CS2 window and auto-insert lineup"
-        >
-          <Camera class="w-3.5 h-3.5 text-slate-950" />
-          <span>+ Snap</span>
+          <Sliders class="w-3.5 h-3.5 text-amber-400" />
+          <span class="hidden sm:inline">Studio</span>
         </button>
       </div>
     </div>
-
 
     <!-- LIVE DETECTED TAGS / INTENT PREVIEW (WHEN TYPING) -->
     <div v-if="parsedDraft" class="flex items-center gap-1.5 flex-wrap p-2 bg-slate-950/80 border border-slate-800 rounded-xl text-[11px] animate-fade-in">
@@ -323,21 +278,13 @@ function handleOpenFullModal() {
         <Plus class="w-2.5 h-2.5 text-amber-500" />
         <span>{{ preset }}</span>
       </button>
-
-      <button
-        @click="handleOpenFullModal"
-        class="ml-auto px-2 py-1 text-slate-400 hover:text-white text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1 shrink-0"
-      >
-        <Sliders class="w-3 h-3" />
-        <span>Full Form</span>
-      </button>
     </div>
 
     <!-- SUCCESS NOTIFICATION TOAST -->
     <Transition name="fade">
       <div 
         v-if="lastAddedTitle" 
-        class="p-2.5 bg-emerald-950/90 border border-emerald-500/50 rounded-xl flex items-center justify-between gap-2 shadow-lg animate-bounce"
+        class="p-2.5 bg-emerald-950/90 border border-emerald-500/50 rounded-xl flex items-center justify-between gap-2 shadow-lg"
       >
         <div class="flex items-center gap-2">
           <div class="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center font-bold">

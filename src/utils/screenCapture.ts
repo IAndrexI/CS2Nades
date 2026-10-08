@@ -1,7 +1,7 @@
 /**
- * CS2 Screen Capture & Clipboard Utilities
- * Allows 1-click snapshot directly from the CS2 Game Window or browser screen capture API,
- * as well as clipboard image extraction and compression.
+ * CS2 Screen Capture & Snipping Tool Utilities
+ * Allows opening the native Windows Snipping Tool (ms-screenclip: / Win+Shift+S),
+ * capturing display frames via getDisplayMedia, and clipboard extraction.
  */
 
 export interface CapturedFrame {
@@ -9,6 +9,31 @@ export interface CapturedFrame {
   width: number
   height: number
   timestamp: number
+}
+
+/**
+ * Opens Windows Snipping Tool (Win + Shift + S) via native protocol URI
+ */
+export function openWindowsSnippingTool(): boolean {
+  if (typeof window === 'undefined') return false
+  
+  try {
+    const link = document.createElement('a')
+    link.href = 'ms-screenclip:'
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    return true
+  } catch (e) {
+    try {
+      window.location.href = 'ms-screenclip:'
+      return true
+    } catch (err) {
+      console.warn('Failed to open ms-screenclip protocol:', err)
+      return false
+    }
+  }
 }
 
 /**
@@ -92,7 +117,7 @@ export async function captureScreenFrame(): Promise<CapturedFrame | null> {
 }
 
 /**
- * Extract image data URL from clipboard event
+ * Extract image data URL from clipboard event or navigator.clipboard
  */
 export async function extractImageFromClipboard(event?: ClipboardEvent): Promise<string | null> {
   if (event && event.clipboardData) {

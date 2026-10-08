@@ -16,7 +16,9 @@ import DirectMessagesModal from '../user/DirectMessagesModal.vue'
 import PeopleAndGroupsModal from '../user/PeopleAndGroupsModal.vue'
 import PracticeServerModal from '../common/PracticeServerModal.vue'
 import RemotePairModal from '../common/RemotePairModal.vue'
+import InstallAppModal from '../common/InstallAppModal.vue'
 import { useCompanionStore } from '../../stores/companionStore'
+import { usePwaStore } from '../../stores/pwaStore'
 
 import { 
   Crosshair, 
@@ -39,6 +41,7 @@ import {
   MessageSquare,
   Smartphone,
   Monitor,
+  Download,
   Menu,
   X,
   PenTool,
@@ -54,6 +57,7 @@ const adminStore = useAdminStore()
 const themeStore = useThemeStore()
 const gameRoomStore = useGameRoomStore()
 const companionStore = useCompanionStore()
+const pwaStore = usePwaStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -66,6 +70,7 @@ const isDirectMessagesOpen = ref(false)
 const isPeopleGroupsOpen = ref(false)
 const isPracticeModalOpen = ref(false)
 const isRemoteModalOpen = ref(false)
+const isInstallAppModalOpen = ref(false)
 const directMessageTargetId = ref<string | undefined>(undefined)
 
 function openDirectMessageWith(userId: string) {
@@ -365,6 +370,21 @@ onUnmounted(() => {
           ></span>
         </button>
 
+        <!-- INSTALL APP / PWA BUTTON -->
+        <button
+          @click="isInstallAppModalOpen = true"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-emerald-500/40 text-emerald-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
+          title="Install CS2 Stratbook App (Desktop & Mobile) - 100% Server Synced"
+        >
+          <Monitor class="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+          <span class="hidden lg:inline">{{ pwaStore.isStandaloneMode ? 'App Live' : 'Install App' }}</span>
+          <span class="hidden sm:inline lg:hidden">App</span>
+          <span 
+            v-if="pwaStore.isStandaloneMode" 
+            class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5"
+          ></span>
+        </button>
+
         <!-- PRACTICE SERVER & CFG STUDIO BUTTON -->
         <button
           @click="isPracticeModalOpen = true"
@@ -625,6 +645,14 @@ onUnmounted(() => {
       </router-link>
 
       <button
+        @click="isInstallAppModalOpen = true; isMobileMenuOpen = false"
+        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-emerald-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
+      >
+        <Monitor class="w-4 h-4" />
+        <span>Install Desktop / Mobile App</span>
+      </button>
+
+      <button
         @click="isRemoteModalOpen = true; isMobileMenuOpen = false"
         class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-cyan-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
       >
@@ -666,6 +694,10 @@ onUnmounted(() => {
     </div>
 
     <!-- MODALS -->
+    <InstallAppModal
+      :is-open="isInstallAppModalOpen"
+      @close="isInstallAppModalOpen = false"
+    />
     <DataSyncModal 
       :is-open="isDataModalOpen" 
       @close="isDataModalOpen = false" 
