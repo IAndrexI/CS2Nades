@@ -20,7 +20,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           if [ -f package.json ] && command -v npm >/dev/null 2>&1; then
-            npm install --production || true
+            npm install || true
             npm run build || true
           fi
           if command -v docker >/dev/null 2>&1 && ([ -f "docker-compose.yml" ] || [ -f "compose.yaml" ]); then
