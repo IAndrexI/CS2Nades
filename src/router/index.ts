@@ -50,6 +50,11 @@ const routes = [
     component: AdminView
   },
   {
+    path: '/updates',
+    name: 'updates',
+    component: () => import('../views/UpdatesAndLeaksView.vue')
+  },
+  {
     path: '/remote',
     name: 'remote',
     component: () => import('../views/RemoteCompanionView.vue')

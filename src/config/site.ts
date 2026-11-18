@@ -19,6 +19,9 @@ export const BRANDING = {
   footerItems: [],
 }
 
+// ── DEFAULT ASSETS ─────────────────────────────────────────
+export const DEFAULT_LINEUP_IMAGE = '/images/default-cs2-util-gray.svg'
+
 // ── NAVIGATION TAB LABELS ──────────────────────────────────
 export const NAV_LABELS = {
   radar:     'Radar',
@@ -27,6 +30,7 @@ export const NAV_LABELS = {
   library:   'Lineup Library',
   myLineups: 'My Lineups',
   callouts:  'Callouts',
+  updates:   'Updates & Leaks',
   gameRoom:  'Live Room',
   admin:     'Admin',
 }

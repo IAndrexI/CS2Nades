@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import axios from 'axios'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useMapStore } from '../../stores/mapStore'
+import { DEFAULT_LINEUP_IMAGE } from '../../config/site'
 import { DEFAULT_LINEUPS } from '../../data/defaultLineups'
 import NadeIcon from '../common/NadeIcon.vue'
-import type { Lineup, GrenadeType } from '../../types'
+import type { Lineup } from '../../types'
 import { 
   X, 
   Globe, 
@@ -17,7 +19,8 @@ import {
   ArrowRight,
   Filter,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  Trophy
 } from 'lucide-vue-next'
 
 const emit = defineEmits<{
@@ -30,17 +33,33 @@ const mapStore = useMapStore()
 const searchQuery = ref('')
 const selectedMap = ref<string>('all')
 const selectedSource = ref<string>('all')
+const selectedProPlayer = ref<string>('all')
 const selectedNadeType = ref<string>('all')
 const isImporting = ref(false)
+const isFetchingFeed = ref(false)
+const liveDiscoveredLineups = ref<Lineup[]>([])
 const importSuccessMessage = ref('')
 
 const sources = [
   { id: 'all', name: 'All Popular Sources' },
   { id: 'CSNades.gg', name: 'CSNades.gg', desc: 'Interactive Radar Meta Lineups' },
   { id: 'NadeKing', name: 'NadeKing', desc: 'YouTube & Pro Precision Throws' },
-  { id: 'CS2Lineups', name: 'CS2Lineups.com', desc: 'Subtick Jumpthrow Library' },
-  { id: 'Pracc.com', name: 'Pracc.com Hub', desc: 'Scrim & Competitive Meta' },
-  { id: 'Scope.gg', name: 'Scope.gg Guides', desc: 'Analytics & Tactical Setups' }
+  { id: 'CS2Lineups', name: 'CS2Lineups', desc: 'Subtick Jumpthrow Library' },
+  { id: 'Pracc.com', name: 'Pracc.com', desc: 'Scrim & Competitive Meta' },
+  { id: 'Scope.gg', name: 'Scope.gg', desc: 'Analytics & Tactical Setups' },
+  { id: 'HLTV Pro Utility', name: 'HLTV Pro Utility', desc: 'Tier-1 LAN Utility Archive' },
+  { id: 'Bo3.gg', name: 'Bo3.gg', desc: 'Pro Match Utility Breakdowns' },
+  { id: 'Community Server', name: 'Community Server', desc: 'Live Shared Squad & Server Feed' }
+]
+
+const proPlayers = [
+  { id: 'all', label: 'All Pros' },
+  { id: 'm0NESY', label: 'm0NESY' },
+  { id: 'ZywOo', label: 'ZywOo' },
+  { id: 'donk', label: 'donk' },
+  { id: 'ropz', label: 'ropz' },
+  { id: 'Aleksib', label: 'Aleksib' },
+  { id: 'Karrigan', label: 'Karrigan' }
 ]
 
 const nadeFilterOptions = [
@@ -48,19 +67,46 @@ const nadeFilterOptions = [
   { id: 'smoke', label: 'Smokes' },
   { id: 'flash', label: 'Flashes' },
   { id: 'molotov', label: 'Molotovs' },
-  { id: 'he', label: 'HE Nades' }
+  { id: 'he', label: 'HE Nades' },
+  { id: 'decoy', label: 'Decoys' }
 ]
 
+const combinedCatalog = computed<Lineup[]>(() => {
+  const seen = new Set<string>()
+  const merged: Lineup[] = []
+  for (const item of [...liveDiscoveredLineups.value, ...DEFAULT_LINEUPS]) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id)
+      merged.push(item)
+    }
+  }
+  return merged
+})
+
 const filteredPresets = computed(() => {
-  return DEFAULT_LINEUPS.filter(lineup => {
+  return combinedCatalog.value.filter(lineup => {
     // Map filter
     if (selectedMap.value !== 'all' && lineup.mapId !== selectedMap.value) {
       return false
     }
 
     // Source filter
-    if (selectedSource.value !== 'all' && lineup.sourceWebsite !== selectedSource.value) {
-      return false
+    if (selectedSource.value !== 'all') {
+      if (selectedSource.value === 'Community Server') {
+        const isCommunity =
+          lineup.sourceWebsite === 'Community Server' ||
+          (!lineup.sourceWebsite && (lineup.isCustom || lineup.isTeamShared))
+        if (!isCommunity) return false
+      } else if (lineup.sourceWebsite !== selectedSource.value) {
+        return false
+      }
+    }
+
+    // Pro player filter
+    if (selectedProPlayer.value !== 'all') {
+      if ((lineup.proPlayer || '').toLowerCase() !== selectedProPlayer.value.toLowerCase()) {
+        return false
+      }
     }
 
     // Nade type filter
@@ -75,8 +121,12 @@ const filteredPresets = computed(() => {
       const matchStart = lineup.startLocation.toLowerCase().includes(q)
       const matchEnd = lineup.endLocation.toLowerCase().includes(q)
       const matchMap = lineup.mapId.toLowerCase().includes(q)
-      const matchTags = lineup.tags.some(t => t.toLowerCase().includes(q))
-      if (!matchTitle && !matchStart && !matchEnd && !matchMap && !matchTags) {
+      const matchPro = (lineup.proPlayer || '').toLowerCase().includes(q)
+      const matchTeam = (lineup.proTeam || '').toLowerCase().includes(q)
+      const matchTourney = (lineup.tournament || '').toLowerCase().includes(q)
+      const matchSource = (lineup.sourceWebsite || '').toLowerCase().includes(q)
+      const matchTags = (lineup.tags || []).some(t => t.toLowerCase().includes(q))
+      if (!matchTitle && !matchStart && !matchEnd && !matchMap && !matchPro && !matchTeam && !matchTourney && !matchSource && !matchTags) {
         return false
       }
     }
@@ -85,8 +135,36 @@ const filteredPresets = computed(() => {
   })
 })
 
+async function fetchLiveCommunityFeed() {
+  isFetchingFeed.value = true
+  try {
+    const res = await axios.get('/api/lineups/discover')
+    const raw = res.data
+    const items: Lineup[] = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw?.lineups)
+        ? raw.lineups
+        : []
+    liveDiscoveredLineups.value = items.map((item) => ({
+      ...item,
+      sourceWebsite: item.sourceWebsite || 'Community Server'
+    }))
+    importSuccessMessage.value = items.length > 0
+      ? `Fetched ${items.length} live community lineup${items.length === 1 ? '' : 's'} from server!`
+      : 'Live community feed checked — showing curated pro & external-site lineups.'
+  } catch {
+    importSuccessMessage.value = 'Server discover feed offline — showing curated pro & external-site lineups.'
+  } finally {
+    isFetchingFeed.value = false
+    setTimeout(() => {
+      importSuccessMessage.value = ''
+    }, 3000)
+  }
+}
+
 function isAlreadyInCustom(lineupId: string): boolean {
-  return lineupStore.customLineups.some(l => l.id === lineupId || l.title === DEFAULT_LINEUPS.find(d => d.id === lineupId)?.title)
+  const target = combinedCatalog.value.find(d => d.id === lineupId)
+  return lineupStore.customLineups.some(l => l.id === lineupId || (target && l.title === target.title))
 }
 
 function importSingleLineup(lineup: Lineup) {
@@ -153,18 +231,27 @@ function selectPresetForInspection(preset: Lineup) {
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <h2 class="text-lg font-black text-white tracking-tight">Popular CS2 Lineups & Meta Sources</h2>
+                <h2 class="text-lg font-black text-white tracking-tight">Popular CS2 Lineups & Pro Meta Sources</h2>
                 <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[11px] font-bold">
-                  {{ DEFAULT_LINEUPS.length }} Curated
+                  {{ combinedCatalog.length }} Curated
                 </span>
               </div>
               <p class="text-xs text-slate-400 mt-0.5">
-                Pulls verified lineups, jumps, and setpos coordinates from leading CS2 tactical websites.
+                Verified pro & community lineups from CSNades, NadeKing, HLTV, Bo3.gg, Pracc, Scope.gg & Live Server.
               </p>
             </div>
           </div>
 
           <div class="flex items-center gap-2">
+            <button
+              @click="fetchLiveCommunityFeed"
+              :disabled="isFetchingFeed"
+              class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-cyan-300 border border-cyan-500/30 font-bold text-xs rounded-xl transition-all cursor-pointer whitespace-nowrap"
+            >
+              <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': isFetchingFeed }" />
+              <span>Fetch Live Community Feed</span>
+            </button>
+
             <button
               @click="importAllFiltered"
               :disabled="filteredPresets.length === 0 || isImporting"
@@ -208,7 +295,7 @@ function selectPresetForInspection(preset: Lineup) {
             </button>
           </div>
 
-          <!-- RIGHT CONTROLS: MAP, NADE TYPE, SEARCH -->
+          <!-- RIGHT CONTROLS: MAP, PRO PLAYER, NADE TYPE, SEARCH -->
           <div class="flex flex-wrap items-center gap-2 flex-grow sm:flex-grow-0">
             <!-- MAP SELECTOR -->
             <select
@@ -218,6 +305,16 @@ function selectPresetForInspection(preset: Lineup) {
               <option value="all">🗺️ All Maps</option>
               <option v-for="map in mapStore.availableMaps" :key="map.id" :value="map.id">
                 {{ map.name }}
+              </option>
+            </select>
+
+            <!-- PRO PLAYER SELECTOR -->
+            <select
+              v-model="selectedProPlayer"
+              class="bg-slate-900 border border-slate-800 text-purple-300 text-xs font-semibold rounded-xl px-3 py-1.5 focus:outline-none focus:border-purple-500 cursor-pointer"
+            >
+              <option v-for="pro in proPlayers" :key="pro.id" :value="pro.id">
+                {{ pro.id === 'all' ? '★ All Pros' : `★ ${pro.label}` }}
               </option>
             </select>
 
@@ -261,9 +358,9 @@ function selectPresetForInspection(preset: Lineup) {
               <!-- TOP BANNER -->
               <div class="relative h-28 bg-slate-950 overflow-hidden flex items-center justify-center">
                 <img 
-                  :src="lineup.imageUrl || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80'" 
+                  :src="lineup.imageUrl || lineup.aimScreenshot || lineup.standingScreenshot || lineup.landingScreenshot || DEFAULT_LINEUP_IMAGE" 
                   :alt="lineup.title"
-                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-70 group-hover:opacity-100"
+                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-95 group-hover:opacity-100"
                 />
 
                 <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-black/60"></div>
@@ -288,10 +385,16 @@ function selectPresetForInspection(preset: Lineup) {
                   </span>
                 </div>
 
-                <!-- SOURCE BADGE -->
-                <div v-if="lineup.sourceWebsite" class="absolute bottom-2 left-2.5 flex items-center gap-1 px-2 py-0.5 bg-slate-900/90 backdrop-blur-md rounded text-[10px] text-amber-300 font-bold border border-amber-500/20">
-                  <Globe class="w-2.5 h-2.5" />
-                  <span>{{ lineup.sourceWebsite }}</span>
+                <!-- SOURCE & PRO BADGES -->
+                <div class="absolute bottom-2 left-2.5 right-2.5 flex flex-wrap items-center gap-1">
+                  <div v-if="lineup.sourceWebsite" class="flex items-center gap-1 px-2 py-0.5 bg-slate-900/90 backdrop-blur-md rounded text-[10px] text-amber-300 font-bold border border-amber-500/20">
+                    <Globe class="w-2.5 h-2.5" />
+                    <span>{{ lineup.sourceWebsite }}</span>
+                  </div>
+                  <div v-if="lineup.proPlayer" class="flex items-center gap-1 px-2 py-0.5 bg-purple-950/90 backdrop-blur-md rounded text-[10px] text-purple-300 font-bold border border-purple-500/30">
+                    <Trophy class="w-2.5 h-2.5" />
+                    <span>{{ lineup.proPlayer }}</span>
+                  </div>
                 </div>
               </div>
 
@@ -344,13 +447,15 @@ function selectPresetForInspection(preset: Lineup) {
 
         <!-- FOOTER -->
         <div class="p-4 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <span>Sources:</span>
             <span class="text-slate-300 font-semibold">CSNades.gg</span> •
             <span class="text-slate-300 font-semibold">NadeKing</span> •
             <span class="text-slate-300 font-semibold">CS2Lineups</span> •
             <span class="text-slate-300 font-semibold">Pracc.com</span> •
-            <span class="text-slate-300 font-semibold">Scope.gg</span>
+            <span class="text-slate-300 font-semibold">Scope.gg</span> •
+            <span class="text-slate-300 font-semibold">HLTV Pro Utility</span> •
+            <span class="text-slate-300 font-semibold">Bo3.gg</span>
           </div>
 
           <div class="text-[11px] font-mono text-slate-500">

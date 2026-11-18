@@ -1,12 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { MAPS_DATA } from '../data/mapsData'
-import type { GrenadeType, TeamSide, ThrowType, MapInfo } from '../types'
+import type { GrenadeType, TeamSide, MapInfo } from '../types'
 
 const CUSTOM_MAPS_KEY = 'cs2_stratbook_custom_maps'
 const CUSTOM_RADARS_KEY = 'cs2_stratbook_custom_radars'
 const RADAR_SETTINGS_KEY = 'cs2_stratbook_radar_settings'
 const CUSTOM_CALLOUTS_KEY = 'cs2_stratbook_custom_callouts'
+
+export type RadarSkin = 'simpleradar' | 'official' | 'blueprint'
 
 export interface CalloutItem {
   id: string
@@ -17,42 +19,41 @@ export interface CalloutItem {
 }
 
 export const useMapStore = defineStore('map', () => {
-  // State
   const currentMapId = ref<string>('mirage')
   const selectedNadeTypes = ref<GrenadeType[]>(['smoke', 'flash', 'molotov', 'he'])
   const selectedSide = ref<TeamSide>('all')
-  const selectedTeam = ref<string>('all') // 'all' | 't' | 'ct' | 'my_squad'
-  const surfaceLevel = ref<'all' | 'upper' | 'lower'>('all') // Surface level for multi-level maps (Nuke, Vertigo)
+  const selectedTeam = ref<string>('all')
+  const surfaceLevel = ref<'all' | 'upper' | 'lower'>('all')
   const selectedThrowType = ref<string>('all')
   const selectedSite = ref<string>('all')
   const searchQuery = ref<string>('')
-  
-  // Custom maps, uploaded radars, and custom callouts
-  const customMaps = ref<MapInfo[]>([])
-  const customRadarImages = ref<Record<string, string>>({}) // mapId -> dataURL or custom image URL
-  const customCallouts = ref<Record<string, CalloutItem[]>>({}) // mapId -> custom callouts array
 
-  // Radar Display Settings
-  const radarOpacity = ref<number>(0.92)
-  const radarMode = ref<'official' | 'blueprint' | 'hybrid'>('official') // Default to official CS2 radar!
+  const customMaps = ref<MapInfo[]>([])
+  const customRadarImages = ref<Record<string, string>>({})
+  const customCallouts = ref<Record<string, CalloutItem[]>>({})
+
+  const radarOpacity = ref<number>(0.95)
+  const radarMode = ref<'official' | 'blueprint' | 'hybrid'>('official')
+  const radarSkin = ref<RadarSkin>('simpleradar')
   const isMapSettingsOpen = ref<boolean>(false)
 
-  // Viewport & Overlays
   const zoomLevel = ref<number>(1)
   const panOffset = ref<{ x: number; y: number }>({ x: 0, y: 0 })
-  const showCallouts = ref<boolean>(false) // OFF BY DEFAULT on main radar for clean CSNADES view!
-  const showSiteMarkers = ref<boolean>(false) // Off by default to avoid duplicate red circles over official radar A/B markers
+  const showCallouts = ref<boolean>(false)
+  const showSiteMarkers = ref<boolean>(false)
   const showTrajectories = ref<boolean>(true)
+  const showLabels = ref<boolean>(false)
+  const clusterTargets = ref<boolean>(true)
+  const showActivePoolOnly = ref<boolean>(false)
+
   const isTacticsMode = ref<boolean>(false)
   const isPlacementMode = ref<boolean>(false)
   const placementStep = ref<'origin' | 'landing'>('origin')
   const tempPlacement = ref<{ origin?: { x: number; y: number }; landing?: { x: number; y: number } }>({})
 
-  // csnades.gg Style Selection State
-  const selectedLandingSpotKey = ref<string | null>(null) // Selected target spot on radar
+  const selectedLandingSpotKey = ref<string | null>(null)
   const selectedOriginSpotKey = ref<string | null>(null)
 
-  // Load from Storage
   function loadStorage() {
     try {
       const storedCustom = localStorage.getItem(CUSTOM_MAPS_KEY)
@@ -69,6 +70,7 @@ export const useMapStore = defineStore('map', () => {
         const s = JSON.parse(storedSettings)
         if (s.radarOpacity !== undefined) radarOpacity.value = s.radarOpacity
         if (s.radarMode !== undefined) radarMode.value = s.radarMode
+        if (s.radarSkin !== undefined) radarSkin.value = s.radarSkin
       }
     } catch (e) {
       console.error('Failed to load custom map storage', e)
@@ -80,10 +82,14 @@ export const useMapStore = defineStore('map', () => {
       localStorage.setItem(CUSTOM_MAPS_KEY, JSON.stringify(customMaps.value))
       localStorage.setItem(CUSTOM_RADARS_KEY, JSON.stringify(customRadarImages.value))
       localStorage.setItem(CUSTOM_CALLOUTS_KEY, JSON.stringify(customCallouts.value))
-      localStorage.setItem(RADAR_SETTINGS_KEY, JSON.stringify({
-        radarOpacity: radarOpacity.value,
-        radarMode: radarMode.value
-      }))
+      localStorage.setItem(
+        RADAR_SETTINGS_KEY,
+        JSON.stringify({
+          radarOpacity: radarOpacity.value,
+          radarMode: radarMode.value,
+          radarSkin: radarSkin.value
+        })
+      )
     } catch (e) {
       console.error('Failed to save custom map storage', e)
     }
@@ -91,18 +97,27 @@ export const useMapStore = defineStore('map', () => {
 
   loadStorage()
 
-  watch([customMaps, customRadarImages, customCallouts, radarOpacity, radarMode], () => {
-    saveStorage()
-  }, { deep: true })
+  watch(
+    [customMaps, customRadarImages, customCallouts, radarOpacity, radarMode, radarSkin],
+    () => {
+      saveStorage()
+    },
+    { deep: true }
+  )
 
-  // All combined maps
   const availableMaps = computed<MapInfo[]>(() => {
     return [...MAPS_DATA, ...customMaps.value]
   })
 
-  // Current active map
+  const maps = availableMaps
+
+  const displayedMaps = computed<MapInfo[]>(() => {
+    if (!showActivePoolOnly.value) return availableMaps.value
+    return availableMaps.value.filter((m) => m.activePool)
+  })
+
   const currentMap = computed<MapInfo>(() => {
-    const base = availableMaps.value.find(m => m.id === currentMapId.value) || MAPS_DATA[0]
+    const base = availableMaps.value.find((m) => m.id === currentMapId.value) ?? MAPS_DATA[0]!
     const customImg = customRadarImages.value[base.id]
     if (customImg) {
       return {
@@ -114,16 +129,23 @@ export const useMapStore = defineStore('map', () => {
     return base
   })
 
-  // Combined Callouts for current active map (Built-in + Custom)
+  function getMapById(id: string): MapInfo {
+    const base = availableMaps.value.find((m) => m.id === id) ?? MAPS_DATA[0]!
+    const customImg = customRadarImages.value[base.id]
+    if (customImg) {
+      return { ...base, radarImage: customImg, customRadarImage: customImg }
+    }
+    return base
+  }
+
   const currentMapCallouts = computed<CalloutItem[]>(() => {
     const baseCallouts = currentMap.value.callouts || []
     const custom = customCallouts.value[currentMapId.value] || []
     return [...baseCallouts, ...custom]
   })
 
-  // Actions
   function setMap(mapId: string) {
-    if (availableMaps.value.some(m => m.id === mapId)) {
+    if (availableMaps.value.some((m) => m.id === mapId)) {
       currentMapId.value = mapId
       selectedLandingSpotKey.value = null
       selectedOriginSpotKey.value = null
@@ -140,7 +162,7 @@ export const useMapStore = defineStore('map', () => {
   }
 
   function addCustomMap(newMap: MapInfo) {
-    const exists = customMaps.value.findIndex(m => m.id === newMap.id)
+    const exists = customMaps.value.findIndex((m) => m.id === newMap.id)
     if (exists >= 0) {
       customMaps.value[exists] = newMap
     } else {
@@ -150,21 +172,20 @@ export const useMapStore = defineStore('map', () => {
   }
 
   function deleteCustomMap(mapId: string) {
-    customMaps.value = customMaps.value.filter(m => m.id !== mapId)
+    customMaps.value = customMaps.value.filter((m) => m.id !== mapId)
     delete customRadarImages.value[mapId]
     if (currentMapId.value === mapId) {
       currentMapId.value = 'mirage'
     }
   }
 
-  // Callout Management Actions
   function addCustomCallout(mapId: string, callout: Omit<CalloutItem, 'id' | 'isCustom'>) {
     if (!customCallouts.value[mapId]) {
       customCallouts.value[mapId] = []
     }
     const newCallout: CalloutItem = {
       ...callout,
-      id: `custom-callout-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      id: `custom-callout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       isCustom: true
     }
     customCallouts.value[mapId].push(newCallout)
@@ -174,7 +195,7 @@ export const useMapStore = defineStore('map', () => {
 
   function deleteCustomCallout(mapId: string, calloutId: string) {
     if (customCallouts.value[mapId]) {
-      customCallouts.value[mapId] = customCallouts.value[mapId].filter(c => c.id !== calloutId)
+      customCallouts.value[mapId] = customCallouts.value[mapId].filter((c) => c.id !== calloutId)
       saveStorage()
     }
   }
@@ -280,12 +301,16 @@ export const useMapStore = defineStore('map', () => {
     currentMapId,
     currentMap,
     availableMaps,
+    maps,
+    displayedMaps,
+    showActivePoolOnly,
     customMaps,
     customRadarImages,
     customCallouts,
     currentMapCallouts,
     radarOpacity,
     radarMode,
+    radarSkin,
     isMapSettingsOpen,
     selectedNadeTypes,
     selectedSide,
@@ -299,12 +324,15 @@ export const useMapStore = defineStore('map', () => {
     showCallouts,
     showSiteMarkers,
     showTrajectories,
+    showLabels,
+    clusterTargets,
     isTacticsMode,
     isPlacementMode,
     placementStep,
     tempPlacement,
     selectedLandingSpotKey,
     selectedOriginSpotKey,
+    getMapById,
     setMap,
     setCustomRadarImage,
     resetCustomRadarImage,

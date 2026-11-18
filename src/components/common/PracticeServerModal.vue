@@ -55,8 +55,34 @@ const lineupStore = useLineupStore()
 const themeStore = useThemeStore()
 const cs2ServerStore = useCs2ServerStore()
 
-const activeTab = ref<'cfg' | 'setpos' | 'dedicated'>('cfg')
+const activeTab = ref<'cfg' | 'setpos' | 'dedicated' | 'gsi'>('cfg')
 const copiedCfg = ref(false)
+const copiedGsi = ref(false)
+const consoleGetposInput = ref('setpos -1028.00 -2485.00 -167.97; setang -42.50 135.20 0.00')
+const consoleSyncFeedback = ref('')
+
+function handleSyncConsoleInput() {
+  const parsed = cs2ServerStore.syncFromConsoleString(consoleGetposInput.value, selectedMapForSetpos.value || 'mirage')
+  if (parsed) {
+    consoleSyncFeedback.value = `Synced player marker on ${selectedMapForSetpos.value.toUpperCase()} at World (${parsed.x.toFixed(0)}, ${parsed.y.toFixed(0)}) -> Radar (${parsed.radarCoords.x.toFixed(1)}%, ${parsed.radarCoords.y.toFixed(1)}%)`
+  } else {
+    consoleSyncFeedback.value = 'Could not parse setpos/getpos coordinates. Paste output from CS2 console "getpos".'
+  }
+}
+
+function handleDownloadGsiCfg() {
+  downloadFile('gamestate_integration_cs2nades.cfg', cs2ServerStore.generateGsiConfigFileContent())
+}
+
+async function handleCopyGsiCfg() {
+  try {
+    await navigator.clipboard.writeText(cs2ServerStore.generateGsiConfigFileContent())
+    copiedGsi.value = true
+    setTimeout(() => (copiedGsi.value = false), 2500)
+  } catch (e) {
+    console.error(e)
+  }
+}
 const copiedDocker = ref(false)
 const copiedSetpos = ref(false)
 const copiedServerSetpos = ref(false)
@@ -420,6 +446,18 @@ async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' |
             >
               <Server class="w-3.5 h-3.5" />
               <span>Dedicated Server</span>
+            </button>
+
+            <button
+              @click="activeTab = 'gsi'"
+              :class="[
+                'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                activeTab === 'gsi' ? 'font-black shadow' : 'text-slate-400 hover:text-white'
+              ]"
+              :style="activeTab === 'gsi' ? { backgroundColor: themeStore.customAccentColor, color: '#020617' } : {}"
+            >
+              <Radio class="w-3.5 h-3.5" />
+              <span>GSI & CS2 Live Sync</span>
             </button>
 
             <button 
@@ -1022,6 +1060,130 @@ async function copyToClipboard(text: string, type: 'cfg' | 'docker' | 'setpos' |
               </div>
             </div>
 
+          </div>
+
+          <!-- ============================================================ -->
+          <!-- TAB 4: GSI & CS2 LIVE GAME INTEGRATION                       -->
+          <!-- ============================================================ -->
+          <div v-if="activeTab === 'gsi'" class="flex flex-col gap-6">
+            <!-- 1. CONSOLE GETPOS / SETPOS LIVE COORDINATE SYNC -->
+            <div class="p-4 bg-slate-950/90 border border-slate-800 rounded-2xl flex flex-col gap-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <Terminal class="w-4 h-4 text-amber-400" />
+                  <span class="font-black uppercase tracking-wider text-white text-xs">
+                    1. Instant Console Position Sync (getpos / setpos)
+                  </span>
+                </div>
+                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono font-bold uppercase">
+                  100% VAC-Safe • Zero Setup
+                </span>
+              </div>
+              <p class="text-slate-400 text-xs leading-relaxed">
+                Run <code class="text-amber-400 font-mono">getpos</code> in your CS2 console and paste the output below to immediately plot your exact in-game position and view cone on the interactive 1024×1024 radar.
+              </p>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input
+                  v-model="consoleGetposInput"
+                  type="text"
+                  placeholder="setpos -1028.00 -2485.00 -167.97; setang -42.50 135.20 0.00"
+                  class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-emerald-300 font-mono focus:outline-none focus:border-amber-500"
+                />
+                <button
+                  @click="handleSyncConsoleInput"
+                  class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer shrink-0"
+                >
+                  Plot Player on Radar
+                </button>
+              </div>
+              <div v-if="consoleSyncFeedback" class="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 font-mono text-[11px]">
+                {{ consoleSyncFeedback }}
+              </div>
+            </div>
+
+            <!-- 2. VALVE HTTP GAME STATE INTEGRATION (GSI) -->
+            <div class="p-4 bg-slate-950/90 border border-slate-800 rounded-2xl flex flex-col gap-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <Radio class="w-4 h-4 text-cyan-400" />
+                  <span class="font-black uppercase tracking-wider text-white text-xs">
+                    2. Official Valve HTTP Game State Integration (GSI)
+                  </span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span
+                    :class="[
+                      'px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border',
+                      cs2ServerStore.gsiConnected
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                        : 'bg-slate-900 text-slate-400 border-slate-800'
+                    ]"
+                  >
+                    {{ cs2ServerStore.gsiConnected ? 'GSI Telemetry Active' : 'Waiting for CS2 GSI Payload' }}
+                  </span>
+                </div>
+              </div>
+              <p class="text-slate-400 text-xs leading-relaxed">
+                Place <code class="text-cyan-400 font-mono">gamestate_integration_cs2nades.cfg</code> inside your
+                <code class="text-slate-200 font-mono">Steam/steamapps/common/Counter-Strike Global Offensive/game/csgo/cfg/</code> folder. CS2 will automatically stream active map, round phase, held grenade, and spectator/practice coordinates to the platform.
+              </p>
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  @click="handleDownloadGsiCfg"
+                  class="px-3.5 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Download class="w-3.5 h-3.5" />
+                  <span>Download gamestate_integration_cs2nades.cfg</span>
+                </button>
+                <button
+                  @click="handleCopyGsiCfg"
+                  class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Check v-if="copiedGsi" class="w-3.5 h-3.5 text-emerald-400" />
+                  <Copy v-else class="w-3.5 h-3.5" />
+                  <span>{{ copiedGsi ? 'Copied GSI Config!' : 'Copy GSI Config' }}</span>
+                </button>
+              </div>
+              <pre class="p-3 bg-slate-900/90 border border-slate-800 rounded-xl font-mono text-[10px] text-cyan-300 overflow-x-auto max-h-40">{{ cs2ServerStore.generateGsiConfigFileContent() }}</pre>
+            </div>
+
+            <!-- 3. TECHNICAL CAPABILITIES & SECURITY MATRIX -->
+            <div class="p-4 bg-slate-950/90 border border-slate-800 rounded-2xl flex flex-col gap-3">
+              <div class="flex items-center gap-2">
+                <ShieldAlert class="w-4 h-4 text-amber-400" />
+                <span class="font-black uppercase tracking-wider text-white text-xs">
+                  CS2 Integration Architecture & Technical Limitations Matrix
+                </span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div
+                  v-for="cap in cs2ServerStore.capabilities"
+                  :key="cap.id"
+                  class="p-3 rounded-xl border bg-slate-900/60 flex flex-col gap-1.5"
+                  :class="cap.status === 'completed' ? 'border-emerald-500/30' : cap.status === 'practice_only' ? 'border-amber-500/30' : 'border-rose-500/30'"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-bold text-white text-xs">{{ cap.title }}</span>
+                    <span
+                      :class="[
+                        'px-1.5 py-0.5 rounded text-[9px] font-mono font-black uppercase shrink-0',
+                        cap.status === 'completed'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : cap.status === 'practice_only'
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-rose-500/20 text-rose-400'
+                      ]"
+                    >
+                      {{ cap.status === 'completed' ? 'LIVE / COMPLETED' : cap.status === 'practice_only' ? 'PRACTICE SERVER ONLY' : 'RESTRICTED / BLOCKED' }}
+                    </span>
+                  </div>
+                  <p class="text-[11px] text-slate-300 leading-snug">{{ cap.summary }}</p>
+                  <p class="text-[10px] text-slate-400 font-mono leading-snug border-t border-slate-800/80 pt-1.5 mt-0.5">
+                    {{ cap.technicalDetails }}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
         </div>

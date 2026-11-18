@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import axios from 'axios'
 import { useLineupStore } from '../stores/lineupStore'
 import { useMapStore } from '../stores/mapStore'
 import LineupCard from '../components/lineups/LineupCard.vue'
@@ -8,7 +9,7 @@ import AddLineupModal from '../components/lineups/AddLineupModal.vue'
 import QuickAddBar from '../components/lineups/QuickAddBar.vue'
 import CommunityPresetsModal from '../components/lineups/CommunityPresetsModal.vue'
 import NadeIcon from '../components/common/NadeIcon.vue'
-import type { GrenadeType, TeamSide } from '../types'
+import type { GrenadeType, Lineup, TeamSide } from '../types'
 import { 
   Grid, 
   Search, 
@@ -20,7 +21,8 @@ import {
   RefreshCw,
   Globe,
   Sparkles,
-  Check
+  Check,
+  CheckCircle2
 } from 'lucide-vue-next'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
 
@@ -32,10 +34,76 @@ const selectedMapFilter = ref('all')
 const selectedNadeFilter = ref<string>('all')
 const selectedSideFilter = ref<string>('all')
 const selectedSourceFilter = ref<string>('all')
+const selectedProPlayerFilter = ref<string>('all')
 const showFavoritesOnly = ref(false)
+const discoveredLineups = ref<Lineup[]>([])
+const isFetchingDiscoverFeed = ref(false)
+const discoverFeedBanner = ref('')
+
+const externalSourceOptions = [
+  { value: 'all', label: 'All Sources' },
+  { value: 'CSNades.gg', label: 'CSNades.gg' },
+  { value: 'NadeKing', label: 'NadeKing' },
+  { value: 'CS2Lineups', label: 'CS2Lineups' },
+  { value: 'Pracc.com', label: 'Pracc.com' },
+  { value: 'Scope.gg', label: 'Scope.gg' },
+  { value: 'HLTV Pro Utility', label: 'HLTV Pro Utility' },
+  { value: 'Bo3.gg', label: 'Bo3.gg' },
+  { value: 'Community Server', label: 'Community Server' },
+  { value: 'custom', label: 'Squad Custom Only' }
+]
+
+const proPlayerOptions = [
+  { value: 'all', label: 'All Pros' },
+  { value: 'm0NESY', label: 'm0NESY' },
+  { value: 'ZywOo', label: 'ZywOo' },
+  { value: 'donk', label: 'donk' },
+  { value: 'ropz', label: 'ropz' },
+  { value: 'Aleksib', label: 'Aleksib' },
+  { value: 'Karrigan', label: 'Karrigan' }
+]
+
+async function fetchLiveCommunityFeed() {
+  isFetchingDiscoverFeed.value = true
+  try {
+    const res = await axios.get('/api/lineups/discover')
+    const raw = res.data
+    const items: Lineup[] = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw?.lineups)
+        ? raw.lineups
+        : []
+    discoveredLineups.value = items.map((item) => ({
+      ...item,
+      sourceWebsite: item.sourceWebsite || 'Community Server'
+    }))
+    discoverFeedBanner.value = items.length > 0
+      ? `Fetched ${items.length} live community lineup${items.length === 1 ? '' : 's'} from server feed.`
+      : 'Live community feed checked — all curated pro & external-site lineups are ready.'
+  } catch {
+    discoverFeedBanner.value = 'Server discover feed unreachable — showing local & curated pro lineups.'
+  } finally {
+    isFetchingDiscoverFeed.value = false
+    setTimeout(() => {
+      discoverFeedBanner.value = ''
+    }, 3500)
+  }
+}
+
+const combinedLibraryLineups = computed<Lineup[]>(() => {
+  const seen = new Set<string>()
+  const merged: Lineup[] = []
+  for (const item of [...lineupStore.allLineups, ...discoveredLineups.value]) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id)
+      merged.push(item)
+    }
+  }
+  return merged
+})
 
 const allDisplayLineups = computed(() => {
-  return lineupStore.allLineups.filter(lineup => {
+  return combinedLibraryLineups.value.filter(lineup => {
     // Map filter
     if (selectedMapFilter.value !== 'all' && lineup.mapId !== selectedMapFilter.value) {
       return false
@@ -55,7 +123,19 @@ const allDisplayLineups = computed(() => {
     if (selectedSourceFilter.value !== 'all') {
       if (selectedSourceFilter.value === 'custom') {
         if (!lineup.isCustom) return false
+      } else if (selectedSourceFilter.value === 'Community Server') {
+        const isCommunity =
+          lineup.sourceWebsite === 'Community Server' ||
+          (!lineup.sourceWebsite && (lineup.isCustom || lineup.isTeamShared))
+        if (!isCommunity) return false
       } else if (lineup.sourceWebsite !== selectedSourceFilter.value) {
+        return false
+      }
+    }
+
+    // Pro Player filter
+    if (selectedProPlayerFilter.value !== 'all') {
+      if ((lineup.proPlayer || '').toLowerCase() !== selectedProPlayerFilter.value.toLowerCase()) {
         return false
       }
     }
@@ -73,8 +153,11 @@ const allDisplayLineups = computed(() => {
       const matchEnd = lineup.endLocation.toLowerCase().includes(q)
       const matchMap = lineup.mapId.toLowerCase().includes(q)
       const matchSource = (lineup.sourceWebsite || '').toLowerCase().includes(q)
+      const matchPro = (lineup.proPlayer || '').toLowerCase().includes(q)
+      const matchTeam = (lineup.proTeam || '').toLowerCase().includes(q)
+      const matchTourney = (lineup.tournament || '').toLowerCase().includes(q)
       const matchTags = (lineup.tags || []).some(t => t.toLowerCase().includes(q))
-      if (!matchTitle && !matchStart && !matchEnd && !matchMap && !matchSource && !matchTags) return false
+      if (!matchTitle && !matchStart && !matchEnd && !matchMap && !matchSource && !matchPro && !matchTeam && !matchTourney && !matchTags) return false
     }
 
     return true
@@ -138,10 +221,21 @@ async function handleClearAll() {
         <button
           @click="lineupStore.isPresetsModalOpen = true"
           class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-          title="Explore popular lineups from CSNades, NadeKing, CS2Lineups, Pracc, and Scope.gg"
+          title="Explore popular lineups from CSNades, NadeKing, CS2Lineups, Pracc, Scope.gg, HLTV & Bo3.gg"
         >
           <Sparkles class="w-3.5 h-3.5" />
           <span>Meta Sources</span>
+        </button>
+
+        <!-- FETCH LIVE COMMUNITY FEED BUTTON -->
+        <button
+          @click="fetchLiveCommunityFeed"
+          :disabled="isFetchingDiscoverFeed"
+          class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+          title="Fetch shared pro & community lineups from live server feed"
+        >
+          <Globe class="w-3.5 h-3.5 text-cyan-400" :class="{ 'animate-pulse': isFetchingDiscoverFeed }" />
+          <span>Fetch Live Community Feed</span>
         </button>
 
         <!-- SYNC BUTTON -->
@@ -174,6 +268,15 @@ async function handleClearAll() {
           <span>Add Lineup</span>
         </button>
       </div>
+    </div>
+
+    <!-- LIVE DISCOVER BANNER -->
+    <div
+      v-if="discoverFeedBanner"
+      class="px-4 py-2.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold flex items-center gap-2 animate-fade-in"
+    >
+      <CheckCircle2 class="w-4 h-4 text-cyan-400 flex-shrink-0" />
+      <span>{{ discoverFeedBanner }}</span>
     </div>
 
     <!-- ⚡ QUICK ADD BAR -->
@@ -232,13 +335,22 @@ async function handleClearAll() {
             v-model="selectedSourceFilter"
             class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
           >
-            <option value="all">All Sources</option>
-            <option value="CSNades.gg">CSNades.gg</option>
-            <option value="NadeKing">NadeKing</option>
-            <option value="CS2Lineups">CS2Lineups.com</option>
-            <option value="Pracc.com">Pracc.com</option>
-            <option value="Scope.gg">Scope.gg</option>
-            <option value="custom">Squad Custom Only</option>
+            <option v-for="opt in externalSourceOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+        </div>
+
+        <!-- PRO PLAYER FILTER -->
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-400 font-bold">Pro:</span>
+          <select 
+            v-model="selectedProPlayerFilter"
+            class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-purple-300 focus:outline-none focus:border-purple-500 cursor-pointer"
+          >
+            <option v-for="pro in proPlayerOptions" :key="pro.value" :value="pro.value">
+              {{ pro.label }}
+            </option>
           </select>
         </div>
 

@@ -1,3 +1,18 @@
+import type { MapRadarCalibration, Point2D } from '../types'
+import {
+  CS2_RADAR_CALIBRATIONS,
+  clientToSvgRadarPct,
+  parseGetPosCommand,
+  radarToWorldCoords,
+  worldToRadarCoords
+} from '../core/radar/coordinateEngine'
+
+export type RadarCalibration = MapRadarCalibration
+export const MAP_CALIBRATIONS = CS2_RADAR_CALIBRATIONS
+export const worldToRadarPercent = worldToRadarCoords
+export const radarPercentToWorld = radarToWorldCoords
+export const parseCS2Setpos = parseGetPosCommand
+
 export function parseViewBox(viewBox = '0 0 1000 1000') {
   const parts = viewBox.trim().split(/[\s,]+/).map(Number)
   return {
@@ -24,24 +39,7 @@ export function clientToPct(
   clientX: number,
   clientY: number
 ): { x: number; y: number } | null {
-  const ctm = svg.getScreenCTM()
-  if (!ctm) return null
-
-  const pt = svg.createSVGPoint()
-  pt.x = clientX
-  pt.y = clientY
-  const mapped = pt.matrixTransform(ctm.inverse())
-  const vb = svg.viewBox.baseVal.width
-    ? svg.viewBox.baseVal
-    : { x: 0, y: 0, width: 1000, height: 1000 }
-
-  const x = ((mapped.x - vb.x) / vb.width) * 100
-  const y = ((mapped.y - vb.y) / vb.height) * 100
-
-  return {
-    x: Math.round(Math.min(Math.max(x, 0.1), 99.9) * 10) / 10,
-    y: Math.round(Math.min(Math.max(y, 0.1), 99.9) * 10) / 10
-  }
+  return clientToSvgRadarPct(svg, clientX, clientY, true)
 }
 
 export function trajectoryPath(
@@ -59,8 +57,21 @@ export function trajectoryPath(
   const dist = Math.sqrt(dx * dx + dy * dy) || 1
   const vb = parseViewBox(viewBox)
   const scale = vb.height / 1000
-  const archHeight = Math.min(Math.max(dist * 0.25, 20 * scale), 80 * scale) + curveOffset * 2 * scale
+  const archHeight =
+    Math.min(Math.max(dist * 0.25, 20 * scale), 80 * scale) + curveOffset * 2 * scale
   const cx = mx + (-dy / dist) * archHeight
   const cy = my + (dx / dist) * archHeight
   return `M ${o.x} ${o.y} Q ${cx} ${cy} ${l.x} ${l.y}`
+}
+
+export function estimateThrowDirection(
+  mapId: string,
+  originWorld: { x: number; y: number },
+  yawDegrees: number,
+  distanceUnits = 950
+): Point2D {
+  const rad = (yawDegrees * Math.PI) / 180
+  const targetX = originWorld.x + Math.cos(rad) * distanceUnits
+  const targetY = originWorld.y + Math.sin(rad) * distanceUnits
+  return worldToRadarCoords(mapId, targetX, targetY)
 }

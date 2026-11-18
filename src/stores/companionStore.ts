@@ -46,7 +46,12 @@ export const useCompanionStore = defineStore('companion', () => {
   }
 
   function initSocket() {
-    if (socket.value && socket.value.connected) return
+    if (socket.value) {
+      if (!socket.value.connected) {
+        socket.value.connect()
+      }
+      return
+    }
 
     const serverUrl = getSocketUrl()
     socket.value = io(serverUrl, {
@@ -67,6 +72,14 @@ export const useCompanionStore = defineStore('companion', () => {
         isPaired.value = true
         isPhoneSleeping.value = false
         pairedDeviceName.value = data.phoneInfo?.device || 'Mobile Phone'
+      }
+    })
+
+    socket.value.on('remote:disconnected', (data?: { code?: string }) => {
+      const incomingCode = data?.code?.toUpperCase().trim()
+      const currentCode = pairingCode.value?.toUpperCase().trim()
+      if (!incomingCode || incomingCode === currentCode) {
+        disconnectPhone(false)
       }
     })
 
@@ -201,7 +214,10 @@ export const useCompanionStore = defineStore('companion', () => {
     switch (command) {
       case 'switch_map':
         if (payload?.mapId) {
-          mapStore.currentMapId = payload.mapId
+          mapStore.setMap(payload.mapId)
+          if (mapStore.currentMapId !== payload.mapId) {
+            mapStore.currentMapId = payload.mapId
+          }
         }
         break
 
@@ -211,7 +227,10 @@ export const useCompanionStore = defineStore('companion', () => {
           if (lineup) {
             lineupStore.openLineup(lineup)
             if (lineup.mapId && lineup.mapId !== mapStore.currentMapId) {
-              mapStore.currentMapId = lineup.mapId
+              mapStore.setMap(lineup.mapId)
+              if (mapStore.currentMapId !== lineup.mapId) {
+                mapStore.currentMapId = lineup.mapId
+              }
             }
           }
         }
@@ -275,8 +294,24 @@ export const useCompanionStore = defineStore('companion', () => {
     }
   }
 
+  // Disconnect paired phone & optionally notify peer via WebSocket relay
+  function disconnectPhone(notifyPeer = true) {
+    if (notifyPeer && socket.value && pairingCode.value) {
+      if (socket.value.connected) {
+        socket.value.emit('remote:disconnect', { code: pairingCode.value })
+      }
+    }
+    isPaired.value = false
+    isPhoneSleeping.value = false
+    pairedDeviceName.value = ''
+    lastVoiceFeedback.value = null
+  }
+
   // Regenerate pairing code
   function regenerateCode() {
+    if (isPaired.value) {
+      disconnectPhone(true)
+    }
     pairingCode.value = defaultCode()
     localStorage.setItem('cs2_companion_code', pairingCode.value)
     isPaired.value = false
@@ -297,6 +332,7 @@ export const useCompanionStore = defineStore('companion', () => {
     initSocket,
     registerDesktop,
     connectAsPhone,
+    disconnectPhone,
     notifyPhoneSleep,
     notifyPhoneWake,
     sendCommand,

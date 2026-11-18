@@ -13,6 +13,7 @@ import {
   Sparkles, 
   Radio, 
   Wifi, 
+  WifiOff,
   ExternalLink,
   ShieldCheck,
   Gamepad2
@@ -95,19 +96,19 @@ async function copyCode() {
     >
       <div 
         class="relative w-full max-w-lg border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto"
-        :style="{ backgroundColor: themeStore.customModalBgColor }"
+        :style="{ backgroundColor: themeStore.effectiveModalBgColor }"
       >
         <!-- HEADER -->
         <div class="p-5 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between gap-4 shrink-0">
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3 min-w-0">
             <div 
-              class="p-2.5 rounded-2xl border shadow-inner flex items-center justify-center"
+              class="p-2.5 rounded-2xl border shadow-inner flex items-center justify-center shrink-0"
               :style="{ backgroundColor: themeStore.customAccentColor + '22', borderColor: themeStore.customAccentColor + '66', color: themeStore.customAccentColor }"
             >
               <Smartphone class="w-6 h-6 stroke-[2.5]" />
             </div>
-            <div>
-              <div class="flex items-center gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
                 <h2 class="text-base font-black uppercase text-white tracking-wide">
                   Phone StreamDeck & Voice Remote
                 </h2>
@@ -127,12 +128,25 @@ async function copyCode() {
             </div>
           </div>
 
-          <button 
-            @click="emit('close')" 
-            class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <X class="w-5 h-5" />
-          </button>
+          <div class="flex items-center gap-2 shrink-0">
+            <button
+              v-if="companionStore.isPaired"
+              @click="companionStore.disconnectPhone()"
+              class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-rose-600/25 active:scale-95"
+              title="Disconnect Paired Phone"
+            >
+              <WifiOff class="w-3.5 h-3.5" />
+              <span class="hidden sm:inline">Disconnect Phone</span>
+              <span class="sm:hidden">Disconnect</span>
+            </button>
+
+            <button 
+              @click="emit('close')" 
+              class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X class="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <!-- BODY -->
@@ -158,7 +172,17 @@ async function copyCode() {
                 <Wifi class="w-6 h-6 animate-pulse" />
               </div>
               <span class="font-black text-sm text-white">📱 Phone Paired & Live!</span>
+              <span v-if="companionStore.pairedDeviceName" class="text-[11px] font-mono text-emerald-300">
+                Device: {{ companionStore.pairedDeviceName }}
+              </span>
               <span class="text-xs text-slate-300">Tap buttons or speak into your phone to control this screen in real-time.</span>
+              <button
+                @click="companionStore.disconnectPhone()"
+                class="mt-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-rose-600/30 active:scale-95"
+              >
+                <WifiOff class="w-3.5 h-3.5" />
+                <span>Disconnect Phone</span>
+              </button>
             </div>
           </div>
 

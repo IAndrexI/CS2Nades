@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useLineupStore } from '../../stores/lineupStore'
+import { DEFAULT_LINEUP_IMAGE } from '../../config/site'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup } from '../../types'
 import { Heart, Play, ArrowRight, Trash2, Globe, BookmarkCheck } from 'lucide-vue-next'
@@ -12,6 +14,15 @@ const props = defineProps<{
 
 const lineupStore = useLineupStore()
 const { confirmAction } = useConfirmDialog()
+
+const cardThumbnail = computed(
+  () =>
+    props.lineup.imageUrl ||
+    props.lineup.aimScreenshot ||
+    props.lineup.standingScreenshot ||
+    props.lineup.landingScreenshot ||
+    DEFAULT_LINEUP_IMAGE
+)
 
 async function handleDelete(e: MouseEvent) {
   e.stopPropagation()
@@ -41,11 +52,11 @@ function handleToggleLibrary(e: MouseEvent) {
     <!-- TOP THUMBNAIL / PREVIEW -->
     <div class="relative w-full h-32 bg-slate-950 overflow-hidden flex items-center justify-center">
       <img 
-        :src="lineup.imageUrl || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80'" 
+        :src="cardThumbnail" 
         :alt="lineup.title"
         loading="lazy"
         decoding="async"
-        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-80 group-hover:opacity-100"
+        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-95 group-hover:opacity-100"
       />
       
       <!-- NADE TYPE BADGE (TOP LEFT) -->
@@ -115,13 +126,26 @@ function handleToggleLibrary(e: MouseEvent) {
         <span class="truncate max-w-[90px] text-slate-300 font-medium">{{ lineup.endLocation }}</span>
       </div>
 
+      <div v-if="lineup.proPlayer || lineup.sourceWebsite" class="flex flex-wrap items-center gap-1">
+        <span
+          v-if="lineup.proPlayer"
+          class="px-1.5 py-0.5 bg-purple-500/15 text-purple-300 border border-purple-500/30 rounded font-bold text-[9px] truncate max-w-[140px]"
+          :title="lineup.proTeam ? `${lineup.proPlayer} (${lineup.proTeam})` : lineup.proPlayer"
+        >
+          ★ {{ lineup.proPlayer }}<template v-if="lineup.proTeam"> · {{ lineup.proTeam }}</template>
+        </span>
+        <span
+          v-if="lineup.sourceWebsite"
+          class="px-1.5 py-0.5 bg-slate-800/90 text-amber-400/90 border border-amber-500/20 rounded font-semibold text-[9px]"
+        >
+          {{ lineup.sourceWebsite }}
+        </span>
+      </div>
+
       <div class="flex items-center justify-between pt-2 mt-auto border-t border-slate-800 text-[10px]">
         <div class="flex items-center gap-1.5">
           <span class="font-mono uppercase font-bold text-amber-400">
             {{ lineup.throwType.replace('_', ' ') }}
-          </span>
-          <span v-if="lineup.sourceWebsite" class="px-1.5 py-0.2 bg-slate-800/80 text-amber-400/90 border border-amber-500/20 rounded font-semibold text-[9px]">
-            {{ lineup.sourceWebsite }}
           </span>
         </div>
         <span class="text-slate-400 font-medium">

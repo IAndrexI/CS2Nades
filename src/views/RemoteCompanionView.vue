@@ -8,6 +8,7 @@ import { useCompanionStore } from '../stores/companionStore'
 import { useGameRoomStore } from '../stores/gameRoomStore'
 import NadeIcon from '../components/common/NadeIcon.vue'
 import VectorMapBlueprint from '../components/map/VectorMapBlueprint.vue'
+import { DEFAULT_LINEUP_IMAGE } from '../config/site'
 import { trajectoryPath, pctToSvg } from '../utils/radarCoords'
 import type { GrenadeType, TeamSide, Lineup } from '../types'
 import { 
@@ -80,11 +81,88 @@ function handleCloseStreamInspector() {
 }
 
 function openStreamLightbox(url?: string) {
-  if (url) {
-    streamLightboxUrl.value = url
-    isStreamLightboxOpen.value = true
+  streamLightboxUrl.value = url || DEFAULT_LINEUP_IMAGE
+  isStreamLightboxOpen.value = true
+}
+
+function handleStreamImageError(e: Event) {
+  const img = e.target as HTMLImageElement | null
+  if (img && !img.src.endsWith(DEFAULT_LINEUP_IMAGE)) {
+    img.src = DEFAULT_LINEUP_IMAGE
   }
 }
+
+// ── REAL-TIME LIVE LINEUP AUTO-UPDATE BANNER ─────────────────
+const liveUpdateBanner = ref<{
+  type: 'added' | 'updated' | 'deleted'
+  lineup?: Lineup
+  mapName: string
+  message: string
+  timestamp: number
+} | null>(null)
+let liveBannerTimer: ReturnType<typeof setTimeout> | null = null
+
+function dismissLiveBanner() {
+  liveUpdateBanner.value = null
+  if (liveBannerTimer) {
+    clearTimeout(liveBannerTimer)
+    liveBannerTimer = null
+  }
+}
+
+function handleTapLiveBanner() {
+  const lineup = liveUpdateBanner.value?.lineup
+  if (lineup) {
+    if (lineup.mapId && lineup.mapId !== mapStore.currentMapId) {
+      handleSelectMap(lineup.mapId)
+    }
+    handleInspectLineup(lineup)
+  }
+  dismissLiveBanner()
+}
+
+watch(
+  () => lineupStore.lastRealtimeEvent,
+  (evt) => {
+    if (!evt) return
+    if (evt.type === 'added' && evt.lineup) {
+      liveUpdateBanner.value = {
+        type: 'added',
+        lineup: evt.lineup,
+        mapName: evt.lineup.mapId?.toUpperCase() || '',
+        message: 'New Lineup Added — Tap to Inspect',
+        timestamp: evt.timestamp
+      }
+    } else if (evt.type === 'updated' && evt.lineup) {
+      liveUpdateBanner.value = {
+        type: 'updated',
+        lineup: evt.lineup,
+        mapName: evt.lineup.mapId?.toUpperCase() || '',
+        message: `Lineup Updated: ${evt.lineup.title} — Tap to Inspect`,
+        timestamp: evt.timestamp
+      }
+      if (selectedStreamLineup.value?.id === evt.lineup.id) {
+        selectedStreamLineup.value = evt.lineup
+      }
+    } else if (evt.type === 'deleted') {
+      liveUpdateBanner.value = {
+        type: 'deleted',
+        mapName: '',
+        message: 'Lineup removed from server',
+        timestamp: evt.timestamp
+      }
+      if (selectedStreamLineup.value && evt.lineup?.id === selectedStreamLineup.value.id) {
+        selectedStreamLineup.value = null
+      }
+    }
+
+    if (liveBannerTimer) clearTimeout(liveBannerTimer)
+    liveBannerTimer = setTimeout(() => {
+      liveUpdateBanner.value = null
+    }, 8000)
+  },
+  { deep: true }
+)
 
 // ── PHONE INACTIVITY & SLEEP / STANDBY SYSTEM ───────────────
 const isSleeping = ref<boolean>(false)
@@ -93,10 +171,12 @@ const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000 // 3 minutes idle
 let inactivityTimeout: any = null
 
 function resetInactivityTimer() {
-  if (isSleeping.value) return // Don't reset if already sleeping
+  if (isSleeping.value || !companionStore.isPaired) return // Don't reset if sleeping or unpaired
   if (inactivityTimeout) clearTimeout(inactivityTimeout)
   inactivityTimeout = setTimeout(() => {
-    enterSleepMode('Auto-sleep due to 3 minutes of inactivity')
+    if (companionStore.isPaired) {
+      enterSleepMode('Auto-sleep due to 3 minutes of inactivity')
+    }
   }, INACTIVITY_TIMEOUT_MS)
 }
 
@@ -130,12 +210,35 @@ function wakeFromSleep() {
 }
 
 function handleVisibilityChange() {
+  if (!companionStore.isPaired) return
   if (document.hidden) {
     enterSleepMode('Phone screen locked or switched tab')
-  } else {
+  } else if (isSleeping.value) {
     wakeFromSleep()
   }
 }
+
+function handleDisconnectPhone() {
+  isSleeping.value = false
+  sleepReason.value = ''
+  if (inactivityTimeout) clearTimeout(inactivityTimeout)
+  if (recognition && isListening.value) {
+    try { recognition.stop() } catch (e) {}
+    isListening.value = false
+  }
+  companionStore.disconnectPhone()
+}
+
+watch(
+  () => companionStore.isPaired,
+  (paired) => {
+    if (!paired) {
+      isSleeping.value = false
+    } else {
+      resetInactivityTimer()
+    }
+  }
+)
 
 // ── VOICE RECOGNITION STATE ──────────────────────────────────
 const isSpeechSupported = ref<boolean>(false)
@@ -147,6 +250,8 @@ const isVoiceSuccess = ref<boolean | null>(null)
 let recognition: any = null
 
 onMounted(() => {
+  lineupStore.initRealtimeSync?.()
+
   // Check pairing code from URL query param (?code=1234)
   const queryCode = route.query.code as string
   if (queryCode) {
@@ -173,6 +278,7 @@ onUnmounted(() => {
     try { recognition.abort() } catch (e) {}
   }
   if (inactivityTimeout) clearTimeout(inactivityTimeout)
+  if (liveBannerTimer) clearTimeout(liveBannerTimer)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('touchstart', onUserInteraction)
   window.removeEventListener('pointerdown', onUserInteraction)
@@ -265,7 +371,10 @@ const activeLineups = computed(() => {
 
 // ── REMOTE ACTIONS ──────────────────────────────────────────
 function handleSelectMap(mapId: string) {
-  mapStore.currentMapId = mapId
+  mapStore.setMap(mapId)
+  if (mapStore.currentMapId !== mapId) {
+    mapStore.currentMapId = mapId
+  }
   companionStore.sendCommand('switch_map', { mapId })
   if (gameRoomStore.currentRoomCode) {
     gameRoomStore.switchMap(mapId)
@@ -381,7 +490,12 @@ function parseAndExecuteVoice(text: string) {
     'vertigo': 'vertigo',
     'train': 'train',
     'overpass': 'overpass',
-    'cache': 'cache'
+    'cache': 'cache',
+    'cobblestone': 'cobblestone',
+    'cobble': 'cobblestone',
+    'cbble': 'cobblestone',
+    'de_cbble': 'cobblestone',
+    'de_cobble': 'cobblestone'
   }
 
   let detectedMap: string | null = null
@@ -401,7 +515,15 @@ function parseAndExecuteVoice(text: string) {
     handleCloseLineup()
   }
   // 3. Detect Map Switch
-  else if (detectedMap && (t.includes('switch') || t.includes('open') || t.includes('go to') || t === detectedMap || t.includes('map'))) {
+  else if (
+    detectedMap &&
+    (t.includes('switch') ||
+      t.includes('open') ||
+      t.includes('go to') ||
+      t === detectedMap ||
+      Object.keys(maps).includes(t) ||
+      t.includes('map'))
+  ) {
     matchedAction = {
       type: 'switch_map',
       payload: { mapId: detectedMap },
@@ -496,6 +618,14 @@ function parseAndExecuteVoice(text: string) {
           <span>Tap Screen to Reconnect</span>
         </button>
 
+        <button
+          @click.stop="handleDisconnectPhone"
+          class="mt-3 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-rose-600/25 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+        >
+          <WifiOff class="w-4 h-4" />
+          <span>Disconnect Phone</span>
+        </button>
+
         <span class="text-[10px] text-slate-600 font-mono mt-8">
           CS2 Tactical Companion • Auto-Reconnection Ready
         </span>
@@ -503,30 +633,30 @@ function parseAndExecuteVoice(text: string) {
     </Transition>
 
     <!-- TOP APP BAR -->
-    <header class="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 p-3 flex items-center justify-between shadow-lg">
-      <div class="flex items-center gap-2">
+    <header class="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 p-3 flex items-center justify-between gap-2 shadow-lg">
+      <div class="flex items-center gap-2 min-w-0">
         <div 
-          class="p-2 rounded-xl flex items-center justify-center shadow"
+          class="p-2 rounded-xl flex items-center justify-center shadow shrink-0"
           :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
         >
           <Smartphone class="w-5 h-5 stroke-[2.5]" />
         </div>
-        <div>
+        <div class="min-w-0">
           <h1 class="text-xs font-black uppercase text-white tracking-wide flex items-center gap-1.5">
-            <span>CS2 Deck Controller</span>
+            <span class="truncate">CS2 Deck Controller</span>
             <span 
-              class="w-2 h-2 rounded-full"
+              class="w-2 h-2 rounded-full shrink-0"
               :class="companionStore.isPaired ? 'bg-emerald-400 animate-ping' : 'bg-amber-400 animate-pulse'"
             ></span>
           </h1>
-          <span class="text-[10px] text-slate-400 font-mono">
+          <span class="text-[10px] text-slate-400 font-mono block truncate">
             {{ companionStore.isPaired ? `Paired (Deck #${companionStore.pairingCode})` : 'Disconnected' }}
           </span>
         </div>
       </div>
 
-      <!-- PAIRING CODE INPUT & SQUAD ROOM TOGGLE -->
-      <div class="flex items-center gap-2">
+      <!-- PAIRING CODE INPUT, DISCONNECT & SQUAD ROOM TOGGLE -->
+      <div class="flex items-center gap-2 shrink-0">
         <button
           @click="isRoomModalOpen = true"
           :class="[
@@ -542,7 +672,17 @@ function parseAndExecuteVoice(text: string) {
           </span>
         </button>
 
-        <div class="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-xl p-1">
+        <button
+          v-if="companionStore.isPaired"
+          @click="handleDisconnectPhone"
+          class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-rose-600/25 active:scale-95"
+          title="Disconnect Phone from Desktop"
+        >
+          <WifiOff class="w-3.5 h-3.5" />
+          <span>Disconnect</span>
+        </button>
+
+        <div v-else class="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-xl p-1">
           <input 
             v-model="inputPairCode"
             placeholder="Code"
@@ -562,6 +702,36 @@ function parseAndExecuteVoice(text: string) {
 
     <!-- MAIN BODY -->
     <main class="flex-1 p-3 flex flex-col gap-3 max-w-lg mx-auto w-full">
+
+      <!-- REAL-TIME LINEUP AUTO-UPDATE BANNER -->
+      <Transition name="fade">
+        <div
+          v-if="liveUpdateBanner"
+          @click="handleTapLiveBanner"
+          class="p-3 bg-emerald-500/15 hover:bg-emerald-500/20 border border-emerald-500/50 rounded-2xl flex items-center justify-between gap-2.5 shadow-lg cursor-pointer transition-all"
+        >
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="p-2 bg-emerald-500 text-slate-950 rounded-xl shrink-0">
+              <Bell class="w-4 h-4" />
+            </div>
+            <div class="flex flex-col min-w-0">
+              <span class="text-[11px] font-black uppercase tracking-wide text-emerald-400 truncate">
+                {{ liveUpdateBanner.message }}
+              </span>
+              <span v-if="liveUpdateBanner.lineup" class="text-[11px] text-slate-200 font-bold truncate">
+                {{ liveUpdateBanner.mapName ? `[${liveUpdateBanner.mapName}] ` : '' }}{{ liveUpdateBanner.lineup.title }}
+              </span>
+            </div>
+          </div>
+          <button
+            @click.stop="dismissLiveBanner"
+            class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/80 shrink-0 cursor-pointer"
+            title="Dismiss notification"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+      </Transition>
       
       <!-- SQUAD LIVE BROADCAST BAR (ACTIVE ROOM NOTIFICATIONS) -->
       <div 
@@ -947,25 +1117,28 @@ function parseAndExecuteVoice(text: string) {
             </div>
 
             <!-- MEDIA / SCREENSHOT DISPLAY CONTAINER -->
-            <div class="relative w-full aspect-video bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-xl flex items-center justify-center group">
+            <div
+              :class="[
+                'relative w-full bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-xl flex items-center justify-center group',
+                activeStreamMediaTab === 'radar' ? 'aspect-square max-w-[440px] mx-auto' : 'aspect-video'
+              ]"
+            >
               
               <!-- 1. STANDING SPOT SCREENSHOT -->
               <div 
                 v-if="activeStreamMediaTab === 'standing'"
                 class="w-full h-full cursor-zoom-in relative"
-                @click="openStreamLightbox(selectedStreamLineup.standingScreenshot || selectedStreamLineup.imageUrl)"
+                @click="openStreamLightbox(selectedStreamLineup.standingScreenshot || selectedStreamLineup.imageUrl || DEFAULT_LINEUP_IMAGE)"
               >
                 <img 
-                  v-if="selectedStreamLineup.standingScreenshot || selectedStreamLineup.imageUrl"
-                  :src="selectedStreamLineup.standingScreenshot || selectedStreamLineup.imageUrl" 
+                  :src="selectedStreamLineup.standingScreenshot || selectedStreamLineup.imageUrl || DEFAULT_LINEUP_IMAGE" 
                   alt="Standing Position"
-                  class="w-full h-full object-cover"
+                  @error="handleStreamImageError"
+                  :class="[
+                    'w-full h-full object-cover',
+                    !(selectedStreamLineup.standingScreenshot || selectedStreamLineup.imageUrl) ? 'opacity-85' : ''
+                  ]"
                 />
-                <div v-else class="w-full h-full flex flex-col items-center justify-center p-4 text-center text-slate-500">
-                  <MapPin class="w-8 h-8 mb-2 opacity-50" />
-                  <span class="text-xs font-bold">No standing screenshot uploaded</span>
-                  <span class="text-[10px] text-slate-600">Position at: {{ selectedStreamLineup.startLocation }}</span>
-                </div>
 
                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-2.5 pointer-events-none">
                   <span class="text-[10px] font-bold text-sky-300 bg-slate-950/80 px-2 py-0.5 rounded-lg backdrop-blur-md flex items-center gap-1">
@@ -982,19 +1155,17 @@ function parseAndExecuteVoice(text: string) {
               <div 
                 v-else-if="activeStreamMediaTab === 'landing'"
                 class="w-full h-full cursor-zoom-in relative"
-                @click="openStreamLightbox(selectedStreamLineup.landingScreenshot || selectedStreamLineup.imageUrl)"
+                @click="openStreamLightbox(selectedStreamLineup.landingScreenshot || selectedStreamLineup.imageUrl || DEFAULT_LINEUP_IMAGE)"
               >
                 <img 
-                  v-if="selectedStreamLineup.landingScreenshot || selectedStreamLineup.imageUrl"
-                  :src="selectedStreamLineup.landingScreenshot || selectedStreamLineup.imageUrl" 
+                  :src="selectedStreamLineup.landingScreenshot || selectedStreamLineup.imageUrl || DEFAULT_LINEUP_IMAGE" 
                   alt="Landing Result"
-                  class="w-full h-full object-cover"
+                  @error="handleStreamImageError"
+                  :class="[
+                    'w-full h-full object-cover',
+                    !(selectedStreamLineup.landingScreenshot || selectedStreamLineup.imageUrl) ? 'opacity-85' : ''
+                  ]"
                 />
-                <div v-else class="w-full h-full flex flex-col items-center justify-center p-4 text-center text-slate-500">
-                  <Sparkles class="w-8 h-8 mb-2 opacity-50" />
-                  <span class="text-xs font-bold">No landing screenshot uploaded</span>
-                  <span class="text-[10px] text-slate-600">Detonates at: {{ selectedStreamLineup.endLocation }}</span>
-                </div>
 
                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-2.5 pointer-events-none">
                   <span class="text-[10px] font-bold text-rose-300 bg-slate-950/80 px-2 py-0.5 rounded-lg backdrop-blur-md flex items-center gap-1">
@@ -1007,20 +1178,21 @@ function parseAndExecuteVoice(text: string) {
                 </div>
               </div>
 
-              <!-- 3. RADAR TRAJECTORY & LANDING LOCATION MAP -->
+              <!-- 3. RADAR TRAJECTORY & LANDING LOCATION MAP (STRICT 1:1 ASPECT-SQUARE) -->
               <div 
                 v-else-if="activeStreamMediaTab === 'radar'"
-                class="w-full h-full relative bg-slate-950 flex items-center justify-center overflow-hidden"
+                class="w-full h-full aspect-square relative bg-slate-950 flex items-center justify-center overflow-hidden"
               >
                 <svg 
-                  class="w-full h-full object-contain"
-                  :viewBox="mapStore.currentMap.viewBox || '0 0 1000 1000'"
+                  class="w-full h-full aspect-square block"
+                  :viewBox="mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000'"
+                  preserveAspectRatio="xMidYMid meet"
                 >
-                  <VectorMapBlueprint :mapInfo="mapStore.currentMap" />
+                  <VectorMapBlueprint :mapInfo="mapStore.getMapById(selectedStreamLineup.mapId)" />
                   
                   <!-- TRAJECTORY ARC -->
                   <path 
-                    :d="trajectoryPath(selectedStreamLineup.originCoords, selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000', selectedStreamLineup.curveOffset || 0)"
+                    :d="trajectoryPath(selectedStreamLineup.originCoords, selectedStreamLineup.landingCoords, mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000', selectedStreamLineup.curveOffset || 0)"
                     fill="none"
                     stroke="#000000"
                     stroke-width="7"
@@ -1028,7 +1200,7 @@ function parseAndExecuteVoice(text: string) {
                     opacity="0.6"
                   />
                   <path 
-                    :d="trajectoryPath(selectedStreamLineup.originCoords, selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000', selectedStreamLineup.curveOffset || 0)"
+                    :d="trajectoryPath(selectedStreamLineup.originCoords, selectedStreamLineup.landingCoords, mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000', selectedStreamLineup.curveOffset || 0)"
                     fill="none"
                     :stroke="selectedStreamLineup.grenadeType === 'smoke' ? '#94a3b8' : selectedStreamLineup.grenadeType === 'flash' ? '#eab308' : selectedStreamLineup.grenadeType === 'molotov' ? '#ef4444' : '#22c55e'"
                     stroke-width="3.5"
@@ -1038,8 +1210,8 @@ function parseAndExecuteVoice(text: string) {
 
                   <!-- PLAYER ORIGIN PIN -->
                   <circle 
-                    :cx="pctToSvg(selectedStreamLineup.originCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').x" 
-                    :cy="pctToSvg(selectedStreamLineup.originCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').y" 
+                    :cx="pctToSvg(selectedStreamLineup.originCoords, mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(selectedStreamLineup.originCoords, mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000').y" 
                     r="14" 
                     fill="#38bdf8" 
                     fill-opacity="0.3" 
@@ -1047,8 +1219,8 @@ function parseAndExecuteVoice(text: string) {
                     stroke-width="2" 
                   />
                   <circle 
-                    :cx="pctToSvg(selectedStreamLineup.originCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').x" 
-                    :cy="pctToSvg(selectedStreamLineup.originCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').y" 
+                    :cx="pctToSvg(selectedStreamLineup.originCoords, mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(selectedStreamLineup.originCoords, mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000').y" 
                     r="6" 
                     fill="#38bdf8" 
                     stroke="#ffffff" 
@@ -1057,8 +1229,8 @@ function parseAndExecuteVoice(text: string) {
 
                   <!-- GRENADE LANDING PIN -->
                   <circle 
-                    :cx="pctToSvg(selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').x" 
-                    :cy="pctToSvg(selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').y" 
+                    :cx="pctToSvg(selectedStreamLineup.landingCoords, mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(selectedStreamLineup.landingCoords, mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000').y" 
                     r="22" 
                     fill="#ef4444" 
                     fill-opacity="0.25" 
@@ -1067,8 +1239,8 @@ function parseAndExecuteVoice(text: string) {
                     class="animate-pulse"
                   />
                   <circle 
-                    :cx="pctToSvg(selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').x" 
-                    :cy="pctToSvg(selectedStreamLineup.landingCoords, mapStore.currentMap.viewBox || '0 0 1000 1000').y" 
+                    :cx="pctToSvg(selectedStreamLineup.landingCoords, mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000').x" 
+                    :cy="pctToSvg(selectedStreamLineup.landingCoords, mapStore.getMapById(selectedStreamLineup.mapId).viewBox || '0 0 1000 1000').y" 
                     r="7" 
                     fill="#ef4444" 
                     stroke="#ffffff" 
@@ -1090,19 +1262,17 @@ function parseAndExecuteVoice(text: string) {
               <div 
                 v-else
                 class="w-full h-full cursor-zoom-in relative"
-                @click="openStreamLightbox(selectedStreamLineup.aimScreenshot || selectedStreamLineup.imageUrl)"
+                @click="openStreamLightbox(selectedStreamLineup.aimScreenshot || selectedStreamLineup.imageUrl || DEFAULT_LINEUP_IMAGE)"
               >
                 <img 
-                  v-if="selectedStreamLineup.aimScreenshot || selectedStreamLineup.imageUrl" 
-                  :src="selectedStreamLineup.aimScreenshot || selectedStreamLineup.imageUrl" 
+                  :src="selectedStreamLineup.aimScreenshot || selectedStreamLineup.imageUrl || DEFAULT_LINEUP_IMAGE" 
                   :alt="selectedStreamLineup.title"
-                  class="w-full h-full object-cover"
+                  @error="handleStreamImageError"
+                  :class="[
+                    'w-full h-full object-cover',
+                    !(selectedStreamLineup.aimScreenshot || selectedStreamLineup.imageUrl) ? 'opacity-85' : ''
+                  ]"
                 />
-                <div v-else class="w-full h-full flex flex-col items-center justify-center p-4 text-center text-slate-500">
-                  <Crosshair class="w-8 h-8 mb-2 opacity-50" />
-                  <span class="text-xs font-bold">No crosshair screenshot uploaded</span>
-                  <span class="text-[10px] text-slate-600">Throw type: {{ selectedStreamLineup.throwType }}</span>
-                </div>
 
                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-2.5 pointer-events-none">
                   <span class="text-[10px] font-bold text-amber-300 bg-slate-950/80 px-2 py-0.5 rounded-lg backdrop-blur-md flex items-center gap-1">
@@ -1320,6 +1490,16 @@ function parseAndExecuteVoice(text: string) {
       </div>
 
       <div class="flex items-center gap-2">
+        <button
+          v-if="companionStore.isPaired"
+          @click="handleDisconnectPhone"
+          class="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl text-[11px] transition-all flex items-center gap-1 cursor-pointer shadow shadow-rose-600/20 active:scale-95"
+          title="Disconnect Phone"
+        >
+          <WifiOff class="w-3.5 h-3.5" />
+          <span>Disconnect</span>
+        </button>
+
         <button
           @click="enterSleepMode('Manual standby')"
           class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-400 rounded-xl transition-colors cursor-pointer"

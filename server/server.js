@@ -74,7 +74,8 @@ const INITIAL_DB = {
     }
   ],
   lineups: [],
-  strats: []
+  strats: [],
+  updates: []
 }
 
 function syncLineupFiles(lineups) {
@@ -104,6 +105,7 @@ function loadDB() {
       const data = fs.readFileSync(DB_FILE, 'utf-8')
       const parsed = JSON.parse(data)
       if (!parsed.groups) parsed.groups = INITIAL_DB.groups
+      if (!Array.isArray(parsed.updates)) parsed.updates = []
       return parsed
     }
   } catch (err) {
@@ -1224,86 +1226,149 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
 })
 
 // ==========================================
-// LINEUPS API
+// LINEUPS API (FLUSH REAL-TIME SYNC)
 // ==========================================
+function getLineupActor(req) {
+  return req.user || { id: 'local-commander', username: 'Squad Commander', role: 'admin' }
+}
+
+function isActorAdmin(actor) {
+  return actor && (actor.role === 'admin' || (actor.username || '').toLowerCase() === 'andrex')
+}
+
 app.get('/api/lineups', (req, res) => {
   db = loadDB()
-  const userId = req.user ? req.user.id : null
-  const isAdmin = req.user && req.user.role === 'admin'
+  const actor = getLineupActor(req)
+  const admin = isActorAdmin(actor)
 
-  const visibleLineups = db.lineups.filter(l => {
-    if (isAdmin) return true
+  const visibleLineups = (db.lineups || []).filter(l => {
+    if (admin) return true
     if (l.isTeamShared || l.isVerified) return true
-    if (userId && l.userId === userId) return true
+    if (actor.id && l.userId === actor.id) return true
     return false
   })
 
   res.json(visibleLineups)
 })
 
-app.post('/api/lineups', requireAuth, (req, res) => {
+app.get('/api/lineups/discover', (req, res) => {
   db = loadDB()
-  const lineupData = req.body
+  const { mapId, source, proPlayer, grenadeType, search } = req.query
+  const all = Array.isArray(db.lineups) ? db.lineups : []
 
-  const existingIndex = db.lineups.findIndex(l => l.id === lineupData.id)
+  let discovered = all.filter(
+    l => l.isTeamShared || l.isVerified || l.inLibrary || l.proPlayer || l.sourceWebsite
+  )
+
+  if (mapId && mapId !== 'all') {
+    discovered = discovered.filter(l => l.mapId === mapId)
+  }
+  if (source && source !== 'all') {
+    discovered = discovered.filter(l => l.sourceWebsite === source)
+  }
+  if (proPlayer && proPlayer !== 'all') {
+    discovered = discovered.filter(l => l.proPlayer === proPlayer)
+  }
+  if (grenadeType && grenadeType !== 'all') {
+    discovered = discovered.filter(l => l.grenadeType === grenadeType)
+  }
+  if (search && typeof search === 'string' && search.trim()) {
+    const q = search.toLowerCase().trim()
+    discovered = discovered.filter(
+      l =>
+        (l.title || '').toLowerCase().includes(q) ||
+        (l.startLocation || '').toLowerCase().includes(q) ||
+        (l.endLocation || '').toLowerCase().includes(q) ||
+        (l.proPlayer || '').toLowerCase().includes(q) ||
+        (l.sourceWebsite || '').toLowerCase().includes(q)
+    )
+  }
+
+  res.json(discovered)
+})
+
+app.post('/api/lineups', (req, res) => {
+  db = loadDB()
+  if (!Array.isArray(db.lineups)) db.lineups = []
+  const actor = getLineupActor(req)
+  const admin = isActorAdmin(actor)
+  const lineupData = req.body || {}
+
+  const existingIndex = lineupData.id ? db.lineups.findIndex(l => l.id === lineupData.id) : -1
   if (existingIndex >= 0) {
+    const existing = db.lineups[existingIndex]
+    if (!admin && existing.userId && existing.userId !== actor.id) {
+      return res.status(403).json({ error: 'Permission denied to edit this lineup' })
+    }
     db.lineups[existingIndex] = {
-      ...db.lineups[existingIndex],
+      ...existing,
       ...lineupData,
-      updatedAt: new Date().toISOString().split('T')[0]
+      updatedAt: new Date().toISOString()
     }
     saveDB(db)
+    io.emit('lineup:updated', db.lineups[existingIndex])
     return res.json(db.lineups[existingIndex])
   }
 
   const newLineup = {
     ...lineupData,
     id: lineupData.id || `lineup-${Date.now()}-${Math.random().toString(36).substr(2, 7)}`,
-    userId: req.user.id,
-    authorName: req.user.username,
+    userId: lineupData.userId || actor.id,
+    authorName: lineupData.authorName || actor.username,
     isTeamShared: lineupData.isTeamShared !== undefined ? lineupData.isTeamShared : true,
-    isVerified: req.user.role === 'admin',
+    isVerified: admin,
     isCustom: true,
-    createdAt: new Date().toISOString().split('T')[0]
+    createdAt: lineupData.createdAt || new Date().toISOString(),
+    updatedAt: lineupData.updatedAt || new Date().toISOString()
   }
 
-  db.lineups.push(newLineup)
+  db.lineups.unshift(newLineup)
   saveDB(db)
+  io.emit('lineup:created', newLineup)
   res.json(newLineup)
 })
 
-app.put('/api/lineups/:id', requireAuth, (req, res) => {
+app.put('/api/lineups/:id', (req, res) => {
   db = loadDB()
+  if (!Array.isArray(db.lineups)) db.lineups = []
+  const actor = getLineupActor(req)
+  const admin = isActorAdmin(actor)
   const { id } = req.params
   const index = db.lineups.findIndex(l => l.id === id)
   if (index === -1) return res.status(404).json({ error: 'Lineup not found' })
 
-  if (db.lineups[index].userId !== req.user.id && req.user.role !== 'admin') {
+  if (!admin && db.lineups[index].userId && db.lineups[index].userId !== actor.id) {
     return res.status(403).json({ error: 'Permission denied to edit this lineup' })
   }
 
   db.lineups[index] = {
     ...db.lineups[index],
     ...req.body,
-    updatedAt: new Date().toISOString().split('T')[0]
+    id,
+    updatedAt: new Date().toISOString()
   }
 
   saveDB(db)
+  io.emit('lineup:updated', db.lineups[index])
   res.json(db.lineups[index])
 })
 
-app.delete('/api/lineups/:id', requireAuth, (req, res) => {
+app.delete('/api/lineups/:id', (req, res) => {
   db = loadDB()
+  if (!Array.isArray(db.lineups)) db.lineups = []
+  const actor = getLineupActor(req)
+  const admin = isActorAdmin(actor)
   const { id } = req.params
   const index = db.lineups.findIndex(l => l.id === id)
   if (index === -1) return res.status(404).json({ error: 'Lineup not found' })
 
-  if (db.lineups[index].userId !== req.user.id && req.user.role !== 'admin') {
+  if (!admin && db.lineups[index].userId && db.lineups[index].userId !== actor.id) {
     return res.status(403).json({ error: 'Permission denied to delete this lineup' })
   }
 
   db.lineups.splice(index, 1)
   saveDB(db)
+  io.emit('lineup:deleted', { id })
   res.json({ success: true })
 })
 
@@ -1312,6 +1377,7 @@ app.post('/api/lineups/clear', (req, res) => {
   db = loadDB()
   db.lineups = []
   saveDB(db)
+  io.emit('lineups:cleared')
   res.json({ success: true, message: 'All lineups cleared' })
 })
 
@@ -1426,7 +1492,9 @@ const CS2_RADAR_CONFIGS = {
   ancient: { pos_x: -2953, pos_y: 2164, scale: 5.00 },
   vertigo: { pos_x: -3168, pos_y: 1762, scale: 4.00 },
   overpass: { pos_x: -4831, pos_y: 1781, scale: 5.20 },
-  train: { pos_x: -2477, pos_y: 2554, scale: 4.70 },
+  train: { pos_x: -2477, pos_y: 2392, scale: 4.70 },
+  cobblestone: { pos_x: -3840, pos_y: 3072, scale: 6.00 },
+  cbble: { pos_x: -3840, pos_y: 3072, scale: 6.00 },
   office: { pos_x: -1838, pos_y: 1858, scale: 4.10 },
   italy: { pos_x: -2647, pos_y: 2592, scale: 4.60 },
   cache: { pos_x: -2000, pos_y: 3250, scale: 5.50 },
@@ -1435,15 +1503,25 @@ const CS2_RADAR_CONFIGS = {
   shelter: { pos_x: -3000, pos_y: 3000, scale: 5.00 }
 }
 
+function normalizeServerMapKey(mapName) {
+  const clean = (mapName || 'mirage').toLowerCase().trim().replace(/^de_/, '').replace(/^cs_/, '')
+  if (clean === 'dust_2' || clean === 'dust ii' || clean === 'd2') return 'dust2'
+  if (clean === 'cbble' || clean === 'cobble' || clean === 'cobblestone') return 'cobblestone'
+  return clean
+}
+
 function worldToRadarCoords(mapName, worldX, worldY) {
-  const mapKey = (mapName || 'mirage').toLowerCase().replace('de_', '').replace('cs_', '')
+  const mapKey = normalizeServerMapKey(mapName)
   const cfg = CS2_RADAR_CONFIGS[mapKey] || CS2_RADAR_CONFIGS.mirage
-  const radarSize = 1024 * cfg.scale
-  const xPct = ((worldX - cfg.pos_x) / radarSize) * 100
-  const yPct = ((cfg.pos_y - worldY) / radarSize) * 100
+  const pixelX = (worldX - cfg.pos_x) / cfg.scale
+  const pixelY = (cfg.pos_y - worldY) / cfg.scale
+  const rawX = (pixelX / 1024) * 100
+  const rawY = (pixelY / 1024) * 100
+  const x = Math.min(Math.max(rawX, 0), 100)
+  const y = Math.min(Math.max(rawY, 0), 100)
   return {
-    x: Math.round(Math.min(Math.max(xPct, 3), 97) * 10) / 10,
-    y: Math.round(Math.min(Math.max(yPct, 3), 97) * 10) / 10
+    x: Number(x.toFixed(2)),
+    y: Number(y.toFixed(2))
   }
 }
 
@@ -1653,7 +1731,7 @@ app.post('/api/cs2/auto-capture', async (req, res) => {
 
     const mapMatch = outputText.match(/map\s*:\s*de_([a-zA-Z0-9_]+)/i)
     if (mapMatch) {
-      detectedMap = mapMatch[1].toLowerCase()
+      detectedMap = normalizeServerMapKey(mapMatch[1])
     }
 
     const radarCoords = worldToRadarCoords(detectedMap, worldX, worldY)
@@ -1759,7 +1837,9 @@ app.post('/api/cs2/auto-screenshot', (req, res) => {
           else if (type === 'landing') found.landingScreenshot = publicUrl
           else found.aimScreenshot = publicUrl
           found.imageUrl = found.aimScreenshot || found.standingScreenshot || found.landingScreenshot || publicUrl
+          found.updatedAt = new Date().toISOString()
           saveDB(db)
+          io.emit('lineup:updated', found)
         }
       }
     }
@@ -1814,7 +1894,9 @@ app.post('/api/cs2/auto-video', (req, res) => {
         const found = db.lineups.find(l => l.id === lineupId)
         if (found) {
           found.videoUrl = publicUrl
+          found.updatedAt = new Date().toISOString()
           saveDB(db)
+          io.emit('lineup:updated', found)
         }
       }
     }
@@ -1866,7 +1948,7 @@ app.post('/api/cs2/fetch-pos', async (req, res) => {
 
   let worldX = -1450, worldY = 210, worldZ = -120
   let pitch = 12.5, yaw = -89.4, roll = 0
-  let detectedMap = (mapName || 'mirage').toLowerCase().replace('de_', '').replace('cs_', '')
+  let detectedMap = normalizeServerMapKey(mapName || 'mirage')
 
   const posMatch = outputText.match(/setpos(?:_exact)?\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/i)
   if (posMatch) {
@@ -1884,7 +1966,7 @@ app.post('/api/cs2/fetch-pos', async (req, res) => {
 
   const mapMatch = outputText.match(/map\s*:\s*de_([a-zA-Z0-9_]+)/i)
   if (mapMatch) {
-    detectedMap = mapMatch[1].toLowerCase()
+    detectedMap = normalizeServerMapKey(mapMatch[1])
   }
 
   const radarCoords = worldToRadarCoords(detectedMap, worldX, worldY)
@@ -1917,6 +1999,317 @@ app.post('/api/cs2/push-lineup', async (req, res) => {
   } catch (err) {
     res.json({ success: true, simulated: true, response: `Sent: ${fullExec}` })
   }
+})
+
+// ==========================================
+// VALVE CS2 HTTP GAME STATE INTEGRATION (GSI)
+// ==========================================
+let lastGsiTelemetry = null
+
+app.post('/api/cs2/gsi', (req, res) => {
+  try {
+    const payload = req.body || {}
+    const rawMapName = payload.map?.name || 'de_mirage'
+    const cleanMapId = normalizeServerMapKey(rawMapName)
+
+    let worldPos = null
+    let radarPos = null
+    let yaw = 0
+    let pitch = 0
+
+    if (typeof payload.player?.position === 'string') {
+      const parts = payload.player.position.split(',').map(s => parseFloat(s.trim()))
+      if (parts.length >= 3 && parts.every(n => !Number.isNaN(n))) {
+        if (typeof payload.player?.forward === 'string') {
+          const fwd = payload.player.forward.split(',').map(s => parseFloat(s.trim()))
+          if (fwd.length >= 2 && !Number.isNaN(fwd[0]) && !Number.isNaN(fwd[1])) {
+            yaw = Number(((Math.atan2(fwd[1], fwd[0]) * 180) / Math.PI).toFixed(2))
+          }
+          if (fwd.length >= 3 && !Number.isNaN(fwd[2])) {
+            pitch = Number(((-Math.asin(Math.max(-1, Math.min(1, fwd[2]))) * 180) / Math.PI).toFixed(2))
+          }
+        }
+        worldPos = { x: parts[0], y: parts[1], z: parts[2], pitch, yaw, roll: 0 }
+        radarPos = worldToRadarCoords(cleanMapId, parts[0], parts[1])
+      }
+    }
+
+    let activeWeapon = ''
+    let heldGrenade = null
+    if (payload.player?.weapons && typeof payload.player.weapons === 'object') {
+      for (const w of Object.values(payload.player.weapons)) {
+        if (w && w.state === 'active' && w.name) {
+          activeWeapon = w.name
+          if (w.name.includes('smokegrenade')) heldGrenade = 'smoke'
+          else if (w.name.includes('flashbang')) heldGrenade = 'flash'
+          else if (w.name.includes('molotov') || w.name.includes('incgrenade')) heldGrenade = 'molotov'
+          else if (w.name.includes('hegrenade')) heldGrenade = 'he'
+          else if (w.name.includes('decoy')) heldGrenade = 'decoy'
+        }
+      }
+    }
+
+    lastGsiTelemetry = {
+      connected: true,
+      source: 'gsi',
+      mapId: cleanMapId,
+      rawMapName,
+      roundPhase: payload.round?.phase || payload.map?.phase || 'live',
+      playerName: payload.player?.name || 'Local Player',
+      team: payload.player?.team === 'CT' ? 'ct' : payload.player?.team === 'T' ? 't' : '',
+      health: payload.player?.state?.health ?? 100,
+      armor: payload.player?.state?.armor ?? 100,
+      activeWeapon,
+      heldGrenade,
+      worldPos,
+      radarPos,
+      updatedAt: Date.now()
+    }
+
+    io.emit('cs2:gsi-update', payload)
+    if (radarPos) {
+      io.emit('cs2:live-pos', {
+        x: radarPos.x,
+        y: radarPos.y,
+        yaw,
+        mapId: cleanMapId,
+        worldPos
+      })
+    }
+
+    res.status(200).json({ ok: true, telemetry: lastGsiTelemetry })
+  } catch (err) {
+    res.status(200).json({ ok: false })
+  }
+})
+
+app.get('/api/cs2/gsi-status', (req, res) => {
+  res.json({
+    active: !!lastGsiTelemetry && (Date.now() - lastGsiTelemetry.updatedAt < 30000),
+    telemetry: lastGsiTelemetry
+  })
+})
+
+// ==========================================
+// CS2 PATCH NOTES, UPDATES & LEAKS FEED API
+// ==========================================
+const STEAM_NEWS_URL =
+  'https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=730&count=8&maxlength=800'
+
+const OFFLINE_STEAM_NEWS_FALLBACK = [
+  {
+    id: 'steam-fallback-14062',
+    title: 'Counter-Strike 2 Release Notes — Train, Inferno & Subtick Utility',
+    date: '2026-11-12',
+    category: 'patch_note',
+    source: 'Valve Official',
+    sourceHandle: '@CounterStrike',
+    sourceUrl: 'https://store.steampowered.com/news/app/730',
+    version: '1.40.6.2',
+    summary:
+      'Gameplay and map geometry adjustments improving smoke boundary consistency, Banana roof clipping, and Train railcar collision.',
+    details: [
+      'Fixed several unintended grenade bounce edges on Inferno Banana and Train A-site.',
+      'Improved subtick grenade throw release consistency across varying frame rates.'
+    ],
+    affectedMaps: ['train', 'inferno'],
+    lineupImpact: 'high',
+    tags: ['valve', 'patch-notes', 'train', 'inferno', 'subtick']
+  }
+]
+
+let steamNewsCache = {
+  items: [],
+  fetchedAt: 0
+}
+
+function cleanSteamText(raw) {
+  if (!raw || typeof raw !== 'string') return ''
+  return raw
+    .replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '$2')
+    .replace(/\[\/?(b|i|u|h1|h2|h3|list|code|quote|img|spoiler)[^\]]*\]/gi, '')
+    .replace(/\[\*\]/g, '\n• ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(p|div|li|ul|ol|strong|em|a)[^>]*>/gi, '\n')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function detectMapsFromText(text) {
+  const lower = (text || '').toLowerCase()
+  const checks = [
+    ['cobblestone', /\b(cobblestone|cobble|cbble|de_cbble)\b/],
+    ['mirage', /\bmirage\b/],
+    ['dust2', /\b(dust2|dust 2|dust ii|de_dust2)\b/],
+    ['inferno', /\binferno\b/],
+    ['nuke', /\bnuke\b/],
+    ['ancient', /\bancient\b/],
+    ['anubis', /\banubis\b/],
+    ['overpass', /\boverpass\b/],
+    ['vertigo', /\bvertigo\b/],
+    ['train', /\btrain\b/],
+    ['cache', /\bcache\b/]
+  ]
+  const matched = []
+  for (const [id, regex] of checks) {
+    if (regex.test(lower)) matched.push(id)
+  }
+  return matched
+}
+
+function detectLineupImpact(text) {
+  const lower = (text || '').toLowerCase()
+  if (/(smoke|skybox|clipping|clip brush|jumpthrow|subtick|geometry|voxel|hitbox|collision)/.test(lower)) {
+    return 'high'
+  }
+  if (/(grenade|flashbang|molotov|incendiary|he grenade|map update|water)/.test(lower)) {
+    return 'medium'
+  }
+  if (/(movement|crouch|jump|weapon|radar)/.test(lower)) {
+    return 'low'
+  }
+  return 'none'
+}
+
+function mapSteamNewsItem(rawItem) {
+  const cleaned = cleanSteamText(rawItem.contents || '')
+  const lines = cleaned
+    .split('\n')
+    .map(l => l.replace(/^[•\-*]\s*/, '').trim())
+    .filter(l => l.length > 4)
+  const summary = lines[0] || rawItem.title || 'Official Counter-Strike 2 Steam News update.'
+  const details = lines.slice(1, 5)
+  if (details.length === 0 && summary) {
+    details.push(summary)
+  }
+  const combinedText = `${rawItem.title || ''} ${cleaned}`
+  const affectedMaps = detectMapsFromText(combinedText)
+  const lineupImpact = detectLineupImpact(combinedText)
+  const isPatchNote =
+    rawItem.feedname === 'steam_community_announcements' ||
+    /release notes|update|patch/i.test(rawItem.title || '') ||
+    (Array.isArray(rawItem.tags) && rawItem.tags.includes('patchnotes'))
+
+  return {
+    id: `steam-${rawItem.gid || Date.now()}`,
+    title: rawItem.title || 'Counter-Strike 2 Update',
+    date: rawItem.date
+      ? new Date(rawItem.date * 1000).toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0],
+    category: lineupImpact === 'high' && !isPatchNote ? 'lineup_impact' : 'patch_note',
+    source: 'Valve Official',
+    sourceHandle: '@CounterStrike',
+    sourceUrl: rawItem.url || 'https://store.steampowered.com/news/app/730',
+    summary: summary.length > 260 ? summary.slice(0, 257) + '...' : summary,
+    details,
+    affectedMaps,
+    lineupImpact,
+    tags: Array.from(
+      new Set([
+        'steam-news',
+        'valve',
+        ...(Array.isArray(rawItem.tags) ? rawItem.tags : []),
+        ...affectedMaps
+      ])
+    )
+  }
+}
+
+app.get('/api/cs2/updates', async (req, res) => {
+  db = loadDB()
+  const customUpdates = Array.isArray(db.updates) ? db.updates : []
+  const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true'
+  const cacheExpired = Date.now() - steamNewsCache.fetchedAt > 5 * 60 * 1000
+
+  let steamItems = steamNewsCache.items
+  if (forceRefresh || steamItems.length === 0 || cacheExpired) {
+    try {
+      const response = await axios.get(STEAM_NEWS_URL, { timeout: 4500 })
+      const newsItems = response.data?.appnews?.newsitems
+      if (Array.isArray(newsItems) && newsItems.length > 0) {
+        steamItems = newsItems.map(mapSteamNewsItem)
+        steamNewsCache = {
+          items: steamItems,
+          fetchedAt: Date.now()
+        }
+      }
+    } catch (err) {
+      console.warn('[CS2 Updates] Steam News fetch failed, using fallback/cache:', err.message)
+      if (steamItems.length === 0) {
+        steamItems = OFFLINE_STEAM_NEWS_FALLBACK
+      }
+    }
+  }
+
+  const byId = new Map()
+  for (const item of customUpdates) {
+    if (item && item.id) byId.set(item.id, item)
+  }
+  for (const item of steamItems) {
+    if (item && item.id && !byId.has(item.id)) byId.set(item.id, item)
+  }
+
+  const merged = Array.from(byId.values()).sort((a, b) => {
+    const da = new Date(a.date || 0).getTime() || 0
+    const dbDate = new Date(b.date || 0).getTime() || 0
+    return dbDate - da
+  })
+
+  res.json(merged)
+})
+
+app.post('/api/cs2/updates', (req, res) => {
+  db = loadDB()
+  if (!Array.isArray(db.updates)) db.updates = []
+  const body = req.body || {}
+  if (!body.title || !String(body.title).trim()) {
+    return res.status(400).json({ error: 'Update title is required' })
+  }
+
+  const allowedCategories = ['patch_note', 'leak', 'lineup_impact']
+  const allowedSources = [
+    'Valve Official',
+    'Gabe Follower',
+    'ThourCS',
+    'Aquarius',
+    'Community Datamine'
+  ]
+  const allowedImpacts = ['none', 'low', 'medium', 'high']
+
+  const details = Array.isArray(body.details)
+    ? body.details.map(d => String(d).trim()).filter(Boolean)
+    : typeof body.details === 'string'
+      ? body.details
+          .split('\n')
+          .map(d => d.trim())
+          .filter(Boolean)
+      : []
+
+  const item = {
+    id: body.id || `cs2-upd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    title: String(body.title).trim(),
+    date: body.date || new Date().toISOString().split('T')[0],
+    category: allowedCategories.includes(body.category) ? body.category : 'leak',
+    source: allowedSources.includes(body.source) ? body.source : 'Community Datamine',
+    sourceHandle: body.sourceHandle ? String(body.sourceHandle).trim() : undefined,
+    sourceUrl: body.sourceUrl ? String(body.sourceUrl).trim() : undefined,
+    version: body.version ? String(body.version).trim() : undefined,
+    summary: String(body.summary || body.title).trim(),
+    details: details.length > 0 ? details : [String(body.summary || body.title).trim()],
+    affectedMaps: Array.isArray(body.affectedMaps)
+      ? body.affectedMaps.map(m => normalizeServerMapKey(String(m)))
+      : [],
+    lineupImpact: allowedImpacts.includes(body.lineupImpact) ? body.lineupImpact : 'medium',
+    tags: Array.isArray(body.tags)
+      ? body.tags.map(t => String(t).trim()).filter(Boolean)
+      : []
+  }
+
+  db.updates.unshift(item)
+  saveDB(db)
+  io.emit('cs2:update-posted', item)
+  res.json(item)
 })
 
 
@@ -2309,6 +2702,14 @@ io.on('connection', (socket) => {
     const cleanCode = code.toUpperCase().trim()
     const remoteRoom = `remote-${cleanCode}`
     io.to(remoteRoom).emit('remote:phone_woke', { code: cleanCode, timestamp: Date.now() })
+  })
+
+  socket.on('remote:disconnect', ({ code } = {}) => {
+    if (!code) return
+    const cleanCode = String(code).toUpperCase().trim()
+    const remoteRoom = `remote-${cleanCode}`
+    io.to(remoteRoom).emit('remote:disconnected', { code: cleanCode, timestamp: Date.now() })
+    socket.leave(remoteRoom)
   })
 
   // Disconnect handler

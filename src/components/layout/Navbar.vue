@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
@@ -19,6 +19,7 @@ import RemotePairModal from '../common/RemotePairModal.vue'
 import InstallAppModal from '../common/InstallAppModal.vue'
 import { useCompanionStore } from '../../stores/companionStore'
 import { usePwaStore } from '../../stores/pwaStore'
+import { useVoiceStore } from '../../stores/voiceStore'
 
 import { 
   Crosshair, 
@@ -47,7 +48,10 @@ import {
   PenTool,
   Check,
   Eye,
-  UserX
+  UserX,
+  Mic,
+  Newspaper,
+  WifiOff
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -58,6 +62,7 @@ const themeStore = useThemeStore()
 const gameRoomStore = useGameRoomStore()
 const companionStore = useCompanionStore()
 const pwaStore = usePwaStore()
+const voiceStore = useVoiceStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -103,7 +108,8 @@ const navLinks = [
   { name: NAV_LABELS.callouts, path: '/callouts', icon: Layers },
   { name: NAV_LABELS.strats, path: '/strats', icon: BookOpen },
   { name: NAV_LABELS.library, path: '/library', icon: Grid },
-  { name: NAV_LABELS.myLineups, path: '/my-lineups', icon: BookMarked }
+  { name: NAV_LABELS.myLineups, path: '/my-lineups', icon: BookMarked },
+  { name: 'Updates & Leaks', path: '/updates', icon: Newspaper }
 ]
 
 const inGameRoles = ['IGL', 'Entry Fragger', 'Support', 'AWPer', 'Lurker', 'Anchor', 'Flex']
@@ -132,8 +138,6 @@ function handleLogout() {
 }
 
 const unreadMessageCount = ref(0)
-
-import { onMounted, onUnmounted } from 'vue'
 
 function handleGlobalClick(e: MouseEvent) {
   const target = e.target as HTMLElement | null
@@ -230,9 +234,9 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
+    <div class="max-w-[1600px] mx-auto px-3 sm:px-5 py-2 2xl:py-0 2xl:h-16 flex flex-wrap 2xl:flex-nowrap items-center justify-between gap-2 sm:gap-3">
       <!-- LOGO & BRANDING -->
-      <div class="flex items-center gap-3 sm:gap-5">
+      <div class="order-1 flex items-center gap-2.5 sm:gap-4">
         <router-link to="/" class="flex items-center gap-2.5 group cursor-pointer">
           <img 
             src="/logo.png" 
@@ -243,7 +247,7 @@ onUnmounted(() => {
             <span class="text-sm font-black tracking-wider text-white uppercase group-hover:text-amber-400 transition-colors">
               Protutech
             </span>
-            <span class="text-[9px] font-mono text-amber-500/90 font-bold -mt-0.5 tracking-widest uppercase hidden xs:inline">
+            <span class="text-[9px] font-mono text-amber-500/90 font-bold -mt-0.5 tracking-widest uppercase hidden sm:inline">
               Tactical Hub
             </span>
           </div>
@@ -330,14 +334,19 @@ onUnmounted(() => {
       </div>
 
       <!-- MAIN NAVIGATION TABS -->
-      <nav class="hidden md:flex items-center gap-1 p-1 bg-slate-900/80 rounded-xl border border-slate-800">
+      <nav
+        :class="[
+          themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex',
+          'order-3 w-full justify-center 2xl:order-2 2xl:w-auto items-center gap-1 p-1 bg-slate-900/80 rounded-xl border border-slate-800'
+        ]"
+      >
         <router-link
           v-for="link in navLinks"
           :key="link.path"
           :to="link.path"
           @click="handleNavClick($event, link.path)"
           :class="[
-            'flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap',
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap',
             route.path === link.path 
               ? 'bg-slate-800 text-amber-400 shadow-sm border border-slate-700' 
               : 'text-slate-400 hover:text-slate-200'
@@ -348,37 +357,104 @@ onUnmounted(() => {
         </router-link>
       </nav>
 
-      <!-- RIGHT ACTIONS: PHONE DECK, PRACTICE SERVER, PEOPLE & GROUPS, DISCORD, USER PROFILE, NEW NADE -->
-      <div class="flex items-center gap-1.5 sm:gap-2">
-        <!-- PHONE REMOTE / STREAM DECK BUTTON -->
+      <!-- RIGHT ACTIONS: LAYOUT MODE, VOICE NAV, PHONE DECK + DISCONNECT, LIVE SYNC, INSTALL APP, PRACTICE SERVER, PEOPLE & GROUPS, THEME & PALETTE, USER PROFILE, NEW NADE -->
+      <div class="order-2 2xl:order-3 flex items-center gap-1.5">
+        <!-- EXPLICIT DESKTOP / MOBILE LAYOUT MODE SWITCHER -->
         <button
-          @click="isRemoteModalOpen = true"
+          @click="themeStore.togglePhoneMode()"
           :class="[
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border group',
-            companionStore.isPaired 
-              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/30' 
-              : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-cyan-500/40 text-cyan-400'
+            'items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border',
+            themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex',
+            themeStore.isPhoneMode
+              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 hover:bg-cyan-500/30'
+              : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-slate-700 text-slate-300'
           ]"
-          title="Connect Phone as Touch Deck & Voice Controller"
+          :title="themeStore.isPhoneMode ? 'Currently in Mobile Layout Mode — Click to switch to Desktop Layout' : 'Currently in Desktop Layout Mode — Click to switch to Mobile Layout'"
         >
-          <Smartphone class="w-4 h-4 group-hover:scale-110 transition-transform" />
-          <span class="hidden lg:inline">{{ companionStore.isPaired ? 'Phone Live' : 'Phone Deck' }}</span>
-          <span class="hidden sm:inline lg:hidden">Phone</span>
-          <span 
-            v-if="companionStore.isPaired" 
-            class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5"
-          ></span>
+          <Smartphone v-if="themeStore.isPhoneMode" class="w-3.5 h-3.5 text-cyan-400" />
+          <Monitor v-else class="w-3.5 h-3.5 text-amber-400" />
+          <span class="hidden 2xl:inline">{{ themeStore.isPhoneMode ? 'Mobile Mode' : 'Desktop Mode' }}</span>
+        </button>
+
+        <!-- VOICE NAVIGATION BUTTON -->
+        <button
+          @click="voiceStore.isPanelOpen = true"
+          :class="[
+            'items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border',
+            themeStore.isPhoneMode ? 'hidden' : 'hidden sm:flex',
+            voiceStore.isListening
+              ? 'bg-rose-500/20 text-rose-300 border-rose-500/60 animate-pulse'
+              : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-amber-500/40 text-amber-400'
+          ]"
+          title="Voice Navigation & Hands-Free Lineup Search"
+        >
+          <Mic class="w-3.5 h-3.5" />
+          <span class="hidden 2xl:inline">{{ voiceStore.isListening ? 'Listening...' : 'Voice Nav' }}</span>
+        </button>
+
+        <!-- PHONE REMOTE / STREAM DECK BUTTON + 1-CLICK DISCONNECT -->
+        <div class="flex items-center gap-1">
+          <button
+            @click="isRemoteModalOpen = true"
+            :class="[
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border group',
+              companionStore.isPaired 
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/30' 
+                : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-cyan-500/40 text-cyan-400'
+            ]"
+            title="Connect Phone as Touch Deck & Voice Controller"
+          >
+            <Smartphone class="w-4 h-4 group-hover:scale-110 transition-transform" />
+            <span class="hidden lg:inline">{{ companionStore.isPaired ? 'Phone Live' : 'Phone Deck' }}</span>
+            <span class="hidden sm:inline lg:hidden">Phone</span>
+            <span 
+              v-if="companionStore.isPaired" 
+              class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5"
+            ></span>
+          </button>
+
+          <button
+            v-if="companionStore.isPaired"
+            @click.stop="companionStore.disconnectPhone()"
+            class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600/20 hover:bg-rose-600/35 text-rose-400 hover:text-rose-200 border border-rose-500/50 transition-all cursor-pointer shadow-sm"
+            title="Disconnect Paired Phone"
+          >
+            <WifiOff class="w-3.5 h-3.5" />
+            <span class="hidden sm:inline">Disconnect</span>
+          </button>
+        </div>
+
+        <!-- LIVE SYNC STATUS BADGE -->
+        <button
+          @click="lineupStore.syncWithServer()"
+          :class="[
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border',
+            lineupStore.syncStatus === 'syncing'
+              ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+              : lineupStore.syncStatus === 'offline'
+                ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 hover:bg-rose-500/25'
+                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+          ]"
+          :title="lineupStore.lastSyncTime ? `Last synced at ${lineupStore.lastSyncTime} — Click to sync now` : 'Click to sync lineups with server'"
+        >
+          <RefreshCw
+            class="w-3.5 h-3.5 flex-shrink-0"
+            :class="{ 'animate-spin': lineupStore.syncStatus === 'syncing' }"
+          />
+          <span class="hidden lg:inline">
+            {{ lineupStore.syncStatus === 'syncing' ? 'Syncing...' : lineupStore.syncStatus === 'offline' ? 'Offline' : 'Synced' }}
+          </span>
         </button>
 
         <!-- INSTALL APP / PWA BUTTON -->
         <button
           @click="isInstallAppModalOpen = true"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-emerald-500/40 text-emerald-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
+          :class="themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex'"
+          class="items-center gap-1.5 px-2 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-emerald-500/40 text-emerald-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
           title="Install CS2 Stratbook App (Desktop & Mobile) - 100% Server Synced"
         >
           <Monitor class="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-          <span class="hidden lg:inline">{{ pwaStore.isStandaloneMode ? 'App Live' : 'Install App' }}</span>
-          <span class="hidden sm:inline lg:hidden">App</span>
+          <span class="hidden 2xl:inline">{{ pwaStore.isStandaloneMode ? 'App Live' : 'Install App' }}</span>
           <span 
             v-if="pwaStore.isStandaloneMode" 
             class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5"
@@ -388,17 +464,18 @@ onUnmounted(() => {
         <!-- PRACTICE SERVER & CFG STUDIO BUTTON -->
         <button
           @click="isPracticeModalOpen = true"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-amber-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
+          :class="themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex'"
+          class="items-center gap-1.5 px-2 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-amber-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
           title="Host & Configure Practice Server / Generate practice.cfg"
         >
           <Gamepad2 class="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
-          <span class="hidden lg:inline">Practice Server</span>
-          <span class="hidden sm:inline lg:hidden">Practice</span>
+          <span class="hidden 2xl:inline">Practice Server</span>
         </button>
 
         <!-- PEOPLE & SQUAD GROUPS (ICON ONLY WITH UNREAD NOTIFICATION BADGE) -->
         <button
           @click="isPeopleGroupsOpen = true; unreadMessageCount = 0"
+          :class="themeStore.isPhoneMode ? 'hidden' : 'hidden sm:flex'"
           class="relative p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm group"
           title="People & Squads Directory / Chat"
         >
@@ -416,7 +493,8 @@ onUnmounted(() => {
           href="https://github.com/IAndrexI/CS2Nades"
           target="_blank"
           rel="noopener noreferrer"
-          class="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-xl transition-all shadow-sm group hidden sm:flex items-center justify-center cursor-pointer"
+          :class="themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex'"
+          class="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-xl transition-all shadow-sm group items-center justify-center cursor-pointer"
           title="View on GitHub (IAndrexI/CS2Nades)"
         >
           <svg class="w-4 h-4 fill-current group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
@@ -425,10 +503,14 @@ onUnmounted(() => {
         </a>
 
         <!-- PROTUTECH THEME & PALETTE SWITCHER -->
-        <div class="hidden md:flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-xl shadow-sm">
+        <div
+          :class="themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex'"
+          class="items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-xl shadow-sm"
+        >
           <select 
             :value="themeStore.palette"
             @change="(e) => themeStore.setPalette((e.target as HTMLSelectElement).value as any)"
+            aria-label="Switch Theme Palette"
             class="bg-transparent text-slate-200 text-xs font-semibold px-2 py-1 rounded-lg border border-slate-800 hover:border-slate-700 outline-none cursor-pointer"
             title="Switch Theme Palette"
           >
@@ -438,14 +520,34 @@ onUnmounted(() => {
             <option value="sunset-ember" class="bg-slate-900 text-white">Sunset Ember</option>
           </select>
 
-          <button
-            @click="themeStore.toggleTheme"
-            class="px-2 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700/60 transition-colors flex items-center gap-1 cursor-pointer"
-            :title="themeStore.theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
-          >
-            <span>{{ themeStore.theme === 'dark' ? '☀️' : '🌙' }}</span>
-            <span class="hidden xl:inline">{{ themeStore.theme === 'dark' ? 'Light' : 'Dark' }}</span>
-          </button>
+          <div class="flex items-center bg-slate-950/70 rounded-lg p-0.5 border border-slate-800">
+            <button
+              @click="themeStore.setTheme('dark')"
+              :class="[
+                'px-2 py-0.5 text-[11px] font-bold rounded-md transition-colors flex items-center gap-1 cursor-pointer',
+                themeStore.theme === 'dark'
+                  ? 'bg-slate-800 text-amber-400 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              ]"
+              title="Switch to Dark Mode"
+            >
+              <span>🌙</span>
+              <span class="hidden lg:inline">Dark</span>
+            </button>
+            <button
+              @click="themeStore.setTheme('light')"
+              :class="[
+                'px-2 py-0.5 text-[11px] font-bold rounded-md transition-colors flex items-center gap-1 cursor-pointer',
+                themeStore.theme === 'light'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              ]"
+              title="Switch to Light Mode"
+            >
+              <span>☀️</span>
+              <span class="hidden lg:inline">Light</span>
+            </button>
+          </div>
         </div>
 
         <!-- USER PROFILE / LOGIN BUTTON -->
@@ -629,17 +731,19 @@ onUnmounted(() => {
         <!-- NEW NADE BUTTON -->
         <button
           @click="handleNewNadeClick"
-          class="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 font-black text-slate-950 text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+          class="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 font-black text-slate-950 text-xs rounded-xl shadow-lg transition-all cursor-pointer"
           :style="{ backgroundColor: themeStore.customAccentColor }"
         >
           <Plus class="w-3.5 h-3.5 stroke-[3]" />
-          <span>New Nade</span>
+          <span class="hidden sm:inline">New Nade</span>
         </button>
 
         <!-- MOBILE HAMBURGER MENU BUTTON -->
         <button
           @click="isMobileMenuOpen = !isMobileMenuOpen"
-          class="md:hidden p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 rounded-xl"
+          :class="themeStore.isPhoneMode ? 'flex' : 'md:hidden flex'"
+          class="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 rounded-xl items-center justify-center cursor-pointer"
+          aria-label="Toggle Navigation Menu"
         >
           <Menu v-if="!isMobileMenuOpen" class="w-4 h-4" />
           <X v-else class="w-4 h-4" />
@@ -650,7 +754,8 @@ onUnmounted(() => {
     <!-- MOBILE NAVIGATION DRAWER -->
     <div 
       v-if="isMobileMenuOpen"
-      class="md:hidden border-t border-slate-800 bg-slate-950/95 p-3 flex flex-col gap-1 animate-fade-in"
+      :class="themeStore.isPhoneMode ? 'flex' : 'md:hidden flex'"
+      class="border-t border-slate-800 bg-slate-950/95 p-3 flex-col gap-1.5 animate-fade-in max-h-[82vh] overflow-y-auto"
     >
       <router-link
         v-for="link in navLinks"
@@ -667,6 +772,117 @@ onUnmounted(() => {
         <component :is="link.icon" class="w-4 h-4" />
         <span>{{ link.name }}</span>
       </router-link>
+
+      <!-- MOBILE THEME MODE & PALETTE SELECTOR -->
+      <div class="my-1 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col gap-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Theme &amp; Palette</span>
+          <div class="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+            <button
+              @click="themeStore.setTheme('dark')"
+              :class="[
+                'px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1',
+                themeStore.theme === 'dark'
+                  ? 'bg-slate-800 text-amber-400 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              ]"
+            >
+              <span>🌙</span>
+              <span>Dark</span>
+            </button>
+            <button
+              @click="themeStore.setTheme('light')"
+              :class="[
+                'px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1',
+                themeStore.theme === 'light'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              ]"
+            >
+              <span>☀️</span>
+              <span>Light</span>
+            </button>
+          </div>
+        </div>
+
+        <select
+          :value="themeStore.palette"
+          @change="(e) => themeStore.setPalette((e.target as HTMLSelectElement).value as any)"
+          aria-label="Select Theme Palette"
+          class="w-full bg-slate-950 text-slate-200 text-xs font-semibold px-2.5 py-2 rounded-lg border border-slate-800 outline-none cursor-pointer"
+        >
+          <option value="protutech-obsidian" class="bg-slate-900 text-white">Obsidian Neon</option>
+          <option value="adobe-classic" class="bg-slate-900 text-white">Adobe Classic</option>
+          <option value="cyber-emerald" class="bg-slate-900 text-white">Cyber Emerald</option>
+          <option value="sunset-ember" class="bg-slate-900 text-white">Sunset Ember</option>
+        </select>
+      </div>
+
+      <!-- MOBILE DISCONNECT PHONE BUTTON (WHEN PAIRED) -->
+      <button
+        v-if="companionStore.isPaired"
+        @click="companionStore.disconnectPhone(); isMobileMenuOpen = false"
+        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-rose-600/20 text-rose-400 hover:bg-rose-600/30 border border-rose-500/40 transition-all text-left cursor-pointer"
+      >
+        <WifiOff class="w-4 h-4" />
+        <span>Disconnect Phone</span>
+      </button>
+
+      <!-- MOBILE LIVE SYNC TRIGGER -->
+      <button
+        @click="lineupStore.syncWithServer()"
+        class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-200 hover:bg-slate-900 transition-all text-left cursor-pointer"
+      >
+        <span class="flex items-center gap-2">
+          <RefreshCw class="w-4 h-4 text-emerald-400" :class="{ 'animate-spin': lineupStore.syncStatus === 'syncing' }" />
+          <span>Sync Lineups with Server</span>
+        </span>
+        <span
+          :class="[
+            'text-[10px] font-mono px-2 py-0.5 rounded-md',
+            lineupStore.syncStatus === 'syncing'
+              ? 'bg-amber-500/20 text-amber-300'
+              : lineupStore.syncStatus === 'offline'
+                ? 'bg-rose-500/20 text-rose-300'
+                : 'bg-emerald-500/20 text-emerald-400'
+          ]"
+        >
+          {{ lineupStore.syncStatus === 'syncing' ? 'Syncing...' : lineupStore.syncStatus === 'offline' ? 'Offline' : 'Synced' }}
+        </span>
+      </button>
+
+      <button
+        @click="themeStore.togglePhoneMode(); isMobileMenuOpen = false"
+        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-cyan-300 hover:bg-slate-900 transition-all text-left cursor-pointer"
+      >
+        <Monitor v-if="themeStore.isPhoneMode" class="w-4 h-4" />
+        <Smartphone v-else class="w-4 h-4" />
+        <span>{{ themeStore.isPhoneMode ? 'Switch to Desktop Layout' : 'Switch to Mobile Layout' }}</span>
+      </button>
+
+      <button
+        @click="voiceStore.isPanelOpen = true; isMobileMenuOpen = false"
+        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-amber-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
+      >
+        <Mic class="w-4 h-4" />
+        <span>Voice Navigation</span>
+      </button>
+
+      <button
+        @click="isPeopleGroupsOpen = true; unreadMessageCount = 0; isMobileMenuOpen = false"
+        class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-200 hover:bg-slate-900 transition-all text-left cursor-pointer"
+      >
+        <span class="flex items-center gap-2">
+          <Users class="w-4 h-4 text-amber-400" />
+          <span>People &amp; Squads</span>
+        </span>
+        <span
+          v-if="themeStore.showUnreadNotificationBadge && unreadMessageCount > 0"
+          class="px-1.5 py-0.5 rounded-full bg-rose-500 text-[10px] font-black text-white"
+        >
+          {{ unreadMessageCount > 9 ? '9+' : unreadMessageCount }}
+        </span>
+      </button>
 
       <button
         @click="isInstallAppModalOpen = true; isMobileMenuOpen = false"

@@ -2,11 +2,22 @@
 
 @layer base {
   :root {
+    --app-bg: #080c16;
+    --app-surface: #0d1322;
+    --app-modal-bg: #121a2d;
+    --app-hover: #18223b;
+    --app-border: #1e293b;
+    --app-accent: #00f2fe;
+    --app-accent-rgb: 0, 242, 254;
+    --app-secondary: #7f00ff;
+    --primary-accent: #00f2fe;
+    --primary-accent-rgb: 0, 242, 254;
+
     --color-bg-base: #080c16;
     --color-bg-surface: #0d1322;
     --color-bg-card: #121a2d;
     --color-bg-hover: #18223b;
-    --color-border: rgba(255, 255, 255, 0.1);
+    --color-border: #1e293b;
     --color-accent-primary: #00f2fe;
     --color-accent-secondary: #7f00ff;
     --color-accent-gradient: linear-gradient(135deg, #00f2fe 0%, #7f00ff 100%);
@@ -22,7 +33,7 @@
   }
 
   body {
-    background-color: var(--color-bg-base);
+    background-color: var(--app-bg, var(--color-bg-base));
     color: #f8fafc;
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     overflow-x: hidden;
@@ -30,11 +41,40 @@
 }
 
 /* ── PROTUTECH DASHBOARD PALETTES ────────────────────────── */
+[data-palette="protutech-obsidian"], html.palette-protutech-obsidian {
+  --app-bg: #080c16;
+  --app-surface: #0d1322;
+  --app-modal-bg: #121a2d;
+  --app-hover: #18223b;
+  --app-border: #1e293b;
+  --app-accent: #00f2fe;
+  --app-secondary: #7f00ff;
+  --color-bg-base: #080c16;
+  --color-bg-surface: #0d1322;
+  --color-bg-card: #121a2d;
+  --color-bg-hover: #18223b;
+  --color-border: #1e293b;
+  --color-accent-primary: #00f2fe;
+  --color-accent-secondary: #7f00ff;
+  --color-accent-gradient: linear-gradient(135deg, #00f2fe 0%, #7f00ff 100%);
+  --color-accent-glow: rgba(0, 242, 254, 0.3);
+  --color-cs-gold: #00f2fe;
+  --color-ct: #00f2fe;
+}
+
 [data-palette="adobe-classic"], html.palette-adobe-classic {
+  --app-bg: #18181b;
+  --app-surface: #202024;
+  --app-modal-bg: #27272a;
+  --app-hover: #323238;
+  --app-border: #3f3f46;
+  --app-accent: #38bdf8;
+  --app-secondary: #818cf8;
   --color-bg-base: #18181b;
   --color-bg-surface: #202024;
   --color-bg-card: #27272a;
   --color-bg-hover: #323238;
+  --color-border: #3f3f46;
   --color-accent-primary: #38bdf8;
   --color-accent-secondary: #818cf8;
   --color-accent-gradient: linear-gradient(135deg, #38bdf8, #818cf8);
@@ -44,10 +84,18 @@
 }
 
 [data-palette="cyber-emerald"], html.palette-cyber-emerald {
+  --app-bg: #05100e;
+  --app-surface: #091a17;
+  --app-modal-bg: #0f2824;
+  --app-hover: #153832;
+  --app-border: #134e4a;
+  --app-accent: #10b981;
+  --app-secondary: #06b6d4;
   --color-bg-base: #05100e;
   --color-bg-surface: #091a17;
   --color-bg-card: #0f2824;
   --color-bg-hover: #153832;
+  --color-border: #134e4a;
   --color-accent-primary: #10b981;
   --color-accent-secondary: #06b6d4;
   --color-accent-gradient: linear-gradient(135deg, #10b981, #06b6d4);
@@ -57,10 +105,18 @@
 }
 
 [data-palette="sunset-ember"], html.palette-sunset-ember {
+  --app-bg: #120910;
+  --app-surface: #1d0f1a;
+  --app-modal-bg: #291525;
+  --app-hover: #381c32;
+  --app-border: #4c1d3d;
+  --app-accent: #f59e0b;
+  --app-secondary: #f43f5e;
   --color-bg-base: #120910;
   --color-bg-surface: #1d0f1a;
   --color-bg-card: #291525;
   --color-bg-hover: #381c32;
+  --color-border: #4c1d3d;
   --color-accent-primary: #f59e0b;
   --color-accent-secondary: #f43f5e;
   --color-accent-gradient: linear-gradient(135deg, #f59e0b, #f43f5e);
@@ -69,12 +125,148 @@
   --color-ct: #f43f5e;
 }
 
+[data-palette="cs2-gold"], html.palette-cs2-gold {
+  --app-bg: #090d13;
+  --app-surface: #162032;
+  --app-modal-bg: #0f172a;
+  --app-hover: #1e293b;
+  --app-border: #1e293b;
+  --app-accent: #de9b35;
+  --app-secondary: #f59e0b;
+  --color-bg-base: #090d13;
+  --color-bg-surface: #162032;
+  --color-bg-card: #0f172a;
+  --color-bg-hover: #1e293b;
+  --color-border: #1e293b;
+  --color-accent-primary: #de9b35;
+  --color-accent-secondary: #f59e0b;
+  --color-accent-gradient: linear-gradient(135deg, #de9b35, #f59e0b);
+  --color-accent-glow: rgba(222, 155, 53, 0.3);
+  --color-cs-gold: #de9b35;
+  --color-ct: #38bdf8;
+}
+
+/* ── DARK MODE DYNAMIC PALETTE UTILITY MAPPINGS ──────────── */
+html:not(.light-theme) body,
+html:not(.light-theme) .app-root {
+  background-color: var(--app-bg, #080c16);
+  color: #f8fafc;
+}
+
+html:not(.light-theme) .bg-slate-950 {
+  background-color: var(--app-bg, #080c16);
+}
+html:not(.light-theme) .bg-slate-950\/95 {
+  background-color: color-mix(in srgb, var(--app-bg, #080c16) 95%, transparent);
+}
+html:not(.light-theme) .bg-slate-950\/90 {
+  background-color: color-mix(in srgb, var(--app-bg, #080c16) 90%, transparent);
+}
+html:not(.light-theme) .bg-slate-950\/80 {
+  background-color: color-mix(in srgb, var(--app-bg, #080c16) 80%, transparent);
+}
+html:not(.light-theme) .bg-slate-950\/70 {
+  background-color: color-mix(in srgb, var(--app-bg, #080c16) 70%, transparent);
+}
+html:not(.light-theme) .bg-slate-950\/60 {
+  background-color: color-mix(in srgb, var(--app-bg, #080c16) 60%, transparent);
+}
+html:not(.light-theme) .bg-slate-950\/40 {
+  background-color: color-mix(in srgb, var(--app-bg, #080c16) 40%, transparent);
+}
+
+html:not(.light-theme) .bg-slate-900 {
+  background-color: var(--app-modal-bg, #121a2d);
+}
+html:not(.light-theme) .bg-slate-900\/98 {
+  background-color: color-mix(in srgb, var(--app-modal-bg, #121a2d) 98%, transparent);
+}
+html:not(.light-theme) .bg-slate-900\/95 {
+  background-color: color-mix(in srgb, var(--app-modal-bg, #121a2d) 95%, transparent);
+}
+html:not(.light-theme) .bg-slate-900\/92 {
+  background-color: color-mix(in srgb, var(--app-modal-bg, #121a2d) 92%, transparent);
+}
+html:not(.light-theme) .bg-slate-900\/90 {
+  background-color: color-mix(in srgb, var(--app-modal-bg, #121a2d) 90%, transparent);
+}
+html:not(.light-theme) .bg-slate-900\/80 {
+  background-color: color-mix(in srgb, var(--app-modal-bg, #121a2d) 80%, transparent);
+}
+html:not(.light-theme) .bg-slate-900\/70 {
+  background-color: color-mix(in srgb, var(--app-modal-bg, #121a2d) 70%, transparent);
+}
+html:not(.light-theme) .bg-slate-900\/60 {
+  background-color: color-mix(in srgb, var(--app-modal-bg, #121a2d) 60%, transparent);
+}
+html:not(.light-theme) .bg-slate-900\/50 {
+  background-color: color-mix(in srgb, var(--app-modal-bg, #121a2d) 50%, transparent);
+}
+html:not(.light-theme) .bg-slate-900\/40 {
+  background-color: color-mix(in srgb, var(--app-modal-bg, #121a2d) 40%, transparent);
+}
+
+html:not(.light-theme) .bg-slate-850,
+html:not(.light-theme) .bg-slate-800 {
+  background-color: var(--app-surface, #0d1322);
+}
+html:not(.light-theme) .bg-slate-800\/80 {
+  background-color: color-mix(in srgb, var(--app-surface, #0d1322) 80%, transparent);
+}
+html:not(.light-theme) .bg-slate-800\/70 {
+  background-color: color-mix(in srgb, var(--app-surface, #0d1322) 70%, transparent);
+}
+
+html:not(.light-theme) .bg-slate-750,
+html:not(.light-theme) .bg-slate-700 {
+  background-color: var(--app-hover, #18223b);
+}
+html:not(.light-theme) .bg-slate-700\/80 {
+  background-color: color-mix(in srgb, var(--app-hover, #18223b) 80%, transparent);
+}
+
+html:not(.light-theme) .hover\:bg-slate-900:hover {
+  background-color: var(--app-modal-bg, #121a2d);
+}
+html:not(.light-theme) .hover\:bg-slate-850:hover,
+html:not(.light-theme) .hover\:bg-slate-800:hover {
+  background-color: var(--app-surface, #0d1322);
+}
+html:not(.light-theme) .hover\:bg-slate-750:hover,
+html:not(.light-theme) .hover\:bg-slate-700:hover {
+  background-color: var(--app-hover, #18223b);
+}
+
+html:not(.light-theme) .border-slate-950\/80,
+html:not(.light-theme) .border-slate-900,
+html:not(.light-theme) .border-slate-800,
+html:not(.light-theme) .border-slate-700 {
+  border-color: var(--app-border, #1e293b);
+}
+html:not(.light-theme) .border-slate-800\/90,
+html:not(.light-theme) .border-slate-800\/80,
+html:not(.light-theme) .border-slate-800\/70,
+html:not(.light-theme) .border-slate-800\/60,
+html:not(.light-theme) .border-slate-700\/90,
+html:not(.light-theme) .border-slate-700\/80,
+html:not(.light-theme) .border-slate-700\/60 {
+  border-color: color-mix(in srgb, var(--app-border, #1e293b) 85%, transparent);
+}
+html:not(.light-theme) .hover\:border-slate-700:hover {
+  border-color: color-mix(in srgb, var(--app-border, #1e293b) 80%, #ffffff 20%);
+}
+
 /* ── LIGHT THEME OVERRIDES ────────────────────────────────── */
 html.light-theme {
+  --app-bg: #f8fafc;
+  --app-surface: #f1f5f9;
+  --app-modal-bg: #ffffff;
+  --app-hover: #e2e8f0;
+  --app-border: #e2e8f0;
   --color-bg-base: #f8fafc;
-  --color-bg-surface: #ffffff;
+  --color-bg-surface: #f1f5f9;
   --color-bg-card: #ffffff;
-  --color-bg-hover: #f1f5f9;
+  --color-bg-hover: #e2e8f0;
   --color-border: #e2e8f0;
 }
 
@@ -84,34 +276,81 @@ html.light-theme .app-root {
   color: #0f172a !important;
 }
 
-html.light-theme .bg-slate-950,
+html.light-theme .bg-slate-950 {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light-theme .bg-slate-950\/95,
 html.light-theme .bg-slate-950\/90,
 html.light-theme .bg-slate-950\/80,
 html.light-theme .bg-slate-950\/70,
 html.light-theme .bg-slate-950\/60,
 html.light-theme .bg-slate-950\/40 {
-  background-color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.94) !important;
   color: #0f172a !important;
 }
 
 html.light-theme .bg-slate-900,
+html.light-theme .bg-slate-900\/98,
 html.light-theme .bg-slate-900\/95,
+html.light-theme .bg-slate-900\/92,
 html.light-theme .bg-slate-900\/90,
-html.light-theme .bg-slate-900\/80 {
+html.light-theme .bg-slate-900\/80,
+html.light-theme .bg-slate-900\/70,
+html.light-theme .bg-slate-900\/60,
+html.light-theme .bg-slate-900\/50,
+html.light-theme .bg-slate-900\/40 {
   background-color: #ffffff !important;
   color: #0f172a !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
 }
 
 html.light-theme .bg-slate-850,
-html.light-theme .bg-slate-800 {
+html.light-theme .bg-slate-800,
+html.light-theme .bg-slate-800\/80,
+html.light-theme .bg-slate-800\/70 {
   background-color: #f1f5f9 !important;
   color: #0f172a !important;
 }
 
+html.light-theme .bg-slate-750,
+html.light-theme .bg-slate-700,
+html.light-theme .bg-slate-700\/80 {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.light-theme .hover\:bg-slate-900:hover,
+html.light-theme .hover\:bg-slate-850:hover,
+html.light-theme .hover\:bg-slate-800:hover,
+html.light-theme .hover\:bg-slate-750:hover,
+html.light-theme .hover\:bg-slate-700:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* Override inline modal shells in Light Mode while leaving color swatches untouched */
+html.light-theme .rounded-3xl.border-slate-700\/80,
+html.light-theme .rounded-3xl.border-slate-800 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.light-theme .border-slate-950\/80,
+html.light-theme .border-slate-900,
 html.light-theme .border-slate-800,
-html.light-theme .border-slate-700 {
+html.light-theme .border-slate-800\/90,
+html.light-theme .border-slate-800\/80,
+html.light-theme .border-slate-800\/70,
+html.light-theme .border-slate-800\/60 {
   border-color: #e2e8f0 !important;
+}
+
+html.light-theme .border-slate-700,
+html.light-theme .border-slate-700\/90,
+html.light-theme .border-slate-700\/80,
+html.light-theme .border-slate-700\/60 {
+  border-color: #cbd5e1 !important;
 }
 
 html.light-theme .text-slate-400,
@@ -119,16 +358,30 @@ html.light-theme .text-slate-500 {
   color: #64748b !important;
 }
 
-html.light-theme .text-white {
+html.light-theme .text-white,
+html.light-theme .hover\:text-white:hover {
   color: #0f172a !important;
 }
 
+html.light-theme .bg-rose-500.text-white,
+html.light-theme .bg-rose-600.text-white,
+html.light-theme .bg-red-500.text-white,
+html.light-theme .bg-red-600.text-white,
+html.light-theme .bg-emerald-600.text-white,
+html.light-theme .bg-purple-600.text-white,
+html.light-theme .bg-blue-600.text-white,
+html.light-theme .bg-indigo-600.text-white {
+  color: #ffffff !important;
+}
+
+html.light-theme .text-slate-100,
 html.light-theme .text-slate-200,
-html.light-theme .text-slate-300 {
+html.light-theme .text-slate-300,
+html.light-theme .hover\:text-slate-200:hover {
   color: #1e293b !important;
 }
 
-html.light-theme input,
+html.light-theme input:not([type="color"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 html.light-theme select,
 html.light-theme textarea {
   background-color: #ffffff !important;
@@ -145,8 +398,8 @@ html.light-theme textarea::placeholder {
 html.phone-mode-active .app-root {
   max-width: 480px;
   margin: 0 auto;
-  border-left: 1px solid #1e293b;
-  border-right: 1px solid #1e293b;
+  border-left: 1px solid var(--app-border, #1e293b);
+  border-right: 1px solid var(--app-border, #1e293b);
   min-height: 100vh;
   box-shadow: 0 0 50px rgba(0, 0, 0, 0.6);
 }
@@ -157,10 +410,10 @@ html.phone-mode-active .app-root {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b0e14;
+  background: var(--app-bg, #080c16);
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a3649;
+  background: var(--app-border, #2a3649);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {

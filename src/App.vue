@@ -1,31 +1,62 @@
 <script setup lang="ts">
-import { onMounted, watch, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import Navbar from './components/layout/Navbar.vue'
 import AuthModal from './components/auth/AuthModal.vue'
 import GlobalConfirmModal from './components/common/GlobalConfirmModal.vue'
+import VoiceCommandHub from './components/common/VoiceCommandHub.vue'
 import { useAuthStore } from './stores/authStore'
 import { useThemeStore } from './stores/themeStore'
 import { useCompanionStore } from './stores/companionStore'
-import { Mic, Sparkles } from 'lucide-vue-next'
+import { useVoiceStore } from './stores/voiceStore'
+import { useLineupStore } from './stores/lineupStore'
+import { Mic, Map as MapIcon, Layers, BookOpen, Grid, Monitor, Newspaper, WifiOff, Zap, X } from 'lucide-vue-next'
 
 const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const companionStore = useCompanionStore()
+const voiceStore = useVoiceStore()
+const lineupStore = useLineupStore()
+
+const realtimeToast = ref<{ title: string; timestamp: number } | null>(null)
+let realtimeToastTimer: ReturnType<typeof setTimeout> | null = null
+
+function dismissRealtimeToast() {
+  realtimeToast.value = null
+  if (realtimeToastTimer) {
+    clearTimeout(realtimeToastTimer)
+    realtimeToastTimer = null
+  }
+}
+
+watch(
+  () => lineupStore.lastRealtimeEvent,
+  (evt) => {
+    if (!evt) return
+    if (realtimeToastTimer) {
+      clearTimeout(realtimeToastTimer)
+    }
+    const title = evt.lineup?.title || (evt.type === 'deleted' ? 'Lineup Removed' : 'Library Updated')
+    realtimeToast.value = { title, timestamp: evt.timestamp || Date.now() }
+    realtimeToastTimer = setTimeout(() => {
+      realtimeToast.value = null
+      realtimeToastTimer = null
+    }, 4000)
+  }
+)
 
 const isStandaloneView = computed(() => {
   return route.path.startsWith('/remote') || 
          route.path.startsWith('/companion')
 })
 
-// Auto-detect mobile screen on load and resize
+// Auto-detect mobile screen on load and resize only when layoutMode === 'auto'
 function checkAutoMobile() {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && themeStore.layoutMode === 'auto') {
     const isMobileViewport = window.innerWidth < 768
-    if (isMobileViewport && !themeStore.isPhoneMode) {
-      themeStore.isPhoneMode = true
-    }
+    themeStore.isPhoneMode = isMobileViewport
   }
 }
 
@@ -33,29 +64,31 @@ onMounted(() => {
   checkAutoMobile()
   window.addEventListener('resize', checkAutoMobile)
 
-  // Initialize companion socket
+  // Initialize companion socket & real-time lineup auto-sync
   companionStore.initSocket()
+  lineupStore.initRealtimeSync?.()
+})
 
-  // Enforce Sign In / Account creation to use Protutech on main site
-  if (!isStandaloneView.value && !authStore.isAuthenticated) {
-    authStore.isAuthModalOpen = true
+onUnmounted(() => {
+  window.removeEventListener('resize', checkAutoMobile)
+  if (realtimeToastTimer) {
+    clearTimeout(realtimeToastTimer)
+    realtimeToastTimer = null
   }
 })
 
-// Watch auth status
+// Close auth modal automatically once authenticated
 watch(() => [authStore.isAuthenticated, isStandaloneView.value], ([isAuth, isStandalone]) => {
   if (isAuth || isStandalone) {
     authStore.isAuthModalOpen = false
-  } else {
-    authStore.isAuthModalOpen = true
   }
-}, { immediate: true })
+})
 </script>
 
 <template>
   <div 
     class="app-root min-h-screen text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950 transition-colors duration-200"
-    :style="{ backgroundColor: themeStore.customBgColor }"
+    :style="{ backgroundColor: themeStore.effectiveBgColor || themeStore.customBgColor }"
   >
     <!-- NAVBAR (HIDDEN ON STANDALONE HUD & REMOTE) -->
     <Navbar v-if="!isStandaloneView" />
@@ -79,6 +112,26 @@ watch(() => [authStore.isAuthenticated, isStandaloneView.value], ([isAuth, isSta
         </div>
       </div>
 
+      <!-- REAL-TIME LINEUP AUTO-SYNC TOAST -->
+      <div
+        v-if="realtimeToast"
+        class="fixed top-20 right-4 z-[999998] max-w-[calc(100vw-2rem)] sm:max-w-sm flex items-center gap-2.5 px-3.5 py-2.5 bg-slate-900/95 backdrop-blur-xl border border-emerald-500/50 rounded-xl shadow-2xl text-xs text-white animate-fade-in"
+      >
+        <span class="flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex-shrink-0">
+          <Zap class="w-3.5 h-3.5" />
+        </span>
+        <span class="font-bold truncate">
+          ⚡ Lineup Auto-Synced: {{ realtimeToast.title }}
+        </span>
+        <button
+          @click="dismissRealtimeToast"
+          class="ml-1 text-slate-400 hover:text-white cursor-pointer flex-shrink-0"
+          title="Dismiss"
+        >
+          <X class="w-3.5 h-3.5" />
+        </button>
+      </div>
+
       <!-- PHONE SLEEPING / STANDBY DESKTOP INDICATOR -->
       <div 
         v-if="companionStore.isPaired && companionStore.isPhoneSleeping"
@@ -86,13 +139,107 @@ watch(() => [authStore.isAuthenticated, isStandaloneView.value], ([isAuth, isSta
       >
         <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
         <span class="text-slate-300 font-medium text-[11px]">💤 Phone in standby mode</span>
+        <button
+          @click="companionStore.disconnectPhone()"
+          class="ml-1 flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-600/20 hover:bg-rose-600/35 text-rose-400 hover:text-rose-200 border border-rose-500/50 text-[10px] font-bold transition-colors cursor-pointer"
+          title="Disconnect paired phone"
+        >
+          <WifiOff class="w-3 h-3" />
+          <span>Disconnect</span>
+        </button>
       </div>
     </Teleport>
 
     <!-- MAIN VIEW ROUTER CONTENT -->
-    <main class="flex-grow">
+    <main class="flex-grow" :class="themeStore.isPhoneMode && !isStandaloneView ? 'pb-16' : ''">
       <router-view />
     </main>
+
+    <!-- DEDICATED MOBILE LAYOUT BOTTOM NAVIGATION BAR (WHEN PHONE MODE IS ACTIVE) -->
+    <nav
+      v-if="themeStore.isPhoneMode && !isStandaloneView"
+      class="fixed bottom-0 inset-x-0 z-[99990] bg-slate-950/95 backdrop-blur-xl border-t border-slate-800 px-1.5 sm:px-2 py-1.5 flex items-center justify-around shadow-[0_-10px_30px_rgba(0,0,0,0.6)]"
+    >
+      <button
+        @click="router.push('/')"
+        :class="[
+          'flex flex-col items-center gap-0.5 px-1.5 sm:px-2.5 py-1 rounded-xl text-[10px] font-bold transition-colors cursor-pointer',
+          route.path === '/' ? 'text-amber-400 bg-amber-500/10' : 'text-slate-400 hover:text-white'
+        ]"
+      >
+        <MapIcon class="w-4 h-4" />
+        <span>Radar</span>
+      </button>
+
+      <button
+        @click="router.push('/strats')"
+        :class="[
+          'flex flex-col items-center gap-0.5 px-1.5 sm:px-2.5 py-1 rounded-xl text-[10px] font-bold transition-colors cursor-pointer',
+          route.path === '/strats' ? 'text-amber-400 bg-amber-500/10' : 'text-slate-400 hover:text-white'
+        ]"
+      >
+        <BookOpen class="w-4 h-4" />
+        <span>Executes</span>
+      </button>
+
+      <button
+        @click="voiceStore.isPanelOpen = true; voiceStore.toggleListening()"
+        :class="[
+          'flex flex-col items-center gap-0.5 px-2 sm:px-3 py-1 rounded-xl text-[10px] font-black transition-all cursor-pointer border',
+          voiceStore.isListening
+            ? 'bg-rose-500 text-white border-rose-400 animate-pulse'
+            : 'bg-amber-500 text-slate-950 border-amber-400'
+        ]"
+      >
+        <Mic class="w-4 h-4" />
+        <span>{{ voiceStore.isListening ? 'Listening' : 'Voice' }}</span>
+      </button>
+
+      <button
+        @click="router.push('/callouts')"
+        :class="[
+          'flex flex-col items-center gap-0.5 px-1.5 sm:px-2.5 py-1 rounded-xl text-[10px] font-bold transition-colors cursor-pointer',
+          route.path === '/callouts' ? 'text-amber-400 bg-amber-500/10' : 'text-slate-400 hover:text-white'
+        ]"
+      >
+        <Layers class="w-4 h-4" />
+        <span>Callouts</span>
+      </button>
+
+      <button
+        @click="router.push('/library')"
+        :class="[
+          'flex flex-col items-center gap-0.5 px-1.5 sm:px-2.5 py-1 rounded-xl text-[10px] font-bold transition-colors cursor-pointer',
+          route.path === '/library' ? 'text-amber-400 bg-amber-500/10' : 'text-slate-400 hover:text-white'
+        ]"
+      >
+        <Grid class="w-4 h-4" />
+        <span>Library</span>
+      </button>
+
+      <button
+        @click="router.push('/updates')"
+        :class="[
+          'flex flex-col items-center gap-0.5 px-1.5 sm:px-2.5 py-1 rounded-xl text-[10px] font-bold transition-colors cursor-pointer',
+          route.path === '/updates' ? 'text-amber-400 bg-amber-500/10' : 'text-slate-400 hover:text-white'
+        ]"
+      >
+        <Newspaper class="w-4 h-4" />
+        <span>Updates</span>
+      </button>
+
+      <button
+        @click="themeStore.setLayoutMode('desktop')"
+        class="flex flex-col items-center gap-0.5 px-1.5 sm:px-2 py-1 rounded-xl text-[10px] font-bold text-cyan-400 hover:bg-slate-900 transition-colors cursor-pointer"
+        title="Switch back to Desktop Mode"
+      >
+        <Monitor class="w-4 h-4" />
+        <span>Desktop</span>
+      </button>
+    </nav>
+
+    <!-- VOICE NAVIGATION HUB (FLOATING HANDS-FREE MIC & COMMAND DRAWER) -->
+    <VoiceCommandHub v-if="!isStandaloneView" />
 
     <!-- PROTUTECH CLEAN FOOTER (HIDDEN ON STANDALONE HUD) -->
     <footer v-if="!isStandaloneView" class="mt-auto border-t border-slate-900 bg-slate-950/80 py-5 text-xs text-slate-500">
