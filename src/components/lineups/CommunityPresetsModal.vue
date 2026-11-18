@@ -4,7 +4,7 @@ import axios from 'axios'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useMapStore } from '../../stores/mapStore'
 import { DEFAULT_LINEUP_IMAGE } from '../../config/site'
-import { DEFAULT_LINEUPS } from '../../data/defaultLineups'
+import { POTENTIAL_LINEUPS_ARCHIVE } from '../../data/defaultLineups'
 import NadeIcon from '../common/NadeIcon.vue'
 import type { Lineup } from '../../types'
 import { 
@@ -74,7 +74,10 @@ const nadeFilterOptions = [
 const combinedCatalog = computed<Lineup[]>(() => {
   const seen = new Set<string>()
   const merged: Lineup[] = []
-  for (const item of [...liveDiscoveredLineups.value, ...DEFAULT_LINEUPS]) {
+  const archiveSource = lineupStore.potentialArchiveLineups?.length
+    ? lineupStore.potentialArchiveLineups
+    : POTENTIAL_LINEUPS_ARCHIVE
+  for (const item of [...liveDiscoveredLineups.value, ...archiveSource]) {
     if (!seen.has(item.id)) {
       seen.add(item.id)
       merged.push(item)
@@ -231,13 +234,13 @@ function selectPresetForInspection(preset: Lineup) {
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <h2 class="text-lg font-black text-white tracking-tight">Popular CS2 Lineups & Pro Meta Sources</h2>
+                <h2 class="text-lg font-black text-white tracking-tight">Archive of Potential Lineups</h2>
                 <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[11px] font-bold">
-                  {{ combinedCatalog.length }} Curated
+                  {{ combinedCatalog.length }} Archived
                 </span>
               </div>
               <p class="text-xs text-slate-400 mt-0.5">
-                Verified pro & community lineups from CSNades, NadeKing, HLTV, Bo3.gg, Pracc, Scope.gg & Live Server.
+                All pre-built potential lineups are archived here off the active radar. Inspect or restore individual lineups to your active library anytime.
               </p>
             </div>
           </div>

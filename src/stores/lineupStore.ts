@@ -2,7 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import axios from 'axios'
 import { io, type Socket } from 'socket.io-client'
-import { DEFAULT_EXECUTES, DEFAULT_LINEUPS } from '../data/defaultLineups'
+import {
+  DEFAULT_EXECUTES,
+  DEFAULT_LINEUPS,
+  POTENTIAL_EXECUTES_ARCHIVE,
+  POTENTIAL_LINEUPS_ARCHIVE
+} from '../data/defaultLineups'
 import { MAPS_DATA, findNearestCallout } from '../data/mapsData'
 import { normalizeMapId } from '../core/radar/coordinateEngine'
 import {
@@ -24,9 +29,11 @@ import type {
   RadarFloorId
 } from '../types'
 
-const STORAGE_KEY = 'cs2_stratbook_custom_lineups'
+const LEGACY_STORAGE_KEY = 'cs2_stratbook_custom_lineups'
+const LOCAL_ARCHIVE_STORAGE_KEY = 'cs2_stratbook_potential_archive_local'
+const STORAGE_KEY = 'cs2_stratbook_custom_lineups_v2'
 const FAVORITES_KEY = 'cs2_stratbook_favorites'
-const EXECUTES_STORAGE_KEY = 'cs2_stratbook_executes'
+const EXECUTES_STORAGE_KEY = 'cs2_stratbook_executes_v2'
 const BASIC_LINEUPS_KEY = 'cs2_stratbook_show_basic_lineups'
 const LINEUP_DISPLAY_MODE_KEY = 'cs2_stratbook_lineup_display_mode'
 const MODAL_DISPLAY_MODE_KEY = 'cs2_stratbook_modal_display_mode'
@@ -136,8 +143,37 @@ export const useLineupStore = defineStore('lineup', () => {
     set: (val: string) => mapStore.setSearchQuery(val)
   })
 
+  const archivedLocalLineups = ref<Lineup[]>([])
+
   function loadFromStorage() {
     try {
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY)
+      const existingArchive = localStorage.getItem(LOCAL_ARCHIVE_STORAGE_KEY)
+      if (existingArchive) {
+        archivedLocalLineups.value = JSON.parse(existingArchive)
+      }
+      if (legacy) {
+        try {
+          const parsedLegacy: Lineup[] = JSON.parse(legacy)
+          if (Array.isArray(parsedLegacy) && parsedLegacy.length > 0) {
+            const seen = new Set(archivedLocalLineups.value.map((l) => l.id))
+            for (const item of parsedLegacy) {
+              if (item && item.id && !seen.has(item.id)) {
+                archivedLocalLineups.value.push(item)
+                seen.add(item.id)
+              }
+            }
+            localStorage.setItem(
+              LOCAL_ARCHIVE_STORAGE_KEY,
+              JSON.stringify(archivedLocalLineups.value)
+            )
+          }
+        } catch {
+          // ignore
+        }
+        localStorage.removeItem(LEGACY_STORAGE_KEY)
+      }
+
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) customLineups.value = JSON.parse(stored)
 
@@ -206,7 +242,25 @@ export const useLineupStore = defineStore('lineup', () => {
 
   const favoriteSet = computed(() => new Set(favoriteIds.value))
 
-  // General Lineups Catalog (curated multi-site & pro utility, separate from Personal Book)
+  // Archive of Potential Lineups (all 92 curated lineups + any archived local lineups)
+  const potentialArchiveLineups = computed<Lineup[]>(() => {
+    const seen = new Set<string>()
+    const list: Lineup[] = []
+    for (const item of [...archivedLocalLineups.value, ...POTENTIAL_LINEUPS_ARCHIVE]) {
+      if (item && item.id && !seen.has(item.id)) {
+        seen.add(item.id)
+        list.push({
+          ...item,
+          isFavorite: favoriteSet.value.has(item.id)
+        })
+      }
+    }
+    return list
+  })
+
+  const potentialArchiveExecutes = computed<NadeExecute[]>(() => POTENTIAL_EXECUTES_ARCHIVE)
+
+  // General Lineups Catalog (active general lineups; emptied when archived)
   const generalLineups = computed<Lineup[]>(() =>
     DEFAULT_LINEUPS.map((item) => ({
       ...item,
@@ -1544,6 +1598,8 @@ export const useLineupStore = defineStore('lineup', () => {
     allLineups,
     generalLineups,
     personalBookLineups,
+    potentialArchiveLineups,
+    potentialArchiveExecutes,
     customLineups,
     currentMapLineups,
     filteredLineups,

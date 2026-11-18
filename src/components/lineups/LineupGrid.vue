@@ -371,11 +371,10 @@ function handleAddAllForMap() {
       </div>
       <div class="flex flex-wrap items-center justify-center gap-2">
         <button
-          v-if="lineupStore.activeCatalogTab === 'personal'"
-          @click="lineupStore.activeCatalogTab = 'general'"
+          @click="lineupStore.isPresetsModalOpen = true"
           class="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-lg transition-colors cursor-pointer"
         >
-          Browse General Lineups
+          Open Potential Lineups Archive ({{ lineupStore.potentialArchiveLineups.length }})
         </button>
         <button
           @click="mapStore.resetFilters()"

@@ -203,6 +203,38 @@ if (!db.groups || db.groups.length === 0) {
   })
 }
 
+// 5. Archive any existing active db.lineups into potential_lineups_archive.json and clear active lineups
+if (!db.settings) db.settings = { ...INITIAL_DB.settings }
+if (!db.settings.archivedPotentialLineupsV1) {
+  try {
+    const archiveDest = path.join(DATA_DIR, 'potential_lineups_archive.json')
+    const bundledArchive = path.join(__dirname, 'data', 'potential_lineups_archive.json')
+    let archiveObj = { archivedAt: new Date().toISOString(), count: 0, executesCount: 0, lineups: [], executes: [] }
+    if (fs.existsSync(archiveDest)) {
+      archiveObj = JSON.parse(fs.readFileSync(archiveDest, 'utf8'))
+    } else if (fs.existsSync(bundledArchive)) {
+      archiveObj = JSON.parse(fs.readFileSync(bundledArchive, 'utf8'))
+    }
+    const existingLineups = Array.isArray(db.lineups) ? db.lineups : []
+    if (existingLineups.length > 0) {
+      const seen = new Set((archiveObj.lineups || []).map(l => l.id))
+      for (const item of existingLineups) {
+        if (item && item.id && !seen.has(item.id)) {
+          archiveObj.lineups.unshift(item)
+          seen.add(item.id)
+        }
+      }
+    }
+    archiveObj.count = (archiveObj.lineups || []).length
+    archiveObj.archivedAt = new Date().toISOString()
+    fs.writeFileSync(archiveDest, JSON.stringify(archiveObj, null, 2), 'utf8')
+  } catch (err) {
+    console.warn('[Archive] Failed to write potential_lineups_archive.json:', err.message)
+  }
+  db.lineups = []
+  db.settings.archivedPotentialLineupsV1 = true
+}
+
 saveDB(db)
 console.log('[Auth] Sanitized accounts: Andrex (Admin) and chips (Player). All other accounts deleted.')
 
@@ -1379,6 +1411,20 @@ app.post('/api/lineups/clear', (req, res) => {
   saveDB(db)
   io.emit('lineups:cleared')
   res.json({ success: true, message: 'All lineups cleared' })
+})
+
+// POTENTIAL LINEUPS ARCHIVE API
+app.get('/api/lineups/archive', (req, res) => {
+  try {
+    const archivePath = path.join(DATA_DIR, 'potential_lineups_archive.json')
+    const fallbackPath = path.join(__dirname, 'data', 'potential_lineups_archive.json')
+    const targetPath = fs.existsSync(archivePath) ? archivePath : fallbackPath
+    if (fs.existsSync(targetPath)) {
+      const raw = JSON.parse(fs.readFileSync(targetPath, 'utf8'))
+      return res.json(raw)
+    }
+  } catch (err) {}
+  res.json({ count: 0, lineups: [], executes: [] })
 })
 
 // COMMUNITY PRESETS API
