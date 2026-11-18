@@ -1,100 +1,351 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useMapStore } from '../../stores/mapStore'
-import { useAuthStore } from '../../stores/authStore'
 import LineupCard from './LineupCard.vue'
-import { Plus, Search, Filter, Globe, User, Users } from 'lucide-vue-next'
+import type { Lineup, LineupDisplayMode } from '../../types'
+import {
+  BookmarkCheck,
+  BookmarkPlus,
+  CheckCircle2,
+  Footprints,
+  Globe,
+  Layers,
+  LayoutGrid,
+  Search,
+  Sparkles,
+  User,
+  Zap
+} from 'lucide-vue-next'
 
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
-const authStore = useAuthStore()
 
-const sourceTab = ref<'all' | 'server' | 'personal' | 'friends'>('all')
+const quickSelectMode = ref(false)
+const batchNotice = ref<string | null>(null)
+let noticeTimer: ReturnType<typeof setTimeout> | null = null
 
-const lineups = computed(() => {
-  let list = lineupStore.filteredLineups
-  if (sourceTab.value === 'server') {
-    list = list.filter(l => l.isTeamShared || !l.userId)
-  } else if (sourceTab.value === 'personal') {
-    list = list.filter(l => authStore.currentUser && l.userId === authStore.currentUser.id)
-  } else if (sourceTab.value === 'friends') {
-    const following = authStore.currentUser?.following || []
-    list = list.filter(l => l.userId && following.includes(l.userId))
+function showBatchNotice(msg: string) {
+  batchNotice.value = msg
+  if (noticeTimer) clearTimeout(noticeTimer)
+  noticeTimer = setTimeout(() => {
+    batchNotice.value = null
+  }, 3200)
+}
+
+function matchesMapAndFilters(lineup: Lineup): boolean {
+  if (lineup.mapId !== mapStore.currentMapId) return false
+
+  if (lineupStore.activeExecute && lineupStore.activeExecute.mapId === mapStore.currentMapId) {
+    return lineupStore.activeExecute.lineupIds.includes(lineup.id)
   }
-  return list
+
+  if (!mapStore.selectedNadeTypes.includes(lineup.grenadeType)) return false
+
+  if (
+    mapStore.selectedSide !== 'all' &&
+    lineup.side !== 'all' &&
+    lineup.side !== mapStore.selectedSide
+  ) {
+    return false
+  }
+
+  if (mapStore.selectedSite !== 'all' && lineup.site && lineup.site !== mapStore.selectedSite) {
+    return false
+  }
+
+  if (mapStore.selectedThrowType !== 'all' && lineup.throwType !== mapStore.selectedThrowType) {
+    return false
+  }
+
+  if (mapStore.surfaceLevel !== 'all') {
+    const floor =
+      lineup.radarFloor ||
+      (lineup as any).level ||
+      (lineup.tags || []).find(
+        (t) => t.toLowerCase() === 'upper' || t.toLowerCase() === 'lower'
+      )
+    if (floor && String(floor).toLowerCase() !== mapStore.surfaceLevel) {
+      return false
+    }
+  }
+
+  if (mapStore.searchQuery.trim() !== '') {
+    const query = mapStore.searchQuery.toLowerCase()
+    const matchTitle = lineup.title.toLowerCase().includes(query)
+    const matchStart = lineup.startLocation.toLowerCase().includes(query)
+    const matchEnd = lineup.endLocation.toLowerCase().includes(query)
+    const matchSource = (lineup.sourceWebsite || '').toLowerCase().includes(query)
+    const matchPro = (lineup.proPlayer || '').toLowerCase().includes(query)
+    const matchTags = (lineup.tags || []).some((t) => t.toLowerCase().includes(query))
+    if (!matchTitle && !matchStart && !matchEnd && !matchSource && !matchPro && !matchTags) {
+      return false
+    }
+  }
+
+  return true
+}
+
+const generalForMap = computed(() =>
+  lineupStore.generalLineups.filter(matchesMapAndFilters)
+)
+const personalForMap = computed(() =>
+  lineupStore.personalBookLineups.filter(matchesMapAndFilters)
+)
+const allForMap = computed(() =>
+  lineupStore.allLineups.filter(matchesMapAndFilters)
+)
+
+const lineups = computed<Lineup[]>(() => {
+  if (lineupStore.activeCatalogTab === 'general') return generalForMap.value
+  if (lineupStore.activeCatalogTab === 'personal') return personalForMap.value
+  return allForMap.value
 })
+
+const displayModeOptions: { id: LineupDisplayMode; label: string }[] = [
+  { id: 'cards', label: 'Cards' },
+  { id: 'all_images', label: 'Show All Images' },
+  { id: 'spot_movement', label: 'Spot & Movement' }
+]
+
+const gridLayoutClass = computed(() => {
+  if (lineupStore.lineupDisplayMode === 'all_images') {
+    return 'grid grid-cols-1 gap-4'
+  }
+  if (lineupStore.lineupDisplayMode === 'spot_movement') {
+    return 'grid grid-cols-1 xl:grid-cols-2 gap-2.5'
+  }
+  return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'
+})
+
+const unbookmarkedForMap = computed(() =>
+  generalForMap.value.filter((l) => !lineupStore.isInPersonalBook(l.id))
+)
+
+function toggleQuickSelectMode() {
+  quickSelectMode.value = !quickSelectMode.value
+  if (quickSelectMode.value && lineupStore.activeCatalogTab === 'personal') {
+    lineupStore.activeCatalogTab = 'general'
+  }
+  if (!quickSelectMode.value) {
+    lineupStore.clearQuickSelect()
+  }
+}
+
+function selectAllVisibleGeneral() {
+  for (const item of unbookmarkedForMap.value) {
+    if (!lineupStore.quickSelectIds.includes(item.id)) {
+      lineupStore.toggleQuickSelect(item.id)
+    }
+  }
+}
+
+function handleAddSelected() {
+  const count = lineupStore.addQuickSelectedToPersonalBook()
+  if (count > 0) {
+    showBatchNotice(`Added ${count} selected lineup${count === 1 ? '' : 's'} to My Personal Book!`)
+  } else {
+    showBatchNotice('Selected lineups are already in your Personal Book.')
+  }
+  quickSelectMode.value = false
+}
+
+function handleAddAllForMap() {
+  let count = 0
+  for (const item of unbookmarkedForMap.value) {
+    lineupStore.quickAddToPersonalBook(item)
+    count++
+  }
+  if (count > 0) {
+    showBatchNotice(
+      `Added ${count} ${mapStore.currentMap.name} lineup${count === 1 ? '' : 's'} to My Personal Book!`
+    )
+  } else {
+    showBatchNotice(`All matching ${mapStore.currentMap.name} lineups are already in My Book!`)
+  }
+  lineupStore.clearQuickSelect()
+}
 </script>
 
 <template>
   <div class="lineup-grid-container flex flex-col gap-4">
-    <!-- GRID HEADER WITH SOURCE FILTER TABS -->
-    <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
-      <div class="flex items-center gap-3">
-        <h2 class="text-sm font-black tracking-wider uppercase text-slate-200">
-          Lineups ({{ lineups.length }})
-        </h2>
-        <span class="text-xs text-slate-500 font-mono">on {{ mapStore.currentMap.name }}</span>
+    <!-- GRID HEADER: CATALOG TABS + DISPLAY MODE SWITCHER + QUICK-SELECT -->
+    <div class="flex flex-col gap-3 bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <!-- Title & Map -->
+        <div class="flex items-center gap-2.5">
+          <h2 class="text-sm font-black tracking-wider uppercase text-slate-200">
+            Lineups ({{ lineups.length }})
+          </h2>
+          <span class="text-xs text-slate-400 font-mono">on {{ mapStore.currentMap.name }}</span>
+        </div>
+
+        <!-- 3-Way Display Mode Switcher -->
+        <div class="flex flex-wrap items-center gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
+          <button
+            v-for="mode in displayModeOptions"
+            :key="mode.id"
+            @click="lineupStore.lineupDisplayMode = mode.id"
+            :class="[
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer',
+              lineupStore.lineupDisplayMode === mode.id
+                ? 'bg-amber-500 text-slate-950 font-black shadow'
+                : 'text-slate-400 hover:text-white'
+            ]"
+          >
+            <LayoutGrid v-if="mode.id === 'cards'" class="w-3.5 h-3.5" />
+            <Layers v-else-if="mode.id === 'all_images'" class="w-3.5 h-3.5" />
+            <Footprints v-else class="w-3.5 h-3.5" />
+            <span>{{ mode.label }}</span>
+          </button>
+        </div>
       </div>
 
-      <!-- SOURCE FILTER TABS (SERVER vs PERSONAL vs FRIENDS) -->
-      <div class="flex items-center gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
-        <button
-          @click="sourceTab = 'all'"
-          :class="[
-            'px-2.5 py-1 rounded-lg transition-colors cursor-pointer',
-            sourceTab === 'all' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
-          ]"
-        >
-          All
-        </button>
-        <button
-          @click="sourceTab = 'server'"
-          :class="[
-            'flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer',
-            sourceTab === 'server' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
-          ]"
-        >
-          <Globe class="w-3 h-3" />
-          <span>Server / Team</span>
-        </button>
-        <button
-          @click="sourceTab = 'personal'"
-          :class="[
-            'flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer',
-            sourceTab === 'personal' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
-          ]"
-        >
-          <User class="w-3 h-3" />
-          <span>Personal</span>
-        </button>
-        <button
-          @click="sourceTab = 'friends'"
-          :class="[
-            'flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer',
-            sourceTab === 'friends' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
-          ]"
-        >
-          <Users class="w-3 h-3" />
-          <span>Friends</span>
-        </button>
+      <!-- Second Row: General vs Personal Catalog Tabs + Quick-Select Controls -->
+      <div class="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-slate-800/80">
+        <!-- Catalog Separation Tabs -->
+        <div class="flex flex-wrap items-center gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
+          <button
+            @click="lineupStore.activeCatalogTab = 'general'"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer',
+              lineupStore.activeCatalogTab === 'general'
+                ? 'bg-amber-500 text-slate-950 font-black'
+                : 'text-slate-400 hover:text-white'
+            ]"
+          >
+            <Globe class="w-3.5 h-3.5" />
+            <span>General Lineups (Meta Sites)</span>
+            <span class="px-1.5 py-0.2 rounded-full bg-slate-900/40 text-[10px] font-mono">
+              {{ generalForMap.length }}
+            </span>
+          </button>
+
+          <button
+            @click="lineupStore.activeCatalogTab = 'personal'"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer',
+              lineupStore.activeCatalogTab === 'personal'
+                ? 'bg-emerald-500 text-slate-950 font-black'
+                : 'text-slate-400 hover:text-white'
+            ]"
+          >
+            <User class="w-3.5 h-3.5" />
+            <span>My Personal Book</span>
+            <span class="px-1.5 py-0.2 rounded-full bg-slate-900/40 text-[10px] font-mono">
+              {{ personalForMap.length }}
+            </span>
+          </button>
+
+          <button
+            @click="lineupStore.activeCatalogTab = 'all'"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer',
+              lineupStore.activeCatalogTab === 'all'
+                ? 'bg-amber-500 text-slate-950 font-black'
+                : 'text-slate-400 hover:text-white'
+            ]"
+          >
+            <Sparkles class="w-3.5 h-3.5" />
+            <span>All</span>
+            <span class="px-1.5 py-0.2 rounded-full bg-slate-900/40 text-[10px] font-mono">
+              {{ allForMap.length }}
+            </span>
+          </button>
+        </div>
+
+        <!-- Quick-Select to Personal Book Controls -->
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            @click="toggleQuickSelectMode"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer',
+              quickSelectMode
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-amber-500/40 hover:text-amber-300'
+            ]"
+          >
+            <Zap class="w-3.5 h-3.5 text-amber-400" />
+            <span>{{ quickSelectMode ? '⚡ Quick-Select ON' : '⚡ Quick-Select to Personal Book' }}</span>
+          </button>
+
+          <button
+            v-if="unbookmarkedForMap.length > 0"
+            @click="handleAddAllForMap"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 text-xs font-bold transition-colors cursor-pointer"
+          >
+            <BookmarkPlus class="w-3.5 h-3.5" />
+            <span>Add All for Map ({{ unbookmarkedForMap.length }})</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Active Quick-Select Batch Toolbar -->
+      <div
+        v-if="quickSelectMode || lineupStore.quickSelectIds.length > 0"
+        class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-950 border border-amber-500/30 rounded-xl text-xs"
+      >
+        <div class="flex items-center gap-2 text-slate-300">
+          <span class="font-bold text-amber-400">
+            {{ lineupStore.quickSelectIds.length }} selected
+          </span>
+          <button
+            v-if="unbookmarkedForMap.length > 0"
+            @click="selectAllVisibleGeneral"
+            class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold cursor-pointer"
+          >
+            Select Visible ({{ unbookmarkedForMap.length }})
+          </button>
+          <button
+            v-if="lineupStore.quickSelectIds.length > 0"
+            @click="lineupStore.clearQuickSelect()"
+            class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-semibold cursor-pointer"
+          >
+            Clear
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            @click="handleAddSelected"
+            :disabled="lineupStore.quickSelectIds.length === 0"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black transition-all',
+              lineupStore.quickSelectIds.length > 0
+                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer shadow'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            ]"
+          >
+            <BookmarkCheck class="w-3.5 h-3.5" />
+            <span>Add Selected ({{ lineupStore.quickSelectIds.length }}) to My Book</span>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- CARDS GRID -->
-    <div 
-      v-if="lineups.length > 0"
-      class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+    <!-- Batch Add Feedback Banner -->
+    <div
+      v-if="batchNotice"
+      class="px-4 py-2.5 bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-2"
     >
-      <LineupCard 
-        v-for="lineup in lineups" 
-        :key="lineup.id" 
-        :lineup="lineup" 
+      <CheckCircle2 class="w-4 h-4 text-emerald-400 shrink-0" />
+      <span>{{ batchNotice }}</span>
+    </div>
+
+    <!-- LINEUPS GRID / VISUAL STRIPS / SPOT & MOVEMENT LIST -->
+    <div v-if="lineups.length > 0" :class="gridLayoutClass">
+      <LineupCard
+        v-for="lineup in lineups"
+        :key="lineup.id"
+        :lineup="lineup"
+        :selectable="quickSelectMode && !lineup.isCustom && !lineup.isPersonalBook"
+        :selected="lineupStore.quickSelectIds.includes(lineup.id)"
+        @toggle-select="lineupStore.toggleQuickSelect($event)"
       />
     </div>
 
     <!-- EMPTY STATE -->
-    <div 
+    <div
       v-else
       class="flex flex-col items-center justify-center p-12 bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl text-center gap-3"
     >
@@ -102,17 +353,37 @@ const lineups = computed(() => {
         <Search class="w-6 h-6" />
       </div>
       <div>
-        <h3 class="text-sm font-bold text-slate-300">No Lineups Found</h3>
+        <h3 class="text-sm font-bold text-slate-300">
+          {{
+            lineupStore.activeCatalogTab === 'personal'
+              ? `No Personal Book Lineups on ${mapStore.currentMap.name}`
+              : 'No Lineups Found'
+          }}
+        </h3>
         <p class="text-xs text-slate-500 mt-1 max-w-sm">
-          No grenade lineups match your current grenade toggles, team side, or search query for {{ mapStore.currentMap.name }}.
+          <template v-if="lineupStore.activeCatalogTab === 'personal'">
+            Switch to General Lineups to 1-click save meta lineups into your Personal Book, or create a custom lineup on the radar!
+          </template>
+          <template v-else>
+            No grenade lineups match your current grenade toggles, team side, or search query for {{ mapStore.currentMap.name }}.
+          </template>
         </p>
       </div>
-      <button 
-        @click="mapStore.resetFilters()"
-        class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-      >
-        Reset Filters
-      </button>
+      <div class="flex flex-wrap items-center justify-center gap-2">
+        <button
+          v-if="lineupStore.activeCatalogTab === 'personal'"
+          @click="lineupStore.activeCatalogTab = 'general'"
+          class="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-lg transition-colors cursor-pointer"
+        >
+          Browse General Lineups
+        </button>
+        <button
+          @click="mapStore.resetFilters()"
+          class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+        >
+          Reset Filters
+        </button>
+      </div>
     </div>
   </div>
 </template>

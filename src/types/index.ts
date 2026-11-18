@@ -33,6 +33,8 @@ export type TickrateType = 'cs2_subtick' | '64_tick' | '128_tick' | 'all' | '128
 
 export type RadarFloorId = 'upper' | 'lower'
 export type LayoutMode = 'auto' | 'desktop' | 'mobile'
+export type LineupDisplayMode = 'cards' | 'all_images' | 'spot_movement'
+export type ModalDisplayMode = 'all_images' | 'spot_movement' | 'tabs'
 export type PlayerRole = 'IGL' | 'Entry' | 'Support' | 'Lurker' | 'AWPer' | 'AWP' | 'Flex'
 export type ExecuteStrategyType =
   | 'A Execute'
@@ -133,6 +135,7 @@ export interface Lineup {
   side: TeamSide
   throwType: ThrowType
   movementType?: MovementType
+  movementDetails?: string
   clickType?: MouseClickType
   tickrate: TickrateType
 
@@ -154,6 +157,9 @@ export interface Lineup {
   standingScreenshot?: string
   aimScreenshot?: string
   landingScreenshot?: string
+  standingSvg?: string
+  aimSvg?: string
+  landingSvg?: string
   screenshots?: string[]
   extraImages?: string[]
   instructionSteps?: LineupInstructionStep[]
@@ -182,6 +188,7 @@ export interface Lineup {
   sourceWebsite?: string
   sourceUrl?: string
   isCustom?: boolean
+  isPersonalBook?: boolean
   inLibrary?: boolean
   isTeamShared?: boolean
   isFavorite?: boolean

@@ -4,6 +4,10 @@ import { useLineupStore } from './lineupStore'
 import { useThemeStore } from './themeStore'
 import { useCS2ServerStore } from './cs2ServerStore'
 import { MAPS_DATA } from '../data/mapsData'
+import {
+  getLineupSetupConsoleCommand,
+  getMapSwitchConsoleCommand
+} from '../core/radar/mapBounds'
 import type { GrenadeType } from '../types'
 
 export interface VoiceCommandHistoryItem {
@@ -76,6 +80,97 @@ export const useVoiceStore = defineStore('voice', () => {
     const clean = rawText.trim().toLowerCase()
     if (!clean) return { action: 'Empty command' }
 
+    // 0. Slash / Command-String Triggers (Display Modes, Setup, Map Switch, Personal Book)
+    if (clean.startsWith('/')) {
+      const res = lineupStore.executeCommandString(rawText.trim())
+      const matchedId = lineupStore.selectedLineup?.id
+      recordAction(rawText, res.message, matchedId)
+      return { action: res.message, matchedLineupId: matchedId }
+    }
+
+    if (
+      clean.includes('show all images') ||
+      clean.includes('all images') ||
+      clean.includes('display all images')
+    ) {
+      const res = lineupStore.executeCommandString('/mode all')
+      recordAction(rawText, res.message, lineupStore.selectedLineup?.id)
+      return { action: res.message, matchedLineupId: lineupStore.selectedLineup?.id }
+    }
+
+    if (
+      clean.includes('spot and movement') ||
+      clean.includes('spot & movement') ||
+      clean.includes('spot movement') ||
+      clean.includes('movement only') ||
+      clean.includes('spot only')
+    ) {
+      const res = lineupStore.executeCommandString('/mode spot')
+      recordAction(rawText, res.message, lineupStore.selectedLineup?.id)
+      return { action: res.message, matchedLineupId: lineupStore.selectedLineup?.id }
+    }
+
+    if (clean === 'cards' || clean.includes('cards mode') || clean.includes('show cards')) {
+      const res = lineupStore.executeCommandString('/mode cards')
+      recordAction(rawText, res.message, lineupStore.selectedLineup?.id)
+      return { action: res.message, matchedLineupId: lineupStore.selectedLineup?.id }
+    }
+
+    if (clean.startsWith('setup ') || clean.startsWith('load ')) {
+      const res = lineupStore.executeCommandString(rawText.trim())
+      const matchedId = res.handled ? lineupStore.selectedLineup?.id : undefined
+      recordAction(rawText, res.message, matchedId)
+      return { action: res.message, matchedLineupId: matchedId }
+    }
+
+    if (clean.startsWith('switch to ')) {
+      const res = lineupStore.executeCommandString(rawText.trim())
+      if (res.handled) {
+        recordAction(rawText, res.message)
+        return { action: res.message }
+      }
+    }
+
+    if (
+      clean.includes('copy map command') ||
+      clean.includes('copy map practice') ||
+      clean.includes('map practice command')
+    ) {
+      const mapName =
+        MAPS_DATA.find((m) => m.id === lineupStore.activeMapId)?.name || lineupStore.activeMapId
+      const cmd = getMapSwitchConsoleCommand(lineupStore.activeMapId)
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(cmd).catch(() => {})
+      }
+      const msg = `Copied ${mapName} map practice command to clipboard`
+      recordAction(rawText, msg)
+      return { action: msg }
+    }
+
+    if (
+      clean.includes('add to my book') ||
+      clean.includes('save to my book') ||
+      clean.includes('add to personal book') ||
+      clean.includes('save to personal book') ||
+      /^add\s+.+\s+to\s+(?:my\s+|personal\s+)?book$/.test(clean)
+    ) {
+      const explicitMatch = clean.match(/^add\s+(.+?)\s+to\s+(?:my\s+|personal\s+)?book$/)
+      if (explicitMatch && explicitMatch[1]) {
+        const res = lineupStore.executeCommandString(`/book add ${explicitMatch[1]}`)
+        recordAction(rawText, res.message)
+        return { action: res.message }
+      }
+      if (lineupStore.selectedLineup) {
+        const saved = lineupStore.quickAddToPersonalBook(lineupStore.selectedLineup)
+        const msg = `Added "${saved.title}" to Personal Book`
+        recordAction(rawText, msg, saved.id)
+        return { action: msg, matchedLineupId: saved.id }
+      }
+      const msg = 'Select a lineup first or say "add <lineup> to my book"'
+      recordAction(rawText, msg)
+      return { action: msg }
+    }
+
     // 1. Modal / Step-by-Step Navigation Commands (Hands-Free Mobile & Desktop)
     if (lineupStore.selectedLineup) {
       if (
@@ -142,10 +237,11 @@ export const useVoiceStore = defineStore('voice', () => {
       }
 
       if (clean.includes('copy command') || clean.includes('copy setpos')) {
-        if (lineupStore.selectedLineup.consoleCommand && navigator.clipboard) {
-          navigator.clipboard.writeText(lineupStore.selectedLineup.consoleCommand).catch(() => {})
+        const cmd = getLineupSetupConsoleCommand(lineupStore.selectedLineup)
+        if (cmd && navigator.clipboard) {
+          navigator.clipboard.writeText(cmd).catch(() => {})
         }
-        const msg = `Copied setpos command to clipboard`
+        const msg = `Copied lineup setup command to clipboard`
         recordAction(rawText, msg, lineupStore.selectedLineup.id)
         return { action: msg, matchedLineupId: lineupStore.selectedLineup.id }
       }
@@ -158,7 +254,11 @@ export const useVoiceStore = defineStore('voice', () => {
       }
 
       if (clean === 'close' || clean === 'exit' || clean.includes('close lineup')) {
-        lineupStore.selectLineup(null)
+        if (lineupStore.isLineupModalOpen) {
+          lineupStore.closeLineup()
+        } else {
+          lineupStore.selectLineup(null)
+        }
         const msg = `Closed lineup viewer`
         recordAction(rawText, msg)
         return { action: msg }

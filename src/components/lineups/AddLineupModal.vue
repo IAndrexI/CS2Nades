@@ -4,45 +4,66 @@ import { useLineupStore } from '../../stores/lineupStore'
 import { useMapStore } from '../../stores/mapStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
+import { useCs2ServerStore } from '../../stores/cs2ServerStore'
 import NadeIcon from '../common/NadeIcon.vue'
-import type { GrenadeType, TeamSide, ThrowType, TickrateType } from '../../types'
-import { parseCS2Pos, worldToRadarCoords, radarToWorldCoords } from '../../utils/coordinateMapper'
+import VectorMapBlueprint from '../map/VectorMapBlueprint.vue'
+import type {
+  GrenadeType,
+  MouseClickType,
+  MovementType,
+  Point2D,
+  RadarFloorId,
+  TeamSide,
+  ThrowType,
+  TickrateType
+} from '../../types'
+import {
+  parseCS2Pos,
+  worldToRadarCoords,
+  radarToWorldCoords,
+  formatSetposCommand
+} from '../../utils/coordinateMapper'
+import { clientToSvgRadarPct, computeTrajectoryArc } from '../../core/radar/coordinateEngine'
+import { isPointInMapBounds, snapPointToMapBounds } from '../../core/radar/mapBounds'
+import { findNearestCallout } from '../../data/mapsData'
+import { parseQuickLineupInput } from '../../utils/quickLineupParser'
+import { openWindowsSnippingTool } from '../../utils/screenCapture'
 import axios from 'axios'
-import { 
-  X, 
-  MapPin, 
-  Crosshair, 
-  Plus, 
-  Trash2, 
-  Check, 
-  Video, 
-  Image as ImageIcon, 
-  Share2, 
-  Lock, 
-  Terminal, 
-  Upload, 
-  Clipboard, 
-  Eye, 
-  Sliders, 
-  Sparkles, 
-  Layers, 
-  FileText, 
-  Zap, 
-  ArrowRight,
-  Play,
+import {
+  X,
+  MapPin,
+  Crosshair,
+  Plus,
+  Trash2,
+  Check,
+  Video,
+  Image as ImageIcon,
+  Share2,
+  Lock,
+  Terminal,
+  Upload,
+  Clipboard,
+  Eye,
+  Sparkles,
+  Layers,
+  FileText,
+  Zap,
   Film,
   HelpCircle,
-  ExternalLink,
   Camera,
-  Scissors
+  Scissors,
+  AlertTriangle,
+  ShieldCheck,
+  Tag
 } from 'lucide-vue-next'
-import { parseQuickLineupInput } from '../../utils/quickLineupParser'
-import { openWindowsSnippingTool, extractImageFromClipboard } from '../../utils/screenCapture'
 
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
+const cs2ServerStore = useCs2ServerStore()
+
+void cs2ServerStore
 
 const activeTab = ref<'basics' | 'position' | 'screenshots' | 'guide'>('basics')
 
@@ -50,35 +71,18 @@ const quickFillText = ref<string>('')
 const rawCS2PosInput = ref<string>('')
 const parsedPosStatus = ref<{
   success: boolean
+  warning?: string
   message: string
-  details?: { posX: number; posY: number; posZ: number; pitch?: number; yaw?: number; radarX: number; radarY: number }
+  details?: {
+    posX: number
+    posY: number
+    posZ: number
+    pitch?: number
+    yaw?: number
+    radarX: number
+    radarY: number
+  }
 } | null>(null)
-
-function handleQuickFill(text: string) {
-  if (!text.trim()) return
-  const draft = parseQuickLineupInput(text, formData.mapId)
-  formData.title = draft.title
-  formData.mapId = draft.mapId
-  formData.grenadeType = draft.grenadeType
-  formData.side = draft.side
-  formData.throwType = draft.throwType
-  formData.startLocation = draft.startLocation
-  formData.endLocation = draft.endLocation
-  formData.site = draft.site || 'General'
-  formData.originCoords = { ...draft.originCoords }
-  formData.landingCoords = { ...draft.landingCoords }
-  if (draft.consoleCommand) {
-    formData.consoleCommand = draft.consoleCommand
-    rawCS2PosInput.value = draft.consoleCommand
-    processCS2PosInput(draft.consoleCommand)
-  }
-  if (draft.cs2Pos) {
-    formData.cs2Pos = { ...draft.cs2Pos }
-  }
-  if (draft.instructions && draft.instructions.length) {
-    formData.instructions = [...draft.instructions]
-  }
-}
 
 const isUploadingImage = ref<boolean>(false)
 const selectedImagePreview = ref<string | null>(null)
@@ -89,6 +93,9 @@ const formData = reactive({
   grenadeType: 'smoke' as GrenadeType,
   side: 't' as TeamSide,
   throwType: 'jumpthrow' as ThrowType,
+  movementType: 'stationary' as MovementType,
+  movementDetails: '',
+  clickType: 'left' as MouseClickType,
   tickrate: 'cs2_subtick' as TickrateType,
   startLocation: '',
   endLocation: '',
@@ -105,37 +112,220 @@ const formData = reactive({
   description: '',
   instructions: [''],
   consoleCommand: '',
-  cs2Pos: undefined as { x: number; y: number; z: number; pitch?: number; yaw?: number; roll?: number } | undefined,
+  cs2Pos: undefined as
+    | { x: number; y: number; z: number; pitch?: number; yaw?: number; roll?: number }
+    | undefined,
   difficulty: 'easy' as 'easy' | 'medium' | 'hard',
   tags: ''
 })
 
-// Current map radar image
+// Current map radar info
 const currentMapInfo = computed(() => {
-  return mapStore.availableMaps.find(m => m.id === formData.mapId) || mapStore.currentMap
+  return mapStore.availableMaps.find((m) => m.id === formData.mapId) || mapStore.currentMap
 })
+
+const currentActiveFloor = computed<RadarFloorId | undefined>(() => {
+  return currentMapInfo.value.radarFloors && currentMapInfo.value.radarFloors.length > 0
+    ? lineupStore.activeFloorId
+    : undefined
+})
+
+// Interactive 1:1 Mini-Radar Picker State
+const pickerTarget = ref<'origin' | 'landing'>('origin')
+const showPickerCallouts = ref<boolean>(false)
+const miniRadarSvgRef = ref<SVGSVGElement | null>(null)
+const miniRadarCursor = ref<Point2D | null>(null)
+const miniRadarBoundsWarning = ref<string | null>(null)
+let boundsWarningTimer: ReturnType<typeof setTimeout> | null = null
+
+const isMiniCursorInBounds = computed(() =>
+  miniRadarCursor.value
+    ? isPointInMapBounds(formData.mapId, miniRadarCursor.value, currentActiveFloor.value)
+    : true
+)
+
+const miniCursorCallout = computed(() => {
+  if (!miniRadarCursor.value) return null
+  return findNearestCallout(formData.mapId, miniRadarCursor.value, currentActiveFloor.value)
+})
+
+const isOriginInBounds = computed(() =>
+  isPointInMapBounds(formData.mapId, formData.originCoords, currentActiveFloor.value)
+)
+
+const isLandingInBounds = computed(() =>
+  isPointInMapBounds(formData.mapId, formData.landingCoords, currentActiveFloor.value)
+)
+
+const renderedOriginCoords = computed<Point2D>(() => {
+  const s = snapPointToMapBounds(formData.mapId, formData.originCoords, currentActiveFloor.value)
+  return { x: s.x, y: s.y }
+})
+
+const renderedLandingCoords = computed<Point2D>(() => {
+  const s = snapPointToMapBounds(formData.mapId, formData.landingCoords, currentActiveFloor.value)
+  return { x: s.x, y: s.y }
+})
+
+const pickerTrajectory = computed(() =>
+  computeTrajectoryArc(renderedOriginCoords.value, renderedLandingCoords.value)
+)
+
+function setBoundsWarning(msg: string) {
+  miniRadarBoundsWarning.value = msg
+  if (boundsWarningTimer) clearTimeout(boundsWarningTimer)
+  boundsWarningTimer = setTimeout(() => {
+    miniRadarBoundsWarning.value = null
+  }, 5500)
+}
+
+function snapCoordForMap(pt: Point2D): { coords: Point2D; wasOutOfBounds: boolean } {
+  const snapped = snapPointToMapBounds(formData.mapId, pt, currentActiveFloor.value)
+  return {
+    coords: { x: Number(snapped.x.toFixed(2)), y: Number(snapped.y.toFixed(2)) },
+    wasOutOfBounds: snapped.wasOutOfBounds
+  }
+}
+
+function validateAndSnapExistingCoords(showWarn = true) {
+  const safeOrigin = snapCoordForMap(formData.originCoords)
+  const safeLanding = snapCoordForMap(formData.landingCoords)
+  let changed = false
+  if (safeOrigin.wasOutOfBounds) {
+    formData.originCoords = safeOrigin.coords
+    updateFromRadarOrigin(false)
+    changed = true
+  }
+  if (safeLanding.wasOutOfBounds) {
+    formData.landingCoords = safeLanding.coords
+    updateFromRadarLanding(false)
+    changed = true
+  }
+  if (changed && showWarn) {
+    setBoundsWarning('⚠️ Adjusted coordinates to nearest playable spot inside map bounds.')
+  }
+}
+
+// Sync main background radar automatically whenever formData.mapId changes
+watch(
+  () => formData.mapId,
+  (id) => {
+    if (id && mapStore.currentMapId !== id) {
+      mapStore.setMap(id)
+    }
+    if (rawCS2PosInput.value) {
+      processCS2PosInput(rawCS2PosInput.value)
+    } else {
+      validateAndSnapExistingCoords(false)
+    }
+  }
+)
+
+// Watch modal open/close to sync active map & radar draft points or edit payload
+watch(
+  () => lineupStore.isAddModalOpen,
+  (open) => {
+    if (open) {
+      miniRadarBoundsWarning.value = null
+      if (lineupStore.isEditMode && lineupStore.editingLineup) {
+        const l = lineupStore.editingLineup
+        formData.title = l.title
+        formData.mapId = l.mapId
+        if (l.radarFloor) lineupStore.activeFloorId = l.radarFloor
+        formData.grenadeType = l.grenadeType
+        formData.side = l.side
+        formData.throwType = l.throwType
+        formData.movementType = l.movementType || 'stationary'
+        formData.movementDetails = l.movementDetails || ''
+        formData.clickType = l.clickType || 'left'
+        formData.tickrate = l.tickrate
+        formData.startLocation = l.startLocation
+        formData.endLocation = l.endLocation
+        formData.site = l.site || 'A'
+        formData.originCoords = snapCoordForMap(l.originCoords).coords
+        formData.landingCoords = snapCoordForMap(l.landingCoords).coords
+        formData.curveOffset = l.curveOffset || 0
+        formData.isTeamShared = l.isTeamShared ?? true
+        formData.videoUrl = l.videoUrl || ''
+        formData.imageUrl = l.imageUrl || ''
+        formData.aimScreenshot = l.aimScreenshot || ''
+        formData.standingScreenshot = l.standingScreenshot || ''
+        formData.landingScreenshot = l.landingScreenshot || ''
+        formData.description = l.description || ''
+        formData.instructions = l.instructions?.length ? [...l.instructions] : ['']
+        formData.consoleCommand = l.consoleCommand || ''
+        formData.cs2Pos = l.cs2Pos ? { ...l.cs2Pos } : undefined
+        formData.difficulty = l.difficulty || 'easy'
+        formData.tags = (l.tags || []).join(', ')
+        updateFromRadarOrigin(false)
+        updateFromRadarLanding(false)
+      } else {
+        formData.mapId = mapStore.currentMapId
+        if (lineupStore.draftOriginCoords) {
+          formData.originCoords = snapCoordForMap(lineupStore.draftOriginCoords).coords
+          updateFromRadarOrigin(false)
+          if (!formData.startLocation.trim()) {
+            const c = findNearestCallout(
+              formData.mapId,
+              formData.originCoords,
+              currentActiveFloor.value
+            )
+            formData.startLocation = lineupStore.draftStartLocation || c?.name || ''
+          }
+        } else {
+          validateAndSnapExistingCoords(false)
+          updateFromRadarOrigin(false)
+        }
+
+        if (lineupStore.draftLandingCoords) {
+          formData.landingCoords = snapCoordForMap(lineupStore.draftLandingCoords).coords
+          updateFromRadarLanding(false)
+          if (!formData.endLocation.trim()) {
+            const c = findNearestCallout(
+              formData.mapId,
+              formData.landingCoords,
+              currentActiveFloor.value
+            )
+            formData.endLocation = lineupStore.draftEndLocation || c?.name || ''
+          }
+        } else {
+          updateFromRadarLanding(false)
+        }
+      }
+    } else {
+      lineupStore.isEditMode = false
+      lineupStore.editingLineup = null
+      lineupStore.editingLineupId = null
+    }
+  }
+)
 
 // Watch mapStore temp placement if user used full radar pinpoint mode
-watch(() => mapStore.tempPlacement, (newVal) => {
-  if (newVal.origin) {
-    formData.originCoords = { ...newVal.origin }
-  }
-  if (newVal.landing) {
-    formData.landingCoords = { ...newVal.landing }
-  }
-}, { deep: true })
+watch(
+  () => mapStore.tempPlacement,
+  (newVal) => {
+    if (newVal.origin) {
+      const snapped = snapCoordForMap(newVal.origin)
+      formData.originCoords = snapped.coords
+      updateFromRadarOrigin(false)
+      if (!formData.startLocation.trim()) {
+        const c = findNearestCallout(formData.mapId, snapped.coords, currentActiveFloor.value)
+        if (c) formData.startLocation = c.name
+      }
+    }
+    if (newVal.landing) {
+      const snapped = snapCoordForMap(newVal.landing)
+      formData.landingCoords = snapped.coords
+      updateFromRadarLanding(false)
+      if (!formData.endLocation.trim()) {
+        const c = findNearestCallout(formData.mapId, snapped.coords, currentActiveFloor.value)
+        if (c) formData.endLocation = c.name
+      }
+    }
+  },
+  { deep: true }
+)
 
-// Watch map change to recompute radar coords if raw pos exists
-watch(() => formData.mapId, (newMapId) => {
-  if (rawCS2PosInput.value) {
-    processCS2PosInput(rawCS2PosInput.value)
-  }
-})
-
-import { formatSetposCommand } from '../../utils/coordinateMapper'
-import { useCs2ServerStore } from '../../stores/cs2ServerStore'
-
-const cs2ServerStore = useCs2ServerStore()
 const coordInputMode = ref<'world' | 'radar'>('world')
 
 const worldCoords = reactive({
@@ -150,9 +340,48 @@ const worldCoords = reactive({
   landingZ: 0
 })
 
-function updateFromWorldOrigin() {
+function handleQuickFill(text: string) {
+  if (!text.trim()) return
+  const draft = parseQuickLineupInput(text, formData.mapId)
+  formData.title = draft.title
+  formData.mapId = draft.mapId
+  formData.grenadeType = draft.grenadeType
+  formData.side = draft.side
+  formData.throwType = draft.throwType
+  formData.startLocation = draft.startLocation
+  formData.endLocation = draft.endLocation
+  formData.site = draft.site || 'General'
+  formData.originCoords = snapCoordForMap(draft.originCoords).coords
+  formData.landingCoords = snapCoordForMap(draft.landingCoords).coords
+  updateFromRadarLanding(false)
+  if (draft.consoleCommand) {
+    formData.consoleCommand = draft.consoleCommand
+    rawCS2PosInput.value = draft.consoleCommand
+    processCS2PosInput(draft.consoleCommand)
+  }
+  if (draft.cs2Pos) {
+    formData.cs2Pos = { ...draft.cs2Pos }
+  }
+  if (draft.instructions && draft.instructions.length) {
+    formData.instructions = [...draft.instructions]
+  }
+}
+
+function updateFromWorldOrigin(shouldSnap = false) {
   const radar = worldToRadarCoords(worldCoords.originX, worldCoords.originY, formData.mapId)
-  formData.originCoords = { x: radar.x, y: radar.y }
+  if (shouldSnap) {
+    const snapped = snapCoordForMap(radar)
+    formData.originCoords = snapped.coords
+    if (snapped.wasOutOfBounds) {
+      setBoundsWarning(
+        `⚠️ Origin world coords were outside playable bounds — snapped to (${snapped.coords.x}%, ${snapped.coords.y}%).`
+      )
+      updateFromRadarOrigin(false)
+      return
+    }
+  } else {
+    formData.originCoords = { x: radar.x, y: radar.y }
+  }
   formData.cs2Pos = {
     x: worldCoords.originX,
     y: worldCoords.originY,
@@ -161,16 +390,44 @@ function updateFromWorldOrigin() {
     yaw: worldCoords.yaw,
     roll: worldCoords.roll
   }
-  formData.consoleCommand = formatSetposCommand(worldCoords.originX, worldCoords.originY, worldCoords.originZ, worldCoords.pitch, worldCoords.yaw, worldCoords.roll)
+  formData.consoleCommand = formatSetposCommand(
+    worldCoords.originX,
+    worldCoords.originY,
+    worldCoords.originZ,
+    worldCoords.pitch,
+    worldCoords.yaw,
+    worldCoords.roll
+  )
 }
 
-function updateFromWorldLanding() {
+function updateFromWorldLanding(shouldSnap = false) {
   const radar = worldToRadarCoords(worldCoords.landingX, worldCoords.landingY, formData.mapId)
-  formData.landingCoords = { x: radar.x, y: radar.y }
+  if (shouldSnap) {
+    const snapped = snapCoordForMap(radar)
+    formData.landingCoords = snapped.coords
+    if (snapped.wasOutOfBounds) {
+      setBoundsWarning(
+        `⚠️ Landing world coords were outside playable bounds — snapped to (${snapped.coords.x}%, ${snapped.coords.y}%).`
+      )
+      updateFromRadarLanding(false)
+    }
+  } else {
+    formData.landingCoords = { x: radar.x, y: radar.y }
+  }
 }
 
-function updateFromRadarOrigin() {
-  const world = radarToWorldCoords(formData.originCoords.x, formData.originCoords.y, formData.mapId, worldCoords.originZ)
+function updateFromRadarOrigin(shouldSnap = false) {
+  if (shouldSnap) {
+    const snapped = snapCoordForMap(formData.originCoords)
+    if (snapped.wasOutOfBounds) {
+      formData.originCoords = snapped.coords
+      setBoundsWarning(
+        `⚠️ Origin radar % was outside playable bounds — snapped to (${snapped.coords.x}%, ${snapped.coords.y}%).`
+      )
+    }
+  }
+  const safePt = snapCoordForMap(formData.originCoords).coords
+  const world = radarToWorldCoords(safePt.x, safePt.y, formData.mapId, worldCoords.originZ)
   worldCoords.originX = world.x
   worldCoords.originY = world.y
   formData.cs2Pos = {
@@ -181,11 +438,28 @@ function updateFromRadarOrigin() {
     yaw: worldCoords.yaw,
     roll: worldCoords.roll
   }
-  formData.consoleCommand = formatSetposCommand(world.x, world.y, worldCoords.originZ, worldCoords.pitch, worldCoords.yaw, worldCoords.roll)
+  formData.consoleCommand = formatSetposCommand(
+    world.x,
+    world.y,
+    worldCoords.originZ,
+    worldCoords.pitch,
+    worldCoords.yaw,
+    worldCoords.roll
+  )
 }
 
-function updateFromRadarLanding() {
-  const world = radarToWorldCoords(formData.landingCoords.x, formData.landingCoords.y, formData.mapId, worldCoords.landingZ)
+function updateFromRadarLanding(shouldSnap = false) {
+  if (shouldSnap) {
+    const snapped = snapCoordForMap(formData.landingCoords)
+    if (snapped.wasOutOfBounds) {
+      formData.landingCoords = snapped.coords
+      setBoundsWarning(
+        `⚠️ Landing radar % was outside playable bounds — snapped to (${snapped.coords.x}%, ${snapped.coords.y}%).`
+      )
+    }
+  }
+  const safePt = snapCoordForMap(formData.landingCoords).coords
+  const world = radarToWorldCoords(safePt.x, safePt.y, formData.mapId, worldCoords.landingZ)
   worldCoords.landingX = world.x
   worldCoords.landingY = world.y
 }
@@ -199,42 +473,74 @@ function processCS2PosInput(val: string) {
 
   const parsed = parseCS2Pos(val)
   if (parsed && parsed.valid) {
-    const radar = worldToRadarCoords(parsed.posX, parsed.posY, formData.mapId)
-    formData.originCoords = { x: radar.x, y: radar.y }
-    formData.consoleCommand = parsed.consoleCommand
+    const rawRadar = worldToRadarCoords(parsed.posX, parsed.posY, formData.mapId)
+    const snapped = snapCoordForMap(rawRadar)
+
+    formData.originCoords = snapped.coords
+    const effectiveWorld = snapped.wasOutOfBounds
+      ? radarToWorldCoords(snapped.coords.x, snapped.coords.y, formData.mapId, parsed.posZ)
+      : { x: parsed.posX, y: parsed.posY, z: parsed.posZ }
+
     formData.cs2Pos = {
-      x: parsed.posX,
-      y: parsed.posY,
+      x: effectiveWorld.x,
+      y: effectiveWorld.y,
       z: parsed.posZ,
       pitch: parsed.angPitch,
       yaw: parsed.angYaw,
       roll: parsed.angRoll
     }
+    formData.consoleCommand = snapped.wasOutOfBounds
+      ? formatSetposCommand(
+          effectiveWorld.x,
+          effectiveWorld.y,
+          parsed.posZ,
+          parsed.angPitch,
+          parsed.angYaw,
+          parsed.angRoll
+        )
+      : parsed.consoleCommand
 
-    worldCoords.originX = parsed.posX
-    worldCoords.originY = parsed.posY
+    worldCoords.originX = effectiveWorld.x
+    worldCoords.originY = effectiveWorld.y
     worldCoords.originZ = parsed.posZ
     worldCoords.pitch = parsed.angPitch || 0
     worldCoords.yaw = parsed.angYaw || 0
     worldCoords.roll = parsed.angRoll || 0
 
+    if (!formData.startLocation.trim()) {
+      const c = findNearestCallout(formData.mapId, snapped.coords, currentActiveFloor.value)
+      if (c) formData.startLocation = c.name
+    }
+
+    if (snapped.wasOutOfBounds) {
+      setBoundsWarning(
+        `⚠️ Parsed setpos was outside playable bounds for ${currentMapInfo.value.name} — snapped inside bounds (${snapped.coords.x}%, ${snapped.coords.y}%).`
+      )
+    }
+
     parsedPosStatus.value = {
       success: true,
-      message: `Successfully mapped to ${currentMapInfo.value.name}!`,
+      warning: snapped.wasOutOfBounds
+        ? `Coordinates were outside playable bounds and automatically snapped inside ${currentMapInfo.value.name}.`
+        : undefined,
+      message: snapped.wasOutOfBounds
+        ? `Mapped & snapped inside ${currentMapInfo.value.name} bounds`
+        : `Successfully mapped to ${currentMapInfo.value.name}!`,
       details: {
-        posX: parsed.posX,
-        posY: parsed.posY,
+        posX: effectiveWorld.x,
+        posY: effectiveWorld.y,
         posZ: parsed.posZ,
         pitch: parsed.angPitch,
         yaw: parsed.angYaw,
-        radarX: radar.x,
-        radarY: radar.y
+        radarX: snapped.coords.x,
+        radarY: snapped.coords.y
       }
     }
   } else {
     parsedPosStatus.value = {
       success: false,
-      message: 'Could not parse setpos / getpos format. Example: "setpos 1290 -430 -160; setang -12 94 0"'
+      message:
+        'Could not parse setpos / getpos format. Example: "setpos 1290 -430 -160; setang -12 94 0"'
     }
   }
 }
@@ -246,7 +552,7 @@ async function handlePastePosFromClipboard() {
       rawCS2PosInput.value = text
       processCS2PosInput(text)
     }
-  } catch (err) {
+  } catch {
     alert('Clipboard read permission denied. Please paste directly into the box with Ctrl+V.')
   }
 }
@@ -254,16 +560,20 @@ async function handlePastePosFromClipboard() {
 const isSnappingScreen = ref(false)
 const activeSnapSlot = ref<'aim' | 'standing' | 'landing'>('aim')
 const snapNotification = ref<string | null>(null)
-let snapNotificationTimer: any = null
+let snapNotificationTimer: ReturnType<typeof setTimeout> | null = null
 
 function handleDirectScreenSnap(slot: 'aim' | 'standing' | 'landing') {
   activeSnapSlot.value = slot
-  // Trigger native Windows Snipping Tool (ms-screenclip: / Win+Shift+S)
   openWindowsSnippingTool()
 
-  const slotName = slot === 'aim' ? 'Crosshair / Aim Spot' : slot === 'standing' ? 'Standing Spot' : 'Landing Target'
+  const slotName =
+    slot === 'aim'
+      ? 'Crosshair / Aim Spot'
+      : slot === 'standing'
+        ? 'Standing Spot'
+        : 'Landing Target'
   snapNotification.value = `✂️ Windows Snipping Tool opened! Snip your CS2 screen, then press Ctrl+V to attach to ${slotName}.`
-  
+
   if (snapNotificationTimer) clearTimeout(snapNotificationTimer)
   snapNotificationTimer = setTimeout(() => {
     snapNotification.value = null
@@ -281,7 +591,6 @@ async function handleImageFile(file: File, slot: 'aim' | 'standing' | 'landing' 
       const base64Data = e.target?.result as string
       if (!base64Data) return
 
-      // Try uploading to server
       let finalUrl = base64Data
       try {
         const res = await axios.post('/api/upload', { image: base64Data, filename: file.name })
@@ -292,10 +601,9 @@ async function handleImageFile(file: File, slot: 'aim' | 'standing' | 'landing' 
         console.warn('Server upload failed, using local base64', uploadErr)
       }
 
-      // Assign to target slot
       if (slot === 'aim' || slot === 'main') {
         formData.aimScreenshot = finalUrl
-        formData.imageUrl = finalUrl // primary thumbnail
+        formData.imageUrl = finalUrl
       } else if (slot === 'standing') {
         formData.standingScreenshot = finalUrl
       } else if (slot === 'landing') {
@@ -373,19 +681,17 @@ function handleDrop(e: DragEvent, slot: 'aim' | 'standing' | 'landing') {
   }
 }
 
-// Global Clipboard Paste (Ctrl+V) listener
 function handleGlobalPaste(e: ClipboardEvent) {
   if (!lineupStore.isAddModalOpen) return
-  
+
   const items = e.clipboardData?.items
   if (!items) return
 
   for (let i = 0; i < items.length; i++) {
-    if (items[i].type.indexOf('image') !== -1) {
-      const blob = items[i].getAsFile()
+    if (items[i] && items[i]!.type.indexOf('image') !== -1) {
+      const blob = items[i]!.getAsFile()
       if (blob) {
         e.preventDefault()
-        // Prioritize active snap slot or first empty slot
         let targetSlot = activeSnapSlot.value
         if (!targetSlot) {
           if (!formData.aimScreenshot) targetSlot = 'aim'
@@ -396,8 +702,13 @@ function handleGlobalPaste(e: ClipboardEvent) {
 
         handleImageFile(blob, targetSlot)
         activeTab.value = 'screenshots'
-        
-        const slotLabel = targetSlot === 'aim' ? 'Aim / Crosshair' : targetSlot === 'standing' ? 'Standing Spot' : 'Landing Target'
+
+        const slotLabel =
+          targetSlot === 'aim'
+            ? 'Aim / Crosshair'
+            : targetSlot === 'standing'
+              ? 'Standing Spot'
+              : 'Landing Target'
         snapNotification.value = `✓ Pasted & attached screenshot to ${slotLabel}!`
         if (snapNotificationTimer) clearTimeout(snapNotificationTimer)
         snapNotificationTimer = setTimeout(() => {
@@ -415,43 +726,66 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('paste', handleGlobalPaste)
+  if (boundsWarningTimer) clearTimeout(boundsWarningTimer)
+  if (snapNotificationTimer) clearTimeout(snapNotificationTimer)
 })
 
-// ── INTERACTIVE MINI-RADAR CLICK PICKER ───────────────────────
-const isDraggingOrigin = ref(false)
-const isDraggingLanding = ref(false)
-const radarContainerRef = ref<HTMLDivElement | null>(null)
+// ── 1:1 VECTOR MINI-RADAR PICKER WITH STRICT IN-BOUNDS SNAP ───
+function handleMiniRadarMouseMove(e: MouseEvent) {
+  if (!miniRadarSvgRef.value) return
+  miniRadarCursor.value = clientToSvgRadarPct(miniRadarSvgRef.value, e.clientX, e.clientY, true)
+}
 
-function handleMiniRadarClick(e: MouseEvent) {
-  if (!radarContainerRef.value) return
-  const rect = radarContainerRef.value.getBoundingClientRect()
-  const clickX = Math.max(0, Math.min(100, Number((((e.clientX - rect.left) / rect.width) * 100).toFixed(1))))
-  const clickY = Math.max(0, Math.min(100, Number((((e.clientY - rect.top) / rect.height) * 100).toFixed(1))))
+function placeMiniRadarPoint(pt: Point2D, target: 'origin' | 'landing') {
+  const snapped = snapPointToMapBounds(formData.mapId, pt, currentActiveFloor.value)
+  const validPt: Point2D = {
+    x: Number(snapped.x.toFixed(2)),
+    y: Number(snapped.y.toFixed(2))
+  }
 
-  // If shift key or right click, set landing spot; else set origin
-  if (e.shiftKey || e.button === 2) {
-    formData.landingCoords = { x: clickX, y: clickY }
+  if (snapped.wasOutOfBounds) {
+    setBoundsWarning(
+      `⚠️ Clicked outside playable bounds for ${currentMapInfo.value.name} — snapped to nearest playable spot (${validPt.x}%, ${validPt.y}%).`
+    )
   } else {
-    formData.originCoords = { x: clickX, y: clickY }
+    miniRadarBoundsWarning.value = null
+  }
+
+  const nearest = findNearestCallout(formData.mapId, validPt, currentActiveFloor.value)
+
+  if (target === 'landing') {
+    formData.landingCoords = validPt
+    updateFromRadarLanding(false)
+    if (!formData.endLocation.trim() && nearest) {
+      formData.endLocation = nearest.name
+    }
+  } else {
+    formData.originCoords = validPt
+    updateFromRadarOrigin(false)
+    if (!formData.startLocation.trim() && nearest) {
+      formData.startLocation = nearest.name
+    }
   }
 }
 
-function setPlacementPoint(type: 'origin' | 'landing', e: MouseEvent) {
-  if (!radarContainerRef.value) return
-  const rect = radarContainerRef.value.getBoundingClientRect()
-  const clickX = Math.max(0, Math.min(100, Number((((e.clientX - rect.left) / rect.width) * 100).toFixed(1))))
-  const clickY = Math.max(0, Math.min(100, Number((((e.clientY - rect.top) / rect.height) * 100).toFixed(1))))
+function handleMiniRadarClick(e: MouseEvent) {
+  if (!miniRadarSvgRef.value) return
+  const pt = clientToSvgRadarPct(miniRadarSvgRef.value, e.clientX, e.clientY, true)
+  if (!pt) return
+  const target: 'origin' | 'landing' = e.shiftKey ? 'landing' : pickerTarget.value
+  placeMiniRadarPoint(pt, target)
+}
 
-  if (type === 'origin') {
-    formData.originCoords = { x: clickX, y: clickY }
-  } else {
-    formData.landingCoords = { x: clickX, y: clickY }
-  }
+function handleMiniRadarRightClick(e: MouseEvent) {
+  if (!miniRadarSvgRef.value) return
+  const pt = clientToSvgRadarPct(miniRadarSvgRef.value, e.clientX, e.clientY, true)
+  if (!pt) return
+  placeMiniRadarPoint(pt, 'landing')
 }
 
 function startPickFromMap() {
   lineupStore.isAddModalOpen = false
-  mapStore.startPlacement()
+  lineupStore.startPlacingLineup()
 }
 
 function addInstructionStep() {
@@ -464,36 +798,81 @@ function removeInstructionStep(index: number) {
   }
 }
 
-// ── SAVE LINEUP ──────────────────────────────────────────────
-function handleSave() {
+// ── STRICT VALIDATION & SAVE LINEUP ──────────────────────────
+function handleSubmit() {
   if (!formData.title.trim()) {
     alert('Please provide a lineup title.')
     activeTab.value = 'basics'
     return
   }
 
+  // Strictly validate & snap both originCoords and landingCoords inside playable bounds
+  const safeOrigin = snapPointToMapBounds(
+    formData.mapId,
+    formData.originCoords,
+    currentActiveFloor.value
+  )
+  const safeLanding = snapPointToMapBounds(
+    formData.mapId,
+    formData.landingCoords,
+    currentActiveFloor.value
+  )
+
+  formData.originCoords = {
+    x: Number(safeOrigin.x.toFixed(2)),
+    y: Number(safeOrigin.y.toFixed(2))
+  }
+  formData.landingCoords = {
+    x: Number(safeLanding.x.toFixed(2)),
+    y: Number(safeLanding.y.toFixed(2))
+  }
+
+  if (safeOrigin.wasOutOfBounds) {
+    updateFromRadarOrigin(false)
+  }
+  if (safeLanding.wasOutOfBounds) {
+    updateFromRadarLanding(false)
+  }
+
   const tagsArray = formData.tags
     .split(',')
-    .map(t => t.trim())
-    .filter(t => t.length > 0)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0)
 
-  const cleanInstructions = formData.instructions.filter(i => i.trim().length > 0)
+  const cleanInstructions = formData.instructions.filter((i) => i.trim().length > 0)
 
-  // Primary image fallback
-  const primaryImg = formData.aimScreenshot || formData.standingScreenshot || formData.landingScreenshot || formData.imageUrl || undefined
+  const primaryImg =
+    formData.aimScreenshot ||
+    formData.standingScreenshot ||
+    formData.landingScreenshot ||
+    formData.imageUrl ||
+    undefined
 
-  const newLineup = lineupStore.addLineup({
-    title: formData.title,
+  const resolvedStart =
+    formData.startLocation.trim() ||
+    findNearestCallout(formData.mapId, formData.originCoords, currentActiveFloor.value)?.name ||
+    'Custom Spot'
+  const resolvedEnd =
+    formData.endLocation.trim() ||
+    findNearestCallout(formData.mapId, formData.landingCoords, currentActiveFloor.value)?.name ||
+    'Target Spot'
+
+  const payload = {
+    title: formData.title.trim(),
     mapId: formData.mapId,
     grenadeType: formData.grenadeType,
     side: formData.side,
     throwType: formData.throwType,
+    movementType: formData.movementType,
+    movementDetails: formData.movementDetails.trim() || undefined,
+    clickType: formData.clickType,
     tickrate: formData.tickrate,
-    startLocation: formData.startLocation || 'Custom Spot',
-    endLocation: formData.endLocation || 'Target Spot',
+    radarFloor: currentActiveFloor.value,
+    startLocation: resolvedStart,
+    endLocation: resolvedEnd,
     site: formData.site,
-    originCoords: formData.originCoords,
-    landingCoords: formData.landingCoords,
+    originCoords: { ...formData.originCoords },
+    landingCoords: { ...formData.landingCoords },
     curveOffset: formData.curveOffset,
     videoUrl: formData.videoUrl || undefined,
     imageUrl: primaryImg,
@@ -506,14 +885,20 @@ function handleSave() {
     consoleCommand: formData.consoleCommand || undefined,
     difficulty: formData.difficulty,
     author: authStore.currentUser?.username || 'You',
-    tags: tagsArray.length ? tagsArray : ['Custom']
-  })
+    tags: tagsArray.length ? tagsArray : ['Custom'],
+    isPersonalBook: true,
+    isTeamShared: formData.isTeamShared
+  }
 
-  // Tag author info
-  if (authStore.currentUser) {
-    (newLineup as any).userId = authStore.currentUser.id;
-    (newLineup as any).authorName = authStore.currentUser.username;
-    (newLineup as any).isTeamShared = formData.isTeamShared
+  if (lineupStore.isEditMode && lineupStore.editingLineupId) {
+    lineupStore.updateLineup(lineupStore.editingLineupId, payload)
+  } else {
+    const newLineup = lineupStore.addLineup(payload)
+    if (authStore.currentUser) {
+      ;(newLineup as any).userId = authStore.currentUser.id
+      ;(newLineup as any).authorName = authStore.currentUser.username
+      ;(newLineup as any).isTeamShared = formData.isTeamShared
+    }
   }
 
   lineupStore.isAddModalOpen = false
@@ -524,6 +909,9 @@ function resetForm() {
   formData.title = ''
   formData.startLocation = ''
   formData.endLocation = ''
+  formData.movementType = 'stationary'
+  formData.movementDetails = ''
+  formData.clickType = 'left'
   formData.videoUrl = ''
   formData.imageUrl = ''
   formData.aimScreenshot = ''
@@ -535,41 +923,46 @@ function resetForm() {
   formData.consoleCommand = ''
   rawCS2PosInput.value = ''
   parsedPosStatus.value = null
+  miniRadarBoundsWarning.value = null
   formData.tags = ''
   formData.isTeamShared = true
+  pickerTarget.value = 'origin'
   activeTab.value = 'basics'
 }
 </script>
 
 <template>
   <Teleport to="body">
-    <div 
+    <div
       v-if="lineupStore.isAddModalOpen"
       class="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in"
       @click.self="lineupStore.isAddModalOpen = false"
     >
-      <div class="relative w-full max-w-4xl max-h-[92vh] my-auto bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
-        
+      <div
+        class="relative w-full max-w-4xl max-h-[92vh] my-auto bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+      >
         <!-- HEADER -->
-        <div class="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/70">
+        <div
+          class="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/70"
+        >
           <div class="flex items-center gap-3">
             <div class="p-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-2xl shadow">
               <Plus class="w-5 h-5 stroke-[2.5]" />
             </div>
             <div>
               <h2 class="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
-                <span>Create New Grenade Lineup</span>
+                <span>{{ lineupStore.isEditMode ? 'Edit Grenade Lineup' : 'Create New Grenade Lineup' }}</span>
                 <span class="px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-mono rounded-full">
-                  CS2 Ready
+                  Strict In-Bounds
                 </span>
               </h2>
               <p class="text-xs text-slate-400">
-                Directly paste in-game screenshots & <code class="text-amber-300 font-mono">setpos / getpos</code> coordinates
+                Directly paste in-game screenshots &amp; <code class="text-amber-300 font-mono">setpos / getpos</code> coordinates
               </p>
             </div>
           </div>
 
-          <button 
+          <button
             @click="lineupStore.isAddModalOpen = false"
             class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
           >
@@ -578,12 +971,16 @@ function resetForm() {
         </div>
 
         <!-- NAVIGATION TABS -->
-        <div class="flex items-center gap-1.5 px-5 py-2.5 bg-slate-950 border-b border-slate-800 overflow-x-auto scrollbar-none text-xs font-bold">
+        <div
+          class="flex items-center gap-1.5 px-5 py-2.5 bg-slate-950 border-b border-slate-800 overflow-x-auto scrollbar-none text-xs font-bold"
+        >
           <button
             @click="activeTab = 'basics'"
             :class="[
               'px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0',
-              activeTab === 'basics' ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              activeTab === 'basics'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             ]"
           >
             <Layers class="w-3.5 h-3.5" />
@@ -594,11 +991,13 @@ function resetForm() {
             @click="activeTab = 'position'"
             :class="[
               'px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0',
-              activeTab === 'position' ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              activeTab === 'position'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             ]"
           >
             <Terminal class="w-3.5 h-3.5" />
-            <span>2. Position & Console Pos</span>
+            <span>2. Position &amp; Console Pos</span>
             <span v-if="formData.cs2Pos" class="w-2 h-2 rounded-full bg-emerald-400"></span>
           </button>
 
@@ -606,34 +1005,41 @@ function resetForm() {
             @click="activeTab = 'screenshots'"
             :class="[
               'px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0',
-              activeTab === 'screenshots' ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              activeTab === 'screenshots'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             ]"
           >
             <ImageIcon class="w-3.5 h-3.5" />
             <span>3. In-Game Screenshots</span>
-            <span v-if="formData.aimScreenshot || formData.standingScreenshot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span
+              v-if="formData.aimScreenshot || formData.standingScreenshot"
+              class="w-2 h-2 rounded-full bg-emerald-400"
+            ></span>
           </button>
 
           <button
             @click="activeTab = 'guide'"
             :class="[
               'px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0',
-              activeTab === 'guide' ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              activeTab === 'guide'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             ]"
           >
             <FileText class="w-3.5 h-3.5" />
-            <span>4. Instructions & Notes</span>
+            <span>4. Instructions &amp; Notes</span>
           </button>
         </div>
 
         <!-- BODY -->
         <div class="flex-grow overflow-y-auto p-5 sm:p-6 text-xs text-slate-200">
-          
           <!-- TAB 1: BASICS & ESSENTIALS -->
           <div v-show="activeTab === 'basics'" class="flex flex-col gap-4 animate-fade-in">
-            
             <!-- SMART QUICK-TYPE & 1-CLICK POPULATE BOX -->
-            <div class="p-3.5 bg-gradient-to-r from-amber-500/15 via-slate-950 to-slate-950 border-2 border-amber-500/40 rounded-2xl flex flex-col gap-2 shadow-lg">
+            <div
+              class="p-3.5 bg-gradient-to-r from-amber-500/15 via-slate-950 to-slate-950 border-2 border-amber-500/40 rounded-2xl flex flex-col gap-2 shadow-lg"
+            >
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
                   <div class="p-1.5 bg-amber-500 text-slate-950 rounded-lg font-black">
@@ -647,7 +1053,7 @@ function resetForm() {
               </div>
 
               <div class="flex items-center gap-2">
-                <input 
+                <input
                   v-model="quickFillText"
                   @input="handleQuickFill(quickFillText)"
                   placeholder="Type anything (e.g. 'Mirage Window Smoke Jumpthrow from T Spawn' or paste setpos)..."
@@ -667,17 +1073,17 @@ function resetForm() {
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div class="md:col-span-2 flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300">Lineup Title *</label>
-                <input 
-                  v-model="formData.title" 
-                  type="text" 
-                  placeholder="e.g. Window Smoke from T Spawn" 
+                <input
+                  v-model="formData.title"
+                  type="text"
+                  placeholder="e.g. Window Smoke from T Spawn"
                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white text-xs focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div class="flex flex-col gap-1.5">
-                <label class="font-bold text-slate-300">Map</label>
-                <select 
+                <label class="font-bold text-slate-300">Map (Syncs Radar)</label>
+                <select
                   v-model="formData.mapId"
                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-bold focus:outline-none focus:border-amber-500"
                 >
@@ -692,7 +1098,7 @@ function resetForm() {
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div class="flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300">Grenade Type</label>
-                <select 
+                <select
                   v-model="formData.grenadeType"
                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-amber-500 uppercase font-mono font-bold"
                 >
@@ -706,7 +1112,7 @@ function resetForm() {
 
               <div class="flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300">Team Side</label>
-                <select 
+                <select
                   v-model="formData.side"
                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-amber-500 uppercase font-bold"
                 >
@@ -718,13 +1124,15 @@ function resetForm() {
 
               <div class="flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300">Throw Technique</label>
-                <select 
+                <select
                   v-model="formData.throwType"
                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-amber-500 uppercase font-bold"
                 >
                   <option value="standing">Standing (Left-Click)</option>
                   <option value="jumpthrow">Jumpthrow</option>
                   <option value="runthrow">Runthrow</option>
+                  <option value="run_jumpthrow">Run + Jumpthrow</option>
+                  <option value="walkthrow">Walkthrow</option>
                   <option value="crouch_jumpthrow">Crouch + Jumpthrow</option>
                   <option value="left_right_click">Left + Right Click</option>
                   <option value="w_jumpthrow">W-Key Jumpthrow</option>
@@ -732,31 +1140,70 @@ function resetForm() {
               </div>
             </div>
 
+            <!-- MOVEMENT TYPE, CLICK TYPE & MOVEMENT DETAILS -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="flex flex-col gap-1.5">
+                <label class="font-bold text-slate-300">Movement Required</label>
+                <select
+                  v-model="formData.movementType"
+                  class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+                >
+                  <option value="stationary">Stationary (Stand Still)</option>
+                  <option value="running">Running (W)</option>
+                  <option value="walking">Walking (Shift + W)</option>
+                  <option value="crouch">Crouched (Ctrl)</option>
+                  <option value="crouch_walk">Crouch-Walk</option>
+                </select>
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <label class="font-bold text-slate-300">Mouse Click</label>
+                <select
+                  v-model="formData.clickType"
+                  class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+                >
+                  <option value="left">Left-Click (M1)</option>
+                  <option value="right">Right-Click (M2)</option>
+                  <option value="both">Left + Right Click (M1+M2)</option>
+                </select>
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <label class="font-bold text-slate-300">Movement Details</label>
+                <input
+                  v-model="formData.movementDetails"
+                  type="text"
+                  placeholder="e.g. Hold D + Jumpthrow"
+                  class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+
             <!-- LOCATIONS & BOMB SITE -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div class="flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300">Standing Spot Name</label>
-                <input 
-                  v-model="formData.startLocation" 
-                  type="text" 
-                  placeholder="e.g. T Roof / Trash Can" 
+                <input
+                  v-model="formData.startLocation"
+                  type="text"
+                  placeholder="e.g. T Roof / Trash Can"
                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div class="flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300">Landing Target Name</label>
-                <input 
-                  v-model="formData.endLocation" 
-                  type="text" 
-                  placeholder="e.g. Snipers Nest / Window" 
+                <input
+                  v-model="formData.endLocation"
+                  type="text"
+                  placeholder="e.g. Snipers Nest / Window"
                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div class="flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300">Target Bomb Site</label>
-                <select 
+                <select
                   v-model="formData.site"
                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
                 >
@@ -772,9 +1219,10 @@ function resetForm() {
 
           <!-- TAB 2: POSITION & CS2 CONSOLE POS -->
           <div v-show="activeTab === 'position'" class="flex flex-col gap-5 animate-fade-in">
-            
             <!-- CS2 CONSOLE POS DIRECT PARSER -->
-            <div class="p-4 bg-slate-950 border-2 border-amber-500/40 rounded-2xl flex flex-col gap-3 shadow-xl">
+            <div
+              class="p-4 bg-slate-950 border-2 border-amber-500/40 rounded-2xl flex flex-col gap-3 shadow-xl"
+            >
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
                   <Terminal class="w-4 h-4 text-amber-400" />
@@ -793,11 +1241,17 @@ function resetForm() {
               </div>
 
               <p class="text-[11px] text-slate-400 leading-relaxed">
-                In CS2 practice, open console (<kbd class="px-1 bg-slate-800 border border-slate-700 rounded text-amber-300">~</kbd>), type <code class="text-amber-400 font-mono">getpos</code> or copy your <code class="text-amber-400 font-mono">setpos</code> string, and paste it below. It will <strong>automatically map the radar coordinates and angles</strong> for {{ currentMapInfo.name }}!
+                In CS2 practice, open console (<kbd
+                  class="px-1 bg-slate-800 border border-slate-700 rounded text-amber-300"
+                  >~</kbd
+                >), type <code class="text-amber-400 font-mono">getpos</code> or copy your
+                <code class="text-amber-400 font-mono">setpos</code> string, and paste it below.
+                It automatically maps &amp; validates coordinates inside
+                <strong>{{ currentMapInfo.name }}</strong> playable bounds!
               </p>
 
               <div class="relative">
-                <input 
+                <input
                   v-model="rawCS2PosInput"
                   @input="processCS2PosInput(rawCS2PosInput)"
                   type="text"
@@ -814,85 +1268,233 @@ function resetForm() {
               </div>
 
               <!-- PARSED STATUS FEEDBACK -->
-              <div 
-                v-if="parsedPosStatus" 
+              <div
+                v-if="parsedPosStatus"
                 :class="[
                   'p-2.5 rounded-xl border flex flex-col gap-1 text-[11px]',
-                  parsedPosStatus.success ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+                  parsedPosStatus.success
+                    ? parsedPosStatus.warning
+                      ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
+                      : 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                    : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
                 ]"
               >
                 <div class="flex items-center gap-1.5 font-bold">
-                  <Check v-if="parsedPosStatus.success" class="w-3.5 h-3.5 text-emerald-400 stroke-[3]" />
+                  <AlertTriangle
+                    v-if="parsedPosStatus.success && parsedPosStatus.warning"
+                    class="w-3.5 h-3.5 text-amber-400"
+                  />
+                  <Check
+                    v-else-if="parsedPosStatus.success"
+                    class="w-3.5 h-3.5 text-emerald-400 stroke-[3]"
+                  />
                   <X v-else class="w-3.5 h-3.5 text-rose-400" />
                   <span>{{ parsedPosStatus.message }}</span>
                 </div>
-                <div v-if="parsedPosStatus.details" class="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[10px] text-slate-300 pt-1 border-t border-slate-800">
+                <div v-if="parsedPosStatus.warning" class="text-[10px] text-amber-300">
+                  {{ parsedPosStatus.warning }}
+                </div>
+                <div
+                  v-if="parsedPosStatus.details"
+                  class="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[10px] text-slate-300 pt-1 border-t border-slate-800"
+                >
                   <span>X: <strong>{{ parsedPosStatus.details.posX.toFixed(1) }}</strong></span>
                   <span>Y: <strong>{{ parsedPosStatus.details.posY.toFixed(1) }}</strong></span>
                   <span>Z: <strong>{{ parsedPosStatus.details.posZ.toFixed(1) }}</strong></span>
-                  <span>Radar: <strong>{{ parsedPosStatus.details.radarX }}%, {{ parsedPosStatus.details.radarY }}%</strong></span>
+                  <span
+                    >Radar:
+                    <strong
+                      >{{ parsedPosStatus.details.radarX }}%,
+                      {{ parsedPosStatus.details.radarY }}%</strong
+                    ></span
+                  >
                 </div>
               </div>
             </div>
 
-            <!-- INTERACTIVE MINI-RADAR PLACEMENT & COORDINATES -->
+            <!-- INTERACTIVE 1:1 RADAR COORDINATE PICKER & MANUAL COORDINATES -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              
-              <!-- LEFT: INTERACTIVE RADAR VIEW -->
-              <div class="flex flex-col gap-2">
-                <div class="flex items-center justify-between">
+              <!-- LEFT: CRISP 1:1 ASPECT-SQUARE VECTOR RADAR COORDINATE PICKER -->
+              <div class="flex flex-col gap-2.5">
+                <div class="flex flex-wrap items-center justify-between gap-2">
                   <span class="font-bold text-slate-300 text-xs flex items-center gap-1.5">
                     <Crosshair class="w-3.5 h-3.5 text-amber-400" />
-                    <span>Interactive Radar Preview ({{ currentMapInfo.name }})</span>
+                    <span>1:1 Radar Picker ({{ currentMapInfo.name }})</span>
                   </span>
-                  <span class="text-[10px] text-slate-400">Click to set Origin • Shift+Click for Landing</span>
+
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      @click="showPickerCallouts = !showPickerCallouts"
+                      :class="[
+                        'px-2 py-0.5 rounded-md text-[10px] font-bold border transition-colors cursor-pointer flex items-center gap-1',
+                        showPickerCallouts
+                          ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                      ]"
+                    >
+                      <Tag class="w-2.5 h-2.5" />
+                      <span>Callouts</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div 
-                  ref="radarContainerRef"
-                  @click="handleMiniRadarClick"
-                  class="relative aspect-square w-full bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden cursor-crosshair select-none shadow-inner"
-                >
-                  <!-- RADAR BACKGROUND -->
-                  <img 
-                    :src="currentMapInfo.radarImage" 
-                    :alt="currentMapInfo.name"
-                    class="w-full h-full object-cover opacity-80 pointer-events-none"
-                  />
+                <!-- PICKING MODE TOGGLE BUTTONS: [Picking: Origin Spot] / [Picking: Landing Target] -->
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="grid grid-cols-2 gap-1.5 flex-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <button
+                      type="button"
+                      @click="pickerTarget = 'origin'"
+                      :class="[
+                        'px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5',
+                        pickerTarget === 'origin'
+                          ? 'bg-amber-500 text-slate-950 font-black shadow'
+                          : 'text-slate-400 hover:text-white'
+                      ]"
+                    >
+                      <MapPin class="w-3 h-3" />
+                      <span>Picking: Origin Spot</span>
+                    </button>
+                    <button
+                      type="button"
+                      @click="pickerTarget = 'landing'"
+                      :class="[
+                        'px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5',
+                        pickerTarget === 'landing'
+                          ? 'bg-emerald-500 text-slate-950 font-black shadow'
+                          : 'text-slate-400 hover:text-white'
+                      ]"
+                    >
+                      <Crosshair class="w-3 h-3" />
+                      <span>Picking: Landing Target</span>
+                    </button>
+                  </div>
 
-                  <!-- TRAJECTORY LINE -->
-                  <svg class="absolute inset-0 w-full h-full pointer-events-none">
-                    <line 
-                      :x1="`${formData.originCoords.x}%`" 
-                      :y1="`${formData.originCoords.y}%`" 
-                      :x2="`${formData.landingCoords.x}%`" 
-                      :y2="`${formData.landingCoords.y}%`" 
-                      stroke="#f59e0b" 
-                      stroke-width="2" 
-                      stroke-dasharray="4 3" 
+                  <!-- Multi-floor toggle if Nuke/Vertigo -->
+                  <div
+                    v-if="currentMapInfo.radarFloors && currentMapInfo.radarFloors.length > 0"
+                    class="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800"
+                  >
+                    <button
+                      v-for="floor in currentMapInfo.radarFloors"
+                      :key="floor.id"
+                      type="button"
+                      @click="lineupStore.activeFloorId = floor.id"
+                      :class="[
+                        'px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer',
+                        lineupStore.activeFloorId === floor.id
+                          ? 'bg-amber-500 text-slate-950 font-black'
+                          : 'text-slate-400 hover:text-white'
+                      ]"
+                    >
+                      {{ floor.id === 'upper' ? 'Upper' : 'Lower' }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 1:1 ASPECT-SQUARE VECTOR RADAR -->
+                <div
+                  class="relative aspect-square w-full bg-[#070a0f] border border-slate-800 rounded-2xl overflow-hidden cursor-crosshair select-none shadow-inner"
+                >
+                  <svg
+                    ref="miniRadarSvgRef"
+                    :viewBox="currentMapInfo.viewBox || '0 0 1000 1000'"
+                    preserveAspectRatio="none"
+                    class="w-full h-full aspect-square block"
+                    @click="handleMiniRadarClick"
+                    @contextmenu.prevent="handleMiniRadarRightClick"
+                    @mousemove="handleMiniRadarMouseMove"
+                    @mouseleave="miniRadarCursor = null"
+                  >
+                    <VectorMapBlueprint
+                      :map="currentMapInfo"
+                      :show-callouts="showPickerCallouts"
                     />
+
+                    <!-- Ballistic Arc Preview -->
+                    <path
+                      :d="pickerTrajectory.pathData"
+                      fill="none"
+                      stroke="#f59e0b"
+                      stroke-width="3.2"
+                      stroke-dasharray="8 6"
+                      stroke-linecap="round"
+                    />
+
+                    <!-- Origin Pin (O - Amber) -->
+                    <g
+                      :transform="`translate(${renderedOriginCoords.x * 10}, ${renderedOriginCoords.y * 10})`"
+                    >
+                      <circle r="18" fill="#f59e0b" fill-opacity="0.22" />
+                      <circle r="12" fill="#f59e0b" stroke="#090d16" stroke-width="3" />
+                      <text
+                        x="0"
+                        y="4"
+                        text-anchor="middle"
+                        fill="#090d16"
+                        font-size="11"
+                        font-weight="900"
+                      >
+                        O
+                      </text>
+                    </g>
+
+                    <!-- Landing Pin (X - Emerald) -->
+                    <g
+                      :transform="`translate(${renderedLandingCoords.x * 10}, ${renderedLandingCoords.y * 10})`"
+                    >
+                      <circle r="20" fill="#10b981" fill-opacity="0.22" />
+                      <circle r="13" fill="#10b981" stroke="#090d16" stroke-width="3" />
+                      <line x1="-5" y1="-5" x2="5" y2="5" stroke="#090d16" stroke-width="2.5" />
+                      <line x1="5" y1="-5" x2="-5" y2="5" stroke="#090d16" stroke-width="2.5" />
+                    </g>
                   </svg>
 
-                  <!-- ORIGIN PIN (ORANGE) -->
-                  <div 
-                    class="absolute -translate-x-1/2 -translate-y-1/2 p-1 bg-amber-500 text-slate-950 rounded-full shadow-lg ring-2 ring-white cursor-pointer"
-                    :style="{ left: `${formData.originCoords.x}%`, top: `${formData.originCoords.y}%` }"
-                    title="Standing Origin"
+                  <!-- Live Cursor Bounds Status Pill -->
+                  <div
+                    v-if="miniRadarCursor"
+                    class="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 px-2.5 py-1 rounded-xl bg-slate-950/90 backdrop-blur-md border border-slate-800 text-[10px] font-mono pointer-events-none"
                   >
-                    <MapPin class="w-3.5 h-3.5 fill-current" />
-                  </div>
-
-                  <!-- LANDING PIN (RED) -->
-                  <div 
-                    class="absolute -translate-x-1/2 -translate-y-1/2 p-1 bg-rose-500 text-white rounded-full shadow-lg ring-2 ring-white cursor-pointer animate-pulse"
-                    :style="{ left: `${formData.landingCoords.x}%`, top: `${formData.landingCoords.y}%` }"
-                    title="Landing Target"
-                  >
-                    <Crosshair class="w-3.5 h-3.5 stroke-[3]" />
+                    <span class="text-slate-300">
+                      {{ miniRadarCursor.x.toFixed(1) }}%, {{ miniRadarCursor.y.toFixed(1) }}%
+                      <span v-if="miniCursorCallout" class="text-sky-300 font-sans font-bold ml-1">
+                        • {{ miniCursorCallout.name }}
+                      </span>
+                    </span>
+                    <span
+                      :class="[
+                        'px-1.5 py-0.5 rounded font-sans font-extrabold uppercase flex items-center gap-1',
+                        isMiniCursorInBounds
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-rose-500/25 text-rose-300'
+                      ]"
+                    >
+                      <ShieldCheck v-if="isMiniCursorInBounds" class="w-3 h-3" />
+                      <AlertTriangle v-else class="w-3 h-3" />
+                      <span>{{ isMiniCursorInBounds ? 'In Bounds' : 'Out of Bounds' }}</span>
+                    </span>
                   </div>
                 </div>
 
-                <button 
+                <!-- OUT-OF-BOUNDS SNAP WARNING PILL -->
+                <div
+                  v-if="miniRadarBoundsWarning"
+                  class="p-2.5 rounded-xl bg-rose-950/70 border border-rose-500/50 text-rose-200 text-[11px] font-bold flex items-center justify-between gap-2"
+                >
+                  <div class="flex items-center gap-1.5">
+                    <AlertTriangle class="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>{{ miniRadarBoundsWarning }}</span>
+                  </div>
+                  <button
+                    type="button"
+                    @click="miniRadarBoundsWarning = null"
+                    class="text-rose-300 hover:text-white cursor-pointer"
+                  >
+                    <X class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <button
                   type="button"
                   @click="startPickFromMap"
                   class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs rounded-xl border border-slate-700 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
@@ -904,22 +1506,27 @@ function resetForm() {
 
               <!-- RIGHT: COORDINATES & CONSOLE COMMAND -->
               <div class="flex flex-col gap-3">
-                
                 <!-- COORD MODE SWITCHER -->
-                <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-3 shadow-md">
+                <div
+                  class="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-3 shadow-md"
+                >
                   <div class="flex items-center justify-between">
                     <span class="font-bold text-slate-200 text-xs flex items-center gap-1.5">
                       <Terminal class="w-3.5 h-3.5 text-amber-400" />
                       <span>Type Coordinate Mode:</span>
                     </span>
 
-                    <div class="flex items-center gap-1 p-0.5 bg-slate-900 rounded-lg border border-slate-800 text-[10px] font-bold">
+                    <div
+                      class="flex items-center gap-1 p-0.5 bg-slate-900 rounded-lg border border-slate-800 text-[10px] font-bold"
+                    >
                       <button
                         type="button"
                         @click="coordInputMode = 'world'"
                         :class="[
                           'px-2 py-1 rounded transition-colors cursor-pointer',
-                          coordInputMode === 'world' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                          coordInputMode === 'world'
+                            ? 'bg-amber-500 text-slate-950 font-black'
+                            : 'text-slate-400 hover:text-white'
                         ]"
                       >
                         World Units (X, Y, Z)
@@ -929,7 +1536,9 @@ function resetForm() {
                         @click="coordInputMode = 'radar'"
                         :class="[
                           'px-2 py-1 rounded transition-colors cursor-pointer',
-                          coordInputMode === 'radar' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                          coordInputMode === 'radar'
+                            ? 'bg-amber-500 text-slate-950 font-black'
+                            : 'text-slate-400 hover:text-white'
                         ]"
                       >
                         Radar % (0-100)
@@ -940,57 +1549,137 @@ function resetForm() {
                   <!-- WORLD COORDINATES INPUT (SOURCE 2 UNITS) -->
                   <div v-if="coordInputMode === 'world'" class="flex flex-col gap-3 animate-fade-in">
                     <!-- STANDING WORLD COORDS -->
-                    <div class="flex flex-col gap-1.5 p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
+                    <div
+                      class="flex flex-col gap-1.5 p-2.5 bg-slate-900/80 rounded-xl border border-slate-800"
+                    >
                       <div class="flex items-center justify-between text-[11px] font-bold text-amber-400">
                         <span>📍 Standing Position (World X, Y, Z):</span>
-                        <span class="text-[10px] font-mono text-slate-400">Radar: {{ formData.originCoords.x }}%, {{ formData.originCoords.y }}%</span>
+                        <span
+                          :class="[
+                            'text-[10px] font-mono',
+                            isOriginInBounds ? 'text-emerald-400' : 'text-rose-400'
+                          ]"
+                        >
+                          {{ formData.originCoords.x }}%, {{ formData.originCoords.y }}%
+                          {{ isOriginInBounds ? '✓' : '⚠️ Will Snap' }}
+                        </span>
                       </div>
                       <div class="grid grid-cols-3 gap-2">
                         <div>
                           <label class="text-[9px] text-slate-400 font-bold block">Pos X:</label>
-                          <input v-model.number="worldCoords.originX" @input="updateFromWorldOrigin" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-amber-300 font-mono" />
+                          <input
+                            v-model.number="worldCoords.originX"
+                            @input="updateFromWorldOrigin(false)"
+                            @change="updateFromWorldOrigin(true)"
+                            type="number"
+                            step="1"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-amber-300 font-mono"
+                          />
                         </div>
                         <div>
                           <label class="text-[9px] text-slate-400 font-bold block">Pos Y:</label>
-                          <input v-model.number="worldCoords.originY" @input="updateFromWorldOrigin" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-amber-300 font-mono" />
+                          <input
+                            v-model.number="worldCoords.originY"
+                            @input="updateFromWorldOrigin(false)"
+                            @change="updateFromWorldOrigin(true)"
+                            type="number"
+                            step="1"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-amber-300 font-mono"
+                          />
                         </div>
                         <div>
                           <label class="text-[9px] text-slate-400 font-bold block">Pos Z:</label>
-                          <input v-model.number="worldCoords.originZ" @input="updateFromWorldOrigin" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-amber-300 font-mono" />
+                          <input
+                            v-model.number="worldCoords.originZ"
+                            @input="updateFromWorldOrigin(false)"
+                            @change="updateFromWorldOrigin(true)"
+                            type="number"
+                            step="1"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-amber-300 font-mono"
+                          />
                         </div>
                       </div>
 
                       <!-- ANGLES -->
                       <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
                         <div>
-                          <label class="text-[9px] text-slate-400 font-bold block">Pitch Angle (°):</label>
-                          <input v-model.number="worldCoords.pitch" @input="updateFromWorldOrigin" type="number" step="0.1" placeholder="e.g. -12.4" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-emerald-300 font-mono" />
+                          <label class="text-[9px] text-slate-400 font-bold block"
+                            >Pitch Angle (°):</label
+                          >
+                          <input
+                            v-model.number="worldCoords.pitch"
+                            @input="updateFromWorldOrigin(false)"
+                            type="number"
+                            step="0.1"
+                            placeholder="e.g. -12.4"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-emerald-300 font-mono"
+                          />
                         </div>
                         <div>
-                          <label class="text-[9px] text-slate-400 font-bold block">Yaw Angle (°):</label>
-                          <input v-model.number="worldCoords.yaw" @input="updateFromWorldOrigin" type="number" step="0.1" placeholder="e.g. 94.2" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-emerald-300 font-mono" />
+                          <label class="text-[9px] text-slate-400 font-bold block"
+                            >Yaw Angle (°):</label
+                          >
+                          <input
+                            v-model.number="worldCoords.yaw"
+                            @input="updateFromWorldOrigin(false)"
+                            type="number"
+                            step="0.1"
+                            placeholder="e.g. 94.2"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-emerald-300 font-mono"
+                          />
                         </div>
                       </div>
                     </div>
 
                     <!-- LANDING WORLD COORDS -->
-                    <div class="flex flex-col gap-1.5 p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
-                      <div class="flex items-center justify-between text-[11px] font-bold text-rose-400">
+                    <div
+                      class="flex flex-col gap-1.5 p-2.5 bg-slate-900/80 rounded-xl border border-slate-800"
+                    >
+                      <div class="flex items-center justify-between text-[11px] font-bold text-emerald-400">
                         <span>🎯 Landing Target (World X, Y, Z):</span>
-                        <span class="text-[10px] font-mono text-slate-400">Radar: {{ formData.landingCoords.x }}%, {{ formData.landingCoords.y }}%</span>
+                        <span
+                          :class="[
+                            'text-[10px] font-mono',
+                            isLandingInBounds ? 'text-emerald-400' : 'text-rose-400'
+                          ]"
+                        >
+                          {{ formData.landingCoords.x }}%, {{ formData.landingCoords.y }}%
+                          {{ isLandingInBounds ? '✓' : '⚠️ Will Snap' }}
+                        </span>
                       </div>
                       <div class="grid grid-cols-3 gap-2">
                         <div>
                           <label class="text-[9px] text-slate-400 font-bold block">Target X:</label>
-                          <input v-model.number="worldCoords.landingX" @input="updateFromWorldLanding" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-rose-300 font-mono" />
+                          <input
+                            v-model.number="worldCoords.landingX"
+                            @input="updateFromWorldLanding(false)"
+                            @change="updateFromWorldLanding(true)"
+                            type="number"
+                            step="1"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-emerald-300 font-mono"
+                          />
                         </div>
                         <div>
                           <label class="text-[9px] text-slate-400 font-bold block">Target Y:</label>
-                          <input v-model.number="worldCoords.landingY" @input="updateFromWorldLanding" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-rose-300 font-mono" />
+                          <input
+                            v-model.number="worldCoords.landingY"
+                            @input="updateFromWorldLanding(false)"
+                            @change="updateFromWorldLanding(true)"
+                            type="number"
+                            step="1"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-emerald-300 font-mono"
+                          />
                         </div>
                         <div>
                           <label class="text-[9px] text-slate-400 font-bold block">Target Z:</label>
-                          <input v-model.number="worldCoords.landingZ" @input="updateFromWorldLanding" type="number" step="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-rose-300 font-mono" />
+                          <input
+                            v-model.number="worldCoords.landingZ"
+                            @input="updateFromWorldLanding(false)"
+                            @change="updateFromWorldLanding(true)"
+                            type="number"
+                            step="1"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-emerald-300 font-mono"
+                          />
                         </div>
                       </div>
                     </div>
@@ -1000,18 +1689,62 @@ function resetForm() {
                   <div v-else class="flex flex-col gap-3 animate-fade-in">
                     <div class="grid grid-cols-2 gap-3">
                       <div class="flex flex-col gap-1 p-2 bg-slate-900 rounded-xl border border-slate-800">
-                        <span class="text-amber-400 font-bold text-[11px]">📍 Standing Spot (%)</span>
+                        <div class="flex items-center justify-between">
+                          <span class="text-amber-400 font-bold text-[11px]">📍 Standing (%)</span>
+                          <span
+                            class="text-[9px] font-bold"
+                            :class="isOriginInBounds ? 'text-emerald-400' : 'text-rose-400'"
+                          >
+                            {{ isOriginInBounds ? '✓' : 'Snap' }}
+                          </span>
+                        </div>
                         <div class="flex items-center gap-1.5">
-                          <input v-model.number="formData.originCoords.x" @input="updateFromRadarOrigin" type="number" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono" />
-                          <input v-model.number="formData.originCoords.y" @input="updateFromRadarOrigin" type="number" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono" />
+                          <input
+                            v-model.number="formData.originCoords.x"
+                            @input="updateFromRadarOrigin(false)"
+                            @change="updateFromRadarOrigin(true)"
+                            type="number"
+                            step="0.1"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono"
+                          />
+                          <input
+                            v-model.number="formData.originCoords.y"
+                            @input="updateFromRadarOrigin(false)"
+                            @change="updateFromRadarOrigin(true)"
+                            type="number"
+                            step="0.1"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono"
+                          />
                         </div>
                       </div>
 
                       <div class="flex flex-col gap-1 p-2 bg-slate-900 rounded-xl border border-slate-800">
-                        <span class="text-rose-400 font-bold text-[11px]">🎯 Landing Spot (%)</span>
+                        <div class="flex items-center justify-between">
+                          <span class="text-emerald-400 font-bold text-[11px]">🎯 Landing (%)</span>
+                          <span
+                            class="text-[9px] font-bold"
+                            :class="isLandingInBounds ? 'text-emerald-400' : 'text-rose-400'"
+                          >
+                            {{ isLandingInBounds ? '✓' : 'Snap' }}
+                          </span>
+                        </div>
                         <div class="flex items-center gap-1.5">
-                          <input v-model.number="formData.landingCoords.x" @input="updateFromRadarLanding" type="number" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono" />
-                          <input v-model.number="formData.landingCoords.y" @input="updateFromRadarLanding" type="number" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono" />
+                          <input
+                            v-model.number="formData.landingCoords.x"
+                            @input="updateFromRadarLanding(false)"
+                            @change="updateFromRadarLanding(true)"
+                            type="number"
+                            step="0.1"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono"
+                          />
+                          <input
+                            v-model.number="formData.landingCoords.y"
+                            @input="updateFromRadarLanding(false)"
+                            @change="updateFromRadarLanding(true)"
+                            type="number"
+                            step="0.1"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono"
+                          />
                         </div>
                       </div>
                     </div>
@@ -1022,37 +1755,37 @@ function resetForm() {
                 <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-2">
                   <label class="font-bold text-slate-300 text-xs flex items-center gap-1.5">
                     <Terminal class="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Practice Teleport & Aim Command</span>
+                    <span>Practice Teleport &amp; Aim Command</span>
                   </label>
-                  <input 
-                    v-model="formData.consoleCommand" 
-                    type="text" 
-                    placeholder="setpos 1290.4 -430.1 -160.0; setang -12.4 94.2 0.0" 
+                  <input
+                    v-model="formData.consoleCommand"
+                    type="text"
+                    placeholder="setpos 1290.4 -430.1 -160.0; setang -12.4 94.2 0.0"
                     class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-emerald-300 font-mono text-xs focus:outline-none focus:border-amber-500"
                   />
-                  <span class="text-[10px] text-slate-500">Auto-generated from your parsed position or type custom CS2 binds.</span>
+                  <span class="text-[10px] text-slate-500">
+                    Auto-generated from your parsed/snapped position or type custom CS2 binds.
+                  </span>
                 </div>
               </div>
-
             </div>
           </div>
 
           <!-- TAB 3: IN-GAME SCREENSHOTS -->
           <div v-show="activeTab === 'screenshots'" class="flex flex-col gap-5 animate-fade-in">
-            
             <!-- SNIP NOTIFICATION BANNER -->
             <Transition name="fade">
-              <div 
-                v-if="snapNotification" 
+              <div
+                v-if="snapNotification"
                 class="p-3 bg-amber-500/20 border-2 border-amber-400 rounded-2xl flex items-center justify-between gap-3 text-xs text-amber-200 shadow-lg"
               >
                 <div class="flex items-center gap-2">
                   <Scissors class="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
                   <span class="font-bold">{{ snapNotification }}</span>
                 </div>
-                <button 
-                  type="button" 
-                  @click="snapNotification = null" 
+                <button
+                  type="button"
+                  @click="snapNotification = null"
                   class="text-slate-400 hover:text-white p-1 cursor-pointer"
                 >
                   <X class="w-3.5 h-3.5" />
@@ -1060,33 +1793,49 @@ function resetForm() {
               </div>
             </Transition>
 
-            <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 text-xs text-amber-300">
+            <div
+              class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 text-xs text-amber-300"
+            >
               <div class="flex items-center gap-2">
                 <Sparkles class="w-4 h-4 text-amber-400 shrink-0" />
                 <span>
-                  <strong>Tip:</strong> Click <strong>+ Snap</strong> to launch Windows Snipping Tool (<kbd class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]">Win+Shift+S</kbd>), then press <kbd class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]">Ctrl + V</kbd> to paste!
+                  <strong>Tip:</strong> Click <strong>+ Snap</strong> to launch Windows Snipping
+                  Tool (<kbd
+                    class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]"
+                    >Win+Shift+S</kbd
+                  >), then press
+                  <kbd
+                    class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]"
+                    >Ctrl + V</kbd
+                  >
+                  to paste!
                 </span>
               </div>
             </div>
 
             <!-- 3 SLOTS: AIM, STANDING, LANDING -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              
               <!-- SLOT 1: AIM / CROSSHAIR ALIGNMENT -->
-              <div 
-                @dragover.prevent 
+              <div
+                @dragover.prevent
                 @drop="handleDrop($event, 'aim')"
                 class="flex flex-col gap-2 p-3.5 bg-slate-950 border-2 border-dashed rounded-2xl transition-all"
-                :class="formData.aimScreenshot ? 'border-emerald-500/50 bg-emerald-950/10' : 'border-slate-800 hover:border-amber-500/50'"
+                :class="
+                  formData.aimScreenshot
+                    ? 'border-emerald-500/50 bg-emerald-950/10'
+                    : 'border-slate-800 hover:border-amber-500/50'
+                "
               >
                 <div class="flex items-center justify-between">
                   <span class="font-bold text-slate-200 text-xs flex items-center gap-1.5">
                     <Crosshair class="w-3.5 h-3.5 text-amber-400" />
                     <span>Crosshair / Aim Spot *</span>
                   </span>
-                  
+
                   <div class="flex items-center gap-1.5">
-                    <span v-if="formData.aimScreenshot" class="text-[10px] text-emerald-400 font-bold">Uploaded</span>
+                    <span v-if="formData.aimScreenshot" class="text-[10px] text-emerald-400 font-bold"
+                      >Uploaded</span
+                    >
                     <button
                       type="button"
                       @click="handleDirectScreenSnap('aim')"
@@ -1101,19 +1850,29 @@ function resetForm() {
                 </div>
 
                 <!-- PREVIEW OR DROPZONE -->
-                <div v-if="formData.aimScreenshot" class="relative aspect-video w-full rounded-xl overflow-hidden group border border-slate-800">
-                  <img :src="formData.aimScreenshot" loading="lazy" decoding="async" class="w-full h-full object-cover" />
-                  <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <button 
-                      type="button" 
-                      @click="selectedImagePreview = formData.aimScreenshot" 
+                <div
+                  v-if="formData.aimScreenshot"
+                  class="relative aspect-video w-full rounded-xl overflow-hidden group border border-slate-800"
+                >
+                  <img
+                    :src="formData.aimScreenshot"
+                    loading="lazy"
+                    decoding="async"
+                    class="w-full h-full object-cover"
+                  />
+                  <div
+                    class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2"
+                  >
+                    <button
+                      type="button"
+                      @click="selectedImagePreview = formData.aimScreenshot"
                       class="p-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 cursor-pointer"
                     >
                       <Eye class="w-4 h-4" />
                     </button>
-                    <button 
-                      type="button" 
-                      @click="formData.aimScreenshot = ''; formData.imageUrl = ''" 
+                    <button
+                      type="button"
+                      @click="formData.aimScreenshot = ''; formData.imageUrl = ''"
                       class="p-2 bg-rose-600 text-white rounded-lg hover:bg-rose-500 cursor-pointer"
                     >
                       <Trash2 class="w-4 h-4" />
@@ -1121,29 +1880,45 @@ function resetForm() {
                   </div>
                 </div>
 
-                <label v-else class="aspect-video w-full border border-slate-800 hover:border-amber-500/60 rounded-xl flex flex-col items-center justify-center gap-2 p-3 text-center cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 transition-colors">
+                <label
+                  v-else
+                  class="aspect-video w-full border border-slate-800 hover:border-amber-500/60 rounded-xl flex flex-col items-center justify-center gap-2 p-3 text-center cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 transition-colors"
+                >
                   <Upload class="w-6 h-6 text-slate-500" />
                   <span class="text-[11px] font-bold text-slate-300">Drop or Paste Aim Screenshot</span>
                   <span class="text-[9px] text-slate-500">Ctrl+V or click to browse</span>
-                  <input type="file" accept="image/*" class="hidden" @change="handleFileInputChange($event, 'aim')" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    class="hidden"
+                    @change="handleFileInputChange($event, 'aim')"
+                  />
                 </label>
               </div>
 
               <!-- SLOT 2: STANDING POSITION -->
-              <div 
-                @dragover.prevent 
+              <div
+                @dragover.prevent
                 @drop="handleDrop($event, 'standing')"
                 class="flex flex-col gap-2 p-3.5 bg-slate-950 border-2 border-dashed rounded-2xl transition-all"
-                :class="formData.standingScreenshot ? 'border-emerald-500/50 bg-emerald-950/10' : 'border-slate-800 hover:border-amber-500/50'"
+                :class="
+                  formData.standingScreenshot
+                    ? 'border-emerald-500/50 bg-emerald-950/10'
+                    : 'border-slate-800 hover:border-amber-500/50'
+                "
               >
                 <div class="flex items-center justify-between">
                   <span class="font-bold text-slate-200 text-xs flex items-center gap-1.5">
                     <MapPin class="w-3.5 h-3.5 text-sky-400" />
                     <span>Standing / Feet Spot</span>
                   </span>
-                  
+
                   <div class="flex items-center gap-1.5">
-                    <span v-if="formData.standingScreenshot" class="text-[10px] text-emerald-400 font-bold">Uploaded</span>
+                    <span
+                      v-if="formData.standingScreenshot"
+                      class="text-[10px] text-emerald-400 font-bold"
+                      >Uploaded</span
+                    >
                     <button
                       type="button"
                       @click="handleDirectScreenSnap('standing')"
@@ -1158,19 +1933,29 @@ function resetForm() {
                 </div>
 
                 <!-- PREVIEW OR DROPZONE -->
-                <div v-if="formData.standingScreenshot" class="relative aspect-video w-full rounded-xl overflow-hidden group border border-slate-800">
-                  <img :src="formData.standingScreenshot" loading="lazy" decoding="async" class="w-full h-full object-cover" />
-                  <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <button 
-                      type="button" 
-                      @click="selectedImagePreview = formData.standingScreenshot" 
+                <div
+                  v-if="formData.standingScreenshot"
+                  class="relative aspect-video w-full rounded-xl overflow-hidden group border border-slate-800"
+                >
+                  <img
+                    :src="formData.standingScreenshot"
+                    loading="lazy"
+                    decoding="async"
+                    class="w-full h-full object-cover"
+                  />
+                  <div
+                    class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2"
+                  >
+                    <button
+                      type="button"
+                      @click="selectedImagePreview = formData.standingScreenshot"
                       class="p-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 cursor-pointer"
                     >
                       <Eye class="w-4 h-4" />
                     </button>
-                    <button 
-                      type="button" 
-                      @click="formData.standingScreenshot = ''" 
+                    <button
+                      type="button"
+                      @click="formData.standingScreenshot = ''"
                       class="p-2 bg-rose-600 text-white rounded-lg hover:bg-rose-500 cursor-pointer"
                     >
                       <Trash2 class="w-4 h-4" />
@@ -1178,29 +1963,45 @@ function resetForm() {
                   </div>
                 </div>
 
-                <label v-else class="aspect-video w-full border border-slate-800 hover:border-amber-500/60 rounded-xl flex flex-col items-center justify-center gap-2 p-3 text-center cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 transition-colors">
+                <label
+                  v-else
+                  class="aspect-video w-full border border-slate-800 hover:border-amber-500/60 rounded-xl flex flex-col items-center justify-center gap-2 p-3 text-center cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 transition-colors"
+                >
                   <Upload class="w-6 h-6 text-slate-500" />
                   <span class="text-[11px] font-bold text-slate-300">Drop Standing Screenshot</span>
                   <span class="text-[9px] text-slate-500">Wall/Corner position</span>
-                  <input type="file" accept="image/*" class="hidden" @change="handleFileInputChange($event, 'standing')" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    class="hidden"
+                    @change="handleFileInputChange($event, 'standing')"
+                  />
                 </label>
               </div>
 
               <!-- SLOT 3: LANDING / RESULT -->
-              <div 
-                @dragover.prevent 
+              <div
+                @dragover.prevent
                 @drop="handleDrop($event, 'landing')"
                 class="flex flex-col gap-2 p-3.5 bg-slate-950 border-2 border-dashed rounded-2xl transition-all"
-                :class="formData.landingScreenshot ? 'border-emerald-500/50 bg-emerald-950/10' : 'border-slate-800 hover:border-amber-500/50'"
+                :class="
+                  formData.landingScreenshot
+                    ? 'border-emerald-500/50 bg-emerald-950/10'
+                    : 'border-slate-800 hover:border-amber-500/50'
+                "
               >
                 <div class="flex items-center justify-between">
                   <span class="font-bold text-slate-200 text-xs flex items-center gap-1.5">
                     <Sparkles class="w-3.5 h-3.5 text-rose-400" />
                     <span>Landing Result Spot</span>
                   </span>
-                  
+
                   <div class="flex items-center gap-1.5">
-                    <span v-if="formData.landingScreenshot" class="text-[10px] text-emerald-400 font-bold">Uploaded</span>
+                    <span
+                      v-if="formData.landingScreenshot"
+                      class="text-[10px] text-emerald-400 font-bold"
+                      >Uploaded</span
+                    >
                     <button
                       type="button"
                       @click="handleDirectScreenSnap('landing')"
@@ -1215,19 +2016,29 @@ function resetForm() {
                 </div>
 
                 <!-- PREVIEW OR DROPZONE -->
-                <div v-if="formData.landingScreenshot" class="relative aspect-video w-full rounded-xl overflow-hidden group border border-slate-800">
-                  <img :src="formData.landingScreenshot" loading="lazy" decoding="async" class="w-full h-full object-cover" />
-                  <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <button 
-                      type="button" 
-                      @click="selectedImagePreview = formData.landingScreenshot" 
+                <div
+                  v-if="formData.landingScreenshot"
+                  class="relative aspect-video w-full rounded-xl overflow-hidden group border border-slate-800"
+                >
+                  <img
+                    :src="formData.landingScreenshot"
+                    loading="lazy"
+                    decoding="async"
+                    class="w-full h-full object-cover"
+                  />
+                  <div
+                    class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2"
+                  >
+                    <button
+                      type="button"
+                      @click="selectedImagePreview = formData.landingScreenshot"
                       class="p-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 cursor-pointer"
                     >
                       <Eye class="w-4 h-4" />
                     </button>
-                    <button 
-                      type="button" 
-                      @click="formData.landingScreenshot = ''" 
+                    <button
+                      type="button"
+                      @click="formData.landingScreenshot = ''"
                       class="p-2 bg-rose-600 text-white rounded-lg hover:bg-rose-500 cursor-pointer"
                     >
                       <Trash2 class="w-4 h-4" />
@@ -1235,17 +2046,24 @@ function resetForm() {
                   </div>
                 </div>
 
-                <label v-else class="aspect-video w-full border border-slate-800 hover:border-amber-500/60 rounded-xl flex flex-col items-center justify-center gap-2 p-3 text-center cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 transition-colors">
+                <label
+                  v-else
+                  class="aspect-video w-full border border-slate-800 hover:border-amber-500/60 rounded-xl flex flex-col items-center justify-center gap-2 p-3 text-center cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 transition-colors"
+                >
                   <Upload class="w-6 h-6 text-slate-500" />
                   <span class="text-[11px] font-bold text-slate-300">Drop Landing Result</span>
                   <span class="text-[9px] text-slate-500">Smoke bloom / fire spread</span>
-                  <input type="file" accept="image/*" class="hidden" @change="handleFileInputChange($event, 'landing')" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    class="hidden"
+                    @change="handleFileInputChange($event, 'landing')"
+                  />
                 </label>
               </div>
-
             </div>
 
-            <!-- VIDEO CLIP & RECORDING SECTION (PRIORITY 2: VIDEO OPTION) -->
+            <!-- VIDEO CLIP & RECORDING SECTION -->
             <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col gap-3 mt-2">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2">
@@ -1255,77 +2073,96 @@ function resetForm() {
                   <div>
                     <span class="font-bold text-xs text-white uppercase tracking-wider flex items-center gap-2">
                       Lineup Throw Video Clip
-                      <span class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">Secondary Option</span>
+                      <span class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 text-[10px] font-mono"
+                        >Secondary Option</span
+                      >
                     </span>
                     <p class="text-[10px] text-slate-400">
-                      Lineups prioritize high-res screenshots first, then video clips as a secondary motion guide.
+                      Lineups prioritize high-res screenshots first, then video clips as a secondary
+                      motion guide.
                     </p>
                   </div>
                 </div>
 
-                <!-- SOFTWARE GUIDE BUTTON -->
                 <button
                   type="button"
                   @click="showClipSoftwareGuide = !showClipSoftwareGuide"
                   class="px-2.5 py-1 bg-slate-900 hover:bg-slate-850 border border-amber-500/40 text-amber-300 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow"
                 >
                   <HelpCircle class="w-3.5 h-3.5 text-amber-400" />
-                  <span>{{ showClipSoftwareGuide ? 'Hide Clip Guide' : '🎥 Best Clip Software Guide' }}</span>
+                  <span>{{
+                    showClipSoftwareGuide ? 'Hide Clip Guide' : '🎥 Best Clip Software Guide'
+                  }}</span>
                 </button>
               </div>
 
-              <!-- RECOMMENDED RECORDING & CLIPPING SOFTWARE GUIDE (COLLAPSIBLE) -->
-              <div v-if="showClipSoftwareGuide" class="p-3.5 bg-slate-900/90 border border-amber-500/30 rounded-xl flex flex-col gap-3 text-xs animate-fade-in">
+              <div
+                v-if="showClipSoftwareGuide"
+                class="p-3.5 bg-slate-900/90 border border-amber-500/30 rounded-xl flex flex-col gap-3 text-xs animate-fade-in"
+              >
                 <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <span class="font-black text-amber-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <span
+                    class="font-black text-amber-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5"
+                  >
                     <Film class="w-3.5 h-3.5" />
                     Top Recommended Software to Clip CS2 Lineups
                   </span>
-                  <span class="text-[10px] font-mono text-slate-400">Optimal settings: 1080p60 • MP4 • 15s</span>
+                  <span class="text-[10px] font-mono text-slate-400"
+                    >Optimal settings: 1080p60 • MP4 • 15s</span
+                  >
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-[11px]">
-                  <!-- 1. NVIDIA SHADOWPLAY -->
                   <div class="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-1">
                     <span class="font-black text-emerald-400">1. NVIDIA ShadowPlay</span>
                     <p class="text-slate-400 text-[10px] leading-tight">
                       Built into GeForce Experience / NVIDIA App. Zero FPS drop.
                     </p>
                     <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">
-                      Hotkey: <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700">Alt + F10</kbd>
+                      Hotkey:
+                      <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700"
+                        >Alt + F10</kbd
+                      >
                     </span>
                   </div>
 
-                  <!-- 2. OBS REPLAY BUFFER -->
                   <div class="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-1">
                     <span class="font-black text-cyan-400">2. OBS Replay Buffer</span>
                     <p class="text-slate-400 text-[10px] leading-tight">
-                      100% Free & Open Source. Set 15s buffer in Settings &gt; Output &gt; Replay Buffer.
+                      100% Free &amp; Open Source. Set 15s buffer in Settings &gt; Output &gt; Replay
+                      Buffer.
                     </p>
                     <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">
-                      Hotkey: Custom (e.g. <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700">F8</kbd>)
+                      Hotkey: Custom (e.g.
+                      <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700"
+                        >F8</kbd
+                      >)
                     </span>
                   </div>
 
-                  <!-- 3. AMD RADEON RELIVE -->
                   <div class="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-1">
                     <span class="font-black text-rose-400">3. AMD Radeon ReLive</span>
                     <p class="text-slate-400 text-[10px] leading-tight">
                       Built into AMD Software: Adrenalin. High quality GPU hardware encoder.
                     </p>
                     <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">
-                      Hotkey: <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700">Ctrl+Shift+S</kbd>
+                      Hotkey:
+                      <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700"
+                        >Ctrl+Shift+S</kbd
+                      >
                     </span>
                   </div>
 
-                  <!-- 4. MEDAL.TV / STEELSERIES -->
                   <div class="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-1">
                     <span class="font-black text-amber-400">4. Medal.tv / Moments</span>
                     <p class="text-slate-400 text-[10px] leading-tight">
-                      Automatic CS2 bookmarking & 1-click cloud sharing/trimming.
+                      Automatic CS2 bookmarking &amp; 1-click cloud sharing/trimming.
                     </p>
                     <span class="font-mono text-amber-300 font-bold text-[10px] mt-auto">
-                      Hotkey: <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700">F8</kbd>
+                      Hotkey:
+                      <kbd class="bg-slate-900 px-1 rounded text-white border border-slate-700"
+                        >F8</kbd
+                      >
                     </span>
                   </div>
                 </div>
@@ -1333,9 +2170,8 @@ function resetForm() {
 
               <!-- VIDEO DROPZONE & PREVIEW -->
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-stretch">
-                <!-- VIDEO UPLOAD DROPZONE -->
-                <div 
-                  @dragover.prevent 
+                <div
+                  @dragover.prevent
                   @drop="handleVideoDrop"
                   class="flex flex-col gap-2 p-3 bg-slate-900/60 border-2 border-dashed border-slate-800 hover:border-rose-500/50 rounded-xl transition-all justify-center"
                 >
@@ -1344,26 +2180,35 @@ function resetForm() {
                     <span class="text-xs font-bold text-slate-200">
                       {{ isUploadingVideo ? 'Uploading Video File...' : 'Upload Video File (MP4, WebM, MOV)' }}
                     </span>
-                    <span class="text-[10px] text-slate-500">Drag & drop 15-30s CS2 throw clip or click to browse</span>
-                    <input type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska" class="hidden" @change="handleVideoFileInputChange" />
+                    <span class="text-[10px] text-slate-500"
+                      >Drag &amp; drop 15-30s CS2 throw clip or click to browse</span
+                    >
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime,video/x-matroska"
+                      class="hidden"
+                      @change="handleVideoFileInputChange"
+                    />
                   </label>
                 </div>
 
-                <!-- VIDEO PREVIEW OR LINK INPUT -->
                 <div class="flex flex-col gap-2 p-3 bg-slate-900/60 border border-slate-800 rounded-xl justify-between">
-                  <div v-if="formData.videoUrl" class="relative aspect-video w-full rounded-lg overflow-hidden bg-black border border-slate-700 group">
-                    <video 
-                      :src="formData.videoUrl" 
-                      controls 
-                      autoplay 
-                      loop 
-                      muted 
-                      playsinline 
+                  <div
+                    v-if="formData.videoUrl"
+                    class="relative aspect-video w-full rounded-lg overflow-hidden bg-black border border-slate-700 group"
+                  >
+                    <video
+                      :src="formData.videoUrl"
+                      controls
+                      autoplay
+                      loop
+                      muted
+                      playsinline
                       class="w-full h-full object-contain"
                     ></video>
-                    <button 
-                      type="button" 
-                      @click="formData.videoUrl = ''" 
+                    <button
+                      type="button"
+                      @click="formData.videoUrl = ''"
                       class="absolute top-1.5 right-1.5 p-1.5 bg-rose-600/90 hover:bg-rose-500 text-white rounded-lg transition-colors cursor-pointer shadow"
                       title="Remove Video"
                     >
@@ -1372,11 +2217,13 @@ function resetForm() {
                   </div>
 
                   <div v-else class="flex flex-col gap-1.5">
-                    <label class="text-[11px] font-bold text-slate-300">Or Paste Video URL / YouTube Embed:</label>
-                    <input 
-                      v-model="formData.videoUrl" 
-                      type="text" 
-                      placeholder="https://www.youtube.com/embed/... or direct MP4 link" 
+                    <label class="text-[11px] font-bold text-slate-300"
+                      >Or Paste Video URL / YouTube Embed:</label
+                    >
+                    <input
+                      v-model="formData.videoUrl"
+                      type="text"
+                      placeholder="https://www.youtube.com/embed/... or direct MP4 link"
                       class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500 font-mono"
                     />
                   </div>
@@ -1389,25 +2236,23 @@ function resetForm() {
                   <ImageIcon class="w-3 h-3 text-sky-400" />
                   <span>External Image Thumbnail URL (Optional):</span>
                 </label>
-                <input 
-                  v-model="formData.imageUrl" 
-                  type="text" 
-                  placeholder="https://... image link" 
+                <input
+                  v-model="formData.imageUrl"
+                  type="text"
+                  placeholder="https://... image link"
                   class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-amber-500 font-mono"
                 />
               </div>
             </div>
-
           </div>
 
           <!-- TAB 4: INSTRUCTIONS & NOTES -->
           <div v-show="activeTab === 'guide'" class="flex flex-col gap-4 animate-fade-in">
-            <!-- STEP BY STEP INSTRUCTIONS -->
             <div class="flex flex-col gap-2">
               <div class="flex items-center justify-between">
                 <label class="font-bold text-slate-300">Step-by-Step Instructions</label>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   @click="addInstructionStep"
                   class="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
                 >
@@ -1416,20 +2261,20 @@ function resetForm() {
                 </button>
               </div>
 
-              <div 
-                v-for="(step, idx) in formData.instructions" 
+              <div
+                v-for="(_, idx) in formData.instructions"
                 :key="idx"
                 class="flex items-center gap-2"
               >
                 <span class="w-6 text-center font-mono font-bold text-slate-500">{{ idx + 1 }}.</span>
-                <input 
-                  v-model="formData.instructions[idx]" 
-                  type="text" 
+                <input
+                  v-model="formData.instructions[idx]"
+                  type="text"
                   placeholder="e.g. Wedge yourself into the corner of the trash can..."
                   class="flex-grow bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
                 />
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   @click="removeInstructionStep(idx)"
                   class="p-2 text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
                 >
@@ -1438,32 +2283,30 @@ function resetForm() {
               </div>
             </div>
 
-            <!-- DESCRIPTION -->
             <div class="flex flex-col gap-1.5">
               <label class="font-bold text-slate-300">Description / Tactical Purpose</label>
-              <textarea 
-                v-model="formData.description" 
+              <textarea
+                v-model="formData.description"
                 rows="2"
                 placeholder="Deep smoke that blocks snipers nest vision into Top Mid without gaps..."
                 class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-500 resize-none"
               ></textarea>
             </div>
 
-            <!-- TAGS & DIFFICULTY -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300">Tags (comma separated)</label>
-                <input 
-                  v-model="formData.tags" 
-                  type="text" 
-                  placeholder="Execute, Fast Mid, Default, Retake" 
+                <input
+                  v-model="formData.tags"
+                  type="text"
+                  placeholder="Execute, Fast Mid, Default, Retake"
                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div class="flex flex-col gap-1.5">
                 <label class="font-bold text-slate-300">Difficulty</label>
-                <select 
+                <select
                   v-model="formData.difficulty"
                   class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
                 >
@@ -1474,18 +2317,20 @@ function resetForm() {
               </div>
             </div>
           </div>
-
         </div>
 
         <!-- FOOTER -->
-        <div class="flex items-center justify-between p-4 sm:p-5 border-t border-slate-800 bg-slate-950/70">
-          <!-- TEAM SHARING TOGGLE -->
+        <div
+          class="flex items-center justify-between p-4 sm:p-5 border-t border-slate-800 bg-slate-950/70"
+        >
           <button
             type="button"
             @click="formData.isTeamShared = !formData.isTeamShared"
             :class="[
               'flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-colors cursor-pointer border',
-              formData.isTeamShared ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'
+              formData.isTeamShared
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                : 'bg-slate-800 text-slate-400 border-slate-700'
             ]"
           >
             <Share2 v-if="formData.isTeamShared" class="w-3.5 h-3.5" />
@@ -1494,36 +2339,38 @@ function resetForm() {
           </button>
 
           <div class="flex items-center gap-3">
-            <button 
+            <button
               type="button"
               @click="lineupStore.isAddModalOpen = false"
               class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
             >
               Cancel
             </button>
-            <button 
+            <button
               type="button"
-              @click="handleSave"
+              @click="handleSubmit"
               class="flex items-center gap-1.5 px-5 py-2 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer hover:opacity-90"
               :style="{ backgroundColor: themeStore.customAccentColor, color: '#020617' }"
             >
               <Check class="w-4 h-4 stroke-[3]" />
-              <span>Save Lineup</span>
+              <span>{{ lineupStore.isEditMode ? 'Update Lineup' : 'Save Lineup' }}</span>
             </button>
           </div>
         </div>
-
       </div>
 
       <!-- FULL-SCREEN IMAGE PREVIEW LIGHTBOX -->
-      <div 
-        v-if="selectedImagePreview" 
+      <div
+        v-if="selectedImagePreview"
         class="fixed inset-0 z-[100000] bg-black/90 flex items-center justify-center p-4 cursor-pointer"
         @click="selectedImagePreview = null"
       >
         <div class="relative max-w-4xl max-h-[90vh]">
-          <img :src="selectedImagePreview" class="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain" />
-          <button 
+          <img
+            :src="selectedImagePreview"
+            class="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain"
+          />
+          <button
             @click="selectedImagePreview = null"
             class="absolute top-2 right-2 p-2 bg-slate-900/80 text-white rounded-full hover:bg-slate-800"
           >
@@ -1531,7 +2378,6 @@ function resetForm() {
           </button>
         </div>
       </div>
-
     </div>
   </Teleport>
 </template>

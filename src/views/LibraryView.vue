@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useLineupStore } from '../stores/lineupStore'
 import { useMapStore } from '../stores/mapStore'
@@ -8,24 +9,26 @@ import LineupModal from '../components/lineups/LineupModal.vue'
 import AddLineupModal from '../components/lineups/AddLineupModal.vue'
 import QuickAddBar from '../components/lineups/QuickAddBar.vue'
 import CommunityPresetsModal from '../components/lineups/CommunityPresetsModal.vue'
-import NadeIcon from '../components/common/NadeIcon.vue'
-import type { GrenadeType, Lineup, TeamSide } from '../types'
-import { 
-  Grid, 
-  Search, 
-  Heart, 
-  Plus, 
-  Filter, 
-  Layers, 
-  Trash2, 
-  RefreshCw,
+import type { Lineup, LineupDisplayMode } from '../types'
+import {
+  BookmarkCheck,
+  BookmarkPlus,
+  BookMarked,
+  CheckCircle2,
+  Footprints,
   Globe,
+  Grid,
+  Heart,
+  Layers,
+  LayoutGrid,
+  Plus,
+  RefreshCw,
+  Search,
   Sparkles,
-  Check,
-  CheckCircle2
+  Zap
 } from 'lucide-vue-next'
-import { useConfirmDialog } from '../composables/useConfirmDialog'
 
+const router = useRouter()
 const lineupStore = useLineupStore()
 const mapStore = useMapStore()
 
@@ -39,28 +42,38 @@ const showFavoritesOnly = ref(false)
 const discoveredLineups = ref<Lineup[]>([])
 const isFetchingDiscoverFeed = ref(false)
 const discoverFeedBanner = ref('')
+const quickSelectMode = ref(false)
 
 const externalSourceOptions = [
-  { value: 'all', label: 'All Sources' },
+  { value: 'all', label: 'All Sites & Sources' },
   { value: 'CSNades.gg', label: 'CSNades.gg' },
-  { value: 'NadeKing', label: 'NadeKing' },
   { value: 'CS2Lineups', label: 'CS2Lineups' },
+  { value: 'NadeKing', label: 'NadeKing' },
   { value: 'Pracc.com', label: 'Pracc.com' },
   { value: 'Scope.gg', label: 'Scope.gg' },
   { value: 'HLTV Pro Utility', label: 'HLTV Pro Utility' },
   { value: 'Bo3.gg', label: 'Bo3.gg' },
-  { value: 'Community Server', label: 'Community Server' },
-  { value: 'custom', label: 'Squad Custom Only' }
+  { value: 'Refrag.gg', label: 'Refrag.gg' },
+  { value: 'Leetify', label: 'Leetify' },
+  { value: 'Community Server', label: 'Community Server' }
 ]
 
-const proPlayerOptions = [
-  { value: 'all', label: 'All Pros' },
-  { value: 'm0NESY', label: 'm0NESY' },
-  { value: 'ZywOo', label: 'ZywOo' },
-  { value: 'donk', label: 'donk' },
-  { value: 'ropz', label: 'ropz' },
-  { value: 'Aleksib', label: 'Aleksib' },
-  { value: 'Karrigan', label: 'Karrigan' }
+const siteChips = [
+  'CSNades.gg',
+  'CS2Lineups',
+  'NadeKing',
+  'Pracc.com',
+  'Scope.gg',
+  'HLTV Pro Utility',
+  'Bo3.gg',
+  'Refrag.gg',
+  'Leetify'
+]
+
+const displayModeOptions: { id: LineupDisplayMode; label: string }[] = [
+  { id: 'cards', label: 'Cards' },
+  { id: 'all_images', label: 'Show All Images' },
+  { id: 'spot_movement', label: 'Spot & Movement' }
 ]
 
 async function fetchLiveCommunityFeed() {
@@ -77,11 +90,13 @@ async function fetchLiveCommunityFeed() {
       ...item,
       sourceWebsite: item.sourceWebsite || 'Community Server'
     }))
-    discoverFeedBanner.value = items.length > 0
-      ? `Fetched ${items.length} live community lineup${items.length === 1 ? '' : 's'} from server feed.`
-      : 'Live community feed checked — all curated pro & external-site lineups are ready.'
+    discoverFeedBanner.value =
+      items.length > 0
+        ? `Fetched ${items.length} live community lineup${items.length === 1 ? '' : 's'} from server feed.`
+        : 'Live community feed checked — all curated pro & external-site lineups are ready.'
   } catch {
-    discoverFeedBanner.value = 'Server discover feed unreachable — showing local & curated pro lineups.'
+    discoverFeedBanner.value =
+      'Server discover feed unreachable — showing curated multi-site & community lineups.'
   } finally {
     isFetchingDiscoverFeed.value = false
     setTimeout(() => {
@@ -90,10 +105,20 @@ async function fetchLiveCommunityFeed() {
   }
 }
 
+// General Lineups + Live Community Server Feed (strictly separated from Personal Book clones)
 const combinedLibraryLineups = computed<Lineup[]>(() => {
   const seen = new Set<string>()
   const merged: Lineup[] = []
-  for (const item of [...lineupStore.allLineups, ...discoveredLineups.value]) {
+
+  const communityShared = lineupStore.customLineups.filter(
+    (l) => l.isTeamShared && !l.isPersonalBook && !l.externalId
+  )
+
+  for (const item of [
+    ...lineupStore.generalLineups,
+    ...discoveredLineups.value,
+    ...communityShared
+  ]) {
     if (!seen.has(item.id)) {
       seen.add(item.id)
       merged.push(item)
@@ -102,28 +127,36 @@ const combinedLibraryLineups = computed<Lineup[]>(() => {
   return merged
 })
 
+const proPlayerOptions = computed(() => {
+  const base = ['m0NESY', 'ZywOo', 'donk', 'ropz', 'Aleksib', 'Karrigan']
+  const set = new Set<string>(base)
+  for (const item of combinedLibraryLineups.value) {
+    if (item.proPlayer) set.add(item.proPlayer)
+  }
+  return [
+    { value: 'all', label: 'All Pros' },
+    ...Array.from(set).map((name) => ({ value: name, label: name }))
+  ]
+})
+
 const allDisplayLineups = computed(() => {
-  return combinedLibraryLineups.value.filter(lineup => {
-    // Map filter
+  return combinedLibraryLineups.value.filter((lineup) => {
     if (selectedMapFilter.value !== 'all' && lineup.mapId !== selectedMapFilter.value) {
       return false
     }
-
-    // Nade filter
     if (selectedNadeFilter.value !== 'all' && lineup.grenadeType !== selectedNadeFilter.value) {
       return false
     }
-
-    // Side filter
-    if (selectedSideFilter.value !== 'all' && lineup.side !== selectedSideFilter.value && lineup.side !== 'all') {
+    if (
+      selectedSideFilter.value !== 'all' &&
+      lineup.side !== selectedSideFilter.value &&
+      lineup.side !== 'all'
+    ) {
       return false
     }
 
-    // Source filter
     if (selectedSourceFilter.value !== 'all') {
-      if (selectedSourceFilter.value === 'custom') {
-        if (!lineup.isCustom) return false
-      } else if (selectedSourceFilter.value === 'Community Server') {
+      if (selectedSourceFilter.value === 'Community Server') {
         const isCommunity =
           lineup.sourceWebsite === 'Community Server' ||
           (!lineup.sourceWebsite && (lineup.isCustom || lineup.isTeamShared))
@@ -133,19 +166,16 @@ const allDisplayLineups = computed(() => {
       }
     }
 
-    // Pro Player filter
     if (selectedProPlayerFilter.value !== 'all') {
       if ((lineup.proPlayer || '').toLowerCase() !== selectedProPlayerFilter.value.toLowerCase()) {
         return false
       }
     }
 
-    // Favorites filter
     if (showFavoritesOnly.value && !lineupStore.isFavorite(lineup.id)) {
       return false
     }
 
-    // Search query
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.toLowerCase()
       const matchTitle = lineup.title.toLowerCase().includes(q)
@@ -156,32 +186,86 @@ const allDisplayLineups = computed(() => {
       const matchPro = (lineup.proPlayer || '').toLowerCase().includes(q)
       const matchTeam = (lineup.proTeam || '').toLowerCase().includes(q)
       const matchTourney = (lineup.tournament || '').toLowerCase().includes(q)
-      const matchTags = (lineup.tags || []).some(t => t.toLowerCase().includes(q))
-      if (!matchTitle && !matchStart && !matchEnd && !matchMap && !matchSource && !matchPro && !matchTeam && !matchTourney && !matchTags) return false
+      const matchTags = (lineup.tags || []).some((t) => t.toLowerCase().includes(q))
+      if (
+        !matchTitle &&
+        !matchStart &&
+        !matchEnd &&
+        !matchMap &&
+        !matchSource &&
+        !matchPro &&
+        !matchTeam &&
+        !matchTourney &&
+        !matchTags
+      ) {
+        return false
+      }
     }
 
     return true
   })
 })
 
-const { confirmAction } = useConfirmDialog()
-
-async function handleClearAll() {
-  const ok = await confirmAction({
-    title: 'Delete All Custom Lineups?',
-    message: 'Are you sure you want to delete ALL custom saved lineups? Basic default lineups can be toggled on or off anytime.',
-    confirmLabel: 'Delete Custom Lineups',
-    cancelLabel: 'Cancel',
-    isDestructive: true
-  })
-  if (ok) {
-    lineupStore.clearAllLineups()
+const gridLayoutClass = computed(() => {
+  if (lineupStore.lineupDisplayMode === 'all_images') {
+    return 'grid grid-cols-1 gap-4'
   }
+  if (lineupStore.lineupDisplayMode === 'spot_movement') {
+    return 'grid grid-cols-1 xl:grid-cols-2 gap-2.5'
+  }
+  return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'
+})
+
+const unbookmarkedVisible = computed(() =>
+  allDisplayLineups.value.filter((l) => !lineupStore.isInPersonalBook(l.id))
+)
+
+function toggleQuickSelectMode() {
+  quickSelectMode.value = !quickSelectMode.value
+  if (!quickSelectMode.value) {
+    lineupStore.clearQuickSelect()
+  }
+}
+
+function selectAllVisible() {
+  for (const item of unbookmarkedVisible.value) {
+    if (!lineupStore.quickSelectIds.includes(item.id)) {
+      lineupStore.toggleQuickSelect(item.id)
+    }
+  }
+}
+
+function addSelectedToPersonalBook() {
+  const added = lineupStore.addQuickSelectedToPersonalBook()
+  discoverFeedBanner.value =
+    added > 0
+      ? `Added ${added} selected general lineup${added === 1 ? '' : 's'} to your Personal Book!`
+      : 'Selected lineups are already saved in your Personal Book.'
+  quickSelectMode.value = false
+  setTimeout(() => {
+    discoverFeedBanner.value = ''
+  }, 3200)
+}
+
+function addAllVisibleToPersonalBook() {
+  let added = 0
+  for (const item of unbookmarkedVisible.value) {
+    lineupStore.quickAddToPersonalBook(item)
+    added++
+  }
+  discoverFeedBanner.value =
+    added > 0
+      ? `Saved ${added} visible lineup${added === 1 ? '' : 's'} to your Personal Book!`
+      : 'All matching lineups are already in your Personal Book.'
+  lineupStore.clearQuickSelect()
+  setTimeout(() => {
+    discoverFeedBanner.value = ''
+  }, 3200)
 }
 </script>
 
 <template>
-  <div class="library-view max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6 animate-fade-in">
+  <div class="library-view max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-5 animate-fade-in">
     <!-- HEADER -->
     <div class="flex flex-wrap items-center justify-between gap-4 p-5 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl">
       <div class="flex items-center gap-3">
@@ -189,39 +273,34 @@ async function handleClearAll() {
           <Grid class="w-6 h-6 stroke-[2.5]" />
         </div>
         <div>
-          <div class="flex items-center gap-2">
-            <h1 class="text-xl font-black uppercase text-white tracking-wide">Lineup Library</h1>
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 class="text-xl font-black uppercase text-white tracking-wide">
+              General Lineups Directory
+            </h1>
             <span class="px-2 py-0.5 rounded bg-slate-800 text-amber-400 text-xs font-mono font-bold">
-              {{ allDisplayLineups.length }} Lineups
+              {{ allDisplayLineups.length }} Catalog Lineups
             </span>
           </div>
           <p class="text-xs text-slate-400 mt-0.5">
-            Searchable catalog of indexed smokes, flashes, molotovs, and HE nades across all maps
+            Multi-site CS2 utility archive across CSNades.gg, CS2Lineups, NadeKing, Pracc.com, Scope.gg, HLTV, Bo3.gg, Refrag.gg &amp; Leetify — cleanly separated from your Personal Book.
           </p>
         </div>
       </div>
 
-      <div class="flex items-center gap-2.5">
-        <!-- BASIC LINEUPS TOGGLE SWITCH -->
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Link to Personal Book -->
         <button
-          @click="lineupStore.toggleBasicLineups()"
-          :class="[
-            'flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border',
-            lineupStore.showBasicLineups 
-              ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm' 
-              : 'bg-slate-950 text-slate-500 hover:text-slate-300 border-slate-800'
-          ]"
-          :title="lineupStore.showBasicLineups ? 'Basic meta lineups are included (Click to hide)' : 'Basic meta lineups hidden (Click to show)'"
+          @click="router.push('/my-lineups')"
+          class="flex items-center gap-1.5 px-3 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 rounded-xl text-xs font-bold transition-colors cursor-pointer"
         >
-          <Globe class="w-3.5 h-3.5" />
-          <span>Basic Lineups: <strong>{{ lineupStore.showBasicLineups ? 'ON' : 'OFF' }}</strong></span>
+          <BookMarked class="w-3.5 h-3.5" />
+          <span>My Personal Book ({{ lineupStore.personalBookLineups.length }})</span>
         </button>
 
         <!-- META SOURCES MODAL BUTTON -->
         <button
           @click="lineupStore.isPresetsModalOpen = true"
           class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-          title="Explore popular lineups from CSNades, NadeKing, CS2Lineups, Pracc, Scope.gg, HLTV & Bo3.gg"
         >
           <Sparkles class="w-3.5 h-3.5" />
           <span>Meta Sources</span>
@@ -232,10 +311,9 @@ async function handleClearAll() {
           @click="fetchLiveCommunityFeed"
           :disabled="isFetchingDiscoverFeed"
           class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
-          title="Fetch shared pro & community lineups from live server feed"
         >
           <Globe class="w-3.5 h-3.5 text-cyan-400" :class="{ 'animate-pulse': isFetchingDiscoverFeed }" />
-          <span>Fetch Live Community Feed</span>
+          <span>Live Community Feed</span>
         </button>
 
         <!-- SYNC BUTTON -->
@@ -245,18 +323,7 @@ async function handleClearAll() {
           class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
         >
           <RefreshCw class="w-3.5 h-3.5 text-amber-400" :class="{ 'animate-spin': lineupStore.isSyncing }" />
-          <span>Sync Server</span>
-        </button>
-
-        <!-- CLEAR ALL BUTTON -->
-        <button
-          v-if="lineupStore.customLineups.length > 0"
-          @click="handleClearAll"
-          class="flex items-center gap-1.5 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-          title="Delete all custom saved lineups"
-        >
-          <Trash2 class="w-3.5 h-3.5" />
-          <span>Clear Custom</span>
+          <span>Sync</span>
         </button>
 
         <!-- ADD LINEUP -->
@@ -270,7 +337,7 @@ async function handleClearAll() {
       </div>
     </div>
 
-    <!-- LIVE DISCOVER BANNER -->
+    <!-- BANNER -->
     <div
       v-if="discoverFeedBanner"
       class="px-4 py-2.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold flex items-center gap-2 animate-fade-in"
@@ -282,141 +349,262 @@ async function handleClearAll() {
     <!-- ⚡ QUICK ADD BAR -->
     <QuickAddBar />
 
-    <!-- FILTER BAR -->
-    <div class="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-900/80 border border-slate-800 rounded-xl text-xs">
-      <div class="flex flex-wrap items-center gap-3">
-        <!-- MAP SELECT -->
-        <div class="flex items-center gap-1.5">
-          <span class="text-slate-400 font-bold">Map:</span>
-          <select 
-            v-model="selectedMapFilter"
-            class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+    <!-- SITE CHIPS + DISPLAY MODE SWITCHER + QUICK-SELECT BAR -->
+    <div class="flex flex-col gap-3 p-4 bg-slate-900/80 border border-slate-800 rounded-xl text-xs">
+      <!-- Top Row: Site Pills + Display Mode Switcher -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <!-- Quick CS2 Site Chips -->
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button
+            @click="selectedSourceFilter = 'all'"
+            :class="[
+              'px-2.5 py-1 rounded-lg font-bold border transition-colors cursor-pointer',
+              selectedSourceFilter === 'all'
+                ? 'bg-amber-500 text-slate-950 border-amber-400'
+                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+            ]"
           >
-            <option value="all">All Maps</option>
-            <option v-for="map in mapStore.availableMaps" :key="map.id" :value="map.id">
-              {{ map.name }}
-            </option>
-          </select>
+            All Sites
+          </button>
+          <button
+            v-for="site in siteChips"
+            :key="site"
+            @click="selectedSourceFilter = selectedSourceFilter === site ? 'all' : site"
+            :class="[
+              'px-2.5 py-1 rounded-lg font-bold border transition-colors cursor-pointer',
+              selectedSourceFilter === site
+                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+            ]"
+          >
+            {{ site }}
+          </button>
         </div>
 
-        <!-- NADE SELECT -->
-        <div class="flex items-center gap-1.5">
-          <span class="text-slate-400 font-bold">Type:</span>
-          <select 
-            v-model="selectedNadeFilter"
-            class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+        <!-- 3-Way Display Mode Switcher -->
+        <div class="flex flex-wrap items-center gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 font-bold">
+          <button
+            v-for="mode in displayModeOptions"
+            :key="mode.id"
+            @click="lineupStore.lineupDisplayMode = mode.id"
+            :class="[
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer',
+              lineupStore.lineupDisplayMode === mode.id
+                ? 'bg-amber-500 text-slate-950 font-black shadow'
+                : 'text-slate-400 hover:text-white'
+            ]"
           >
-            <option value="all">All Types</option>
-            <option value="smoke">Smokes</option>
-            <option value="flash">Flashes</option>
-            <option value="molotov">Molotovs</option>
-            <option value="he">HE Grenades</option>
-            <option value="decoy">Decoys</option>
-          </select>
+            <LayoutGrid v-if="mode.id === 'cards'" class="w-3.5 h-3.5" />
+            <Layers v-else-if="mode.id === 'all_images'" class="w-3.5 h-3.5" />
+            <Footprints v-else class="w-3.5 h-3.5" />
+            <span>{{ mode.label }}</span>
+          </button>
         </div>
-
-        <!-- SIDE SELECT -->
-        <div class="flex items-center gap-1.5">
-          <span class="text-slate-400 font-bold">Side:</span>
-          <select 
-            v-model="selectedSideFilter"
-            class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
-          >
-            <option value="all">All Sides</option>
-            <option value="t">Terrorist (T)</option>
-            <option value="ct">Counter-Terrorist (CT)</option>
-          </select>
-        </div>
-
-        <!-- SOURCE WEBSITE FILTER -->
-        <div class="flex items-center gap-1.5">
-          <span class="text-slate-400 font-bold">Source:</span>
-          <select 
-            v-model="selectedSourceFilter"
-            class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
-          >
-            <option v-for="opt in externalSourceOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-
-        <!-- PRO PLAYER FILTER -->
-        <div class="flex items-center gap-1.5">
-          <span class="text-slate-400 font-bold">Pro:</span>
-          <select 
-            v-model="selectedProPlayerFilter"
-            class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-purple-300 focus:outline-none focus:border-purple-500 cursor-pointer"
-          >
-            <option v-for="pro in proPlayerOptions" :key="pro.value" :value="pro.value">
-              {{ pro.label }}
-            </option>
-          </select>
-        </div>
-
-        <!-- FAVORITES TOGGLE -->
-        <button
-          @click="showFavoritesOnly = !showFavoritesOnly"
-          :class="[
-            'flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold transition-colors cursor-pointer',
-            showFavoritesOnly 
-              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' 
-              : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-          ]"
-        >
-          <Heart class="w-3.5 h-3.5" :class="{ 'fill-current': showFavoritesOnly }" />
-          <span>Favorites Only</span>
-        </button>
       </div>
 
-      <!-- SEARCH INPUT -->
-      <div class="relative w-full sm:w-64">
-        <Search class="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-        <input 
-          v-model="searchQuery"
-          type="text" 
-          placeholder="Search lineups, spots, tags..." 
-          class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-        />
+      <!-- Second Row: Dropdown Filters + Search + Quick-Select Toggle -->
+      <div class="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-800/80">
+        <div class="flex flex-wrap items-center gap-2.5">
+          <!-- MAP SELECT -->
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400 font-bold">Map:</span>
+            <select
+              v-model="selectedMapFilter"
+              class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+            >
+              <option value="all">All Maps</option>
+              <option v-for="map in mapStore.availableMaps" :key="map.id" :value="map.id">
+                {{ map.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- NADE SELECT -->
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400 font-bold">Type:</span>
+            <select
+              v-model="selectedNadeFilter"
+              class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+            >
+              <option value="all">All Types</option>
+              <option value="smoke">Smokes</option>
+              <option value="flash">Flashes</option>
+              <option value="molotov">Molotovs</option>
+              <option value="he">HE Grenades</option>
+              <option value="decoy">Decoys</option>
+            </select>
+          </div>
+
+          <!-- SIDE SELECT -->
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400 font-bold">Side:</span>
+            <select
+              v-model="selectedSideFilter"
+              class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+            >
+              <option value="all">All Sides</option>
+              <option value="t">Terrorist (T)</option>
+              <option value="ct">Counter-Terrorist (CT)</option>
+            </select>
+          </div>
+
+          <!-- SOURCE SELECT -->
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400 font-bold">Source:</span>
+            <select
+              v-model="selectedSourceFilter"
+              class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+            >
+              <option v-for="opt in externalSourceOptions" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+
+          <!-- PRO PLAYER SELECT -->
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400 font-bold">Pro:</span>
+            <select
+              v-model="selectedProPlayerFilter"
+              class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-purple-300 focus:outline-none focus:border-purple-500 cursor-pointer"
+            >
+              <option v-for="pro in proPlayerOptions" :key="pro.value" :value="pro.value">
+                {{ pro.label }}
+              </option>
+            </select>
+          </div>
+
+          <!-- FAVORITES TOGGLE -->
+          <button
+            @click="showFavoritesOnly = !showFavoritesOnly"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold transition-colors cursor-pointer',
+              showFavoritesOnly
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+            ]"
+          >
+            <Heart class="w-3.5 h-3.5" :class="{ 'fill-current': showFavoritesOnly }" />
+            <span>Favorites</span>
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Quick-Select Toggle -->
+          <button
+            @click="toggleQuickSelectMode"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer',
+              quickSelectMode
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-amber-500/40'
+            ]"
+          >
+            <Zap class="w-3.5 h-3.5 text-amber-400" />
+            <span>{{ quickSelectMode ? 'Quick-Select ON' : 'Quick-Select to Book' }}</span>
+          </button>
+
+          <!-- SEARCH INPUT -->
+          <div class="relative w-full sm:w-56">
+            <Search class="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Search lineups, spots, sites..."
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Batch Quick-Select Toolbar -->
+      <div
+        v-if="quickSelectMode || lineupStore.quickSelectIds.length > 0"
+        class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-950 border border-amber-500/35 rounded-xl"
+      >
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-bold text-amber-400">{{ lineupStore.quickSelectIds.length }} selected</span>
+          <button
+            v-if="unbookmarkedVisible.length > 0"
+            @click="selectAllVisible"
+            class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold cursor-pointer"
+          >
+            Select Visible ({{ unbookmarkedVisible.length }})
+          </button>
+          <button
+            v-if="lineupStore.quickSelectIds.length > 0"
+            @click="lineupStore.clearQuickSelect()"
+            class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-bold cursor-pointer"
+          >
+            Clear
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            v-if="unbookmarkedVisible.length > 0"
+            @click="addAllVisibleToPersonalBook"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/35 font-bold cursor-pointer"
+          >
+            <BookmarkPlus class="w-3.5 h-3.5" />
+            <span>Add All Visible ({{ unbookmarkedVisible.length }})</span>
+          </button>
+
+          <button
+            @click="addSelectedToPersonalBook"
+            :disabled="lineupStore.quickSelectIds.length === 0"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black transition-all',
+              lineupStore.quickSelectIds.length > 0
+                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer shadow'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            ]"
+          >
+            <BookmarkCheck class="w-3.5 h-3.5" />
+            <span>Add Selected ({{ lineupStore.quickSelectIds.length }}) to My Book</span>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- CARDS GRID -->
-    <div 
-      v-if="allDisplayLineups.length > 0"
-      class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-    >
-      <LineupCard 
-        v-for="lineup in allDisplayLineups" 
-        :key="lineup.id" 
-        :lineup="lineup" 
+    <!-- LINEUPS GRID / VISUAL STRIPS / SPOT & MOVEMENT ROWS -->
+    <div v-if="allDisplayLineups.length > 0" :class="gridLayoutClass">
+      <LineupCard
+        v-for="lineup in allDisplayLineups"
+        :key="lineup.id"
+        :lineup="lineup"
+        :selectable="quickSelectMode"
+        :selected="lineupStore.quickSelectIds.includes(lineup.id)"
+        @toggle-select="lineupStore.toggleQuickSelect($event)"
       />
     </div>
 
     <!-- EMPTY STATE -->
-    <div 
-      v-else 
+    <div
+      v-else
       class="flex flex-col items-center justify-center p-16 bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl text-center gap-3"
     >
       <Grid class="w-8 h-8 text-slate-600" />
-      <h3 class="text-sm font-bold text-slate-300">No Lineups Found</h3>
+      <h3 class="text-sm font-bold text-slate-300">No General Lineups Match Your Filters</h3>
       <p class="text-xs text-slate-500 max-w-sm">
-        <span v-if="!lineupStore.showBasicLineups">
-          Basic lineups are currently toggled <strong>OFF</strong>. Turn them on above or import presets!
-        </span>
-        <span v-else>
-          Try changing your filter criteria or click "Meta Sources" to import lineups from CSNades, NadeKing, and more.
-        </span>
+        Try clearing your search or switching site, map, or grenade filters.
       </p>
       <div class="flex items-center gap-2 mt-2">
-        <button 
-          v-if="!lineupStore.showBasicLineups"
-          @click="lineupStore.showBasicLineups = true"
-          class="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 text-xs font-bold rounded-xl transition-all cursor-pointer"
+        <button
+          @click="
+            selectedMapFilter = 'all';
+            selectedNadeFilter = 'all';
+            selectedSideFilter = 'all';
+            selectedSourceFilter = 'all';
+            selectedProPlayerFilter = 'all';
+            showFavoritesOnly = false;
+            searchQuery = '';
+          "
+          class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl cursor-pointer"
         >
-          Enable Basic Lineups
+          Reset Filters
         </button>
-        <button 
+        <button
           @click="lineupStore.isAddModalOpen = true"
           class="px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 text-xs font-black rounded-xl shadow-md hover:from-amber-500 cursor-pointer"
         >
@@ -428,9 +616,9 @@ async function handleClearAll() {
     <!-- MODALS -->
     <LineupModal />
     <AddLineupModal />
-    <CommunityPresetsModal 
-      v-if="lineupStore.isPresetsModalOpen" 
-      @close="lineupStore.isPresetsModalOpen = false" 
+    <CommunityPresetsModal
+      v-if="lineupStore.isPresetsModalOpen"
+      @close="lineupStore.isPresetsModalOpen = false"
     />
   </div>
 </template>
