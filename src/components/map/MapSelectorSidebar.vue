@@ -57,41 +57,45 @@ const reserveCount = computed(() => mapStore.availableMaps.filter(m => !m.active
       </div>
 
       <!-- FILTER TABS -->
-      <div class="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-[11px] font-bold">
+      <div class="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-[10px] font-bold">
         <button
           @click="poolFilter = 'premier'"
+          title="Active Duty / Premier Map Pool"
           :class="[
-            'py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1',
+            'py-1 px-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap',
             poolFilter === 'premier'
               ? 'bg-amber-500 text-slate-950 shadow font-black'
               : 'text-slate-400 hover:text-slate-200'
           ]"
         >
-          <span>Active</span>
-          <span class="text-[10px] opacity-75 font-mono">({{ activeCount }})</span>
+          <span>Active Duty</span>
+          <span class="text-[9px] opacity-80 font-mono">({{ activeCount }})</span>
         </button>
         <button
           @click="poolFilter = 'reserve'"
+          title="Reserve Pool & Classic Competitive Maps"
           :class="[
-            'py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1',
+            'py-1 px-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap',
             poolFilter === 'reserve'
               ? 'bg-amber-500 text-slate-950 shadow font-black'
               : 'text-slate-400 hover:text-slate-200'
           ]"
         >
           <span>Reserve</span>
-          <span class="text-[10px] opacity-75 font-mono">({{ reserveCount }})</span>
+          <span class="text-[9px] opacity-80 font-mono">({{ reserveCount }})</span>
         </button>
         <button
           @click="poolFilter = 'all'"
+          title="All CS2 Maps (Active Duty, Reserve & Classic)"
           :class="[
-            'py-1 rounded-md transition-all cursor-pointer flex items-center justify-center',
+            'py-1 px-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap',
             poolFilter === 'all'
               ? 'bg-amber-500 text-slate-950 shadow font-black'
               : 'text-slate-400 hover:text-slate-200'
           ]"
         >
           <span>All</span>
+          <span class="text-[9px] opacity-80 font-mono">({{ mapStore.availableMaps.length }})</span>
         </button>
       </div>
     </div>
@@ -127,10 +131,12 @@ const reserveCount = computed(() => mapStore.availableMaps.filter(m => !m.active
                 'px-1.5 py-0.5 rounded text-[9px] font-black uppercase font-mono tracking-wider backdrop-blur-md',
                 map.activePool
                   ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                  : 'bg-slate-800/80 text-slate-400 border border-slate-700'
+                  : map.poolCategory === 'Classic Competitive'
+                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                    : 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
               ]"
             >
-              {{ map.activePool ? 'Premier' : 'Reserve' }}
+              {{ map.activePool ? 'Active Duty' : (map.poolCategory === 'Classic Competitive' ? 'Classic' : 'Reserve') }}
             </span>
           </div>
 

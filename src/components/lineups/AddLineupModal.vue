@@ -27,7 +27,11 @@ import { clientToSvgRadarPct, computeTrajectoryArc } from '../../core/radar/coor
 import { isPointInMapBounds, snapPointToMapBounds } from '../../core/radar/mapBounds'
 import { findNearestCallout } from '../../data/mapsData'
 import { parseQuickLineupInput } from '../../utils/quickLineupParser'
-import { openWindowsSnippingTool } from '../../utils/screenCapture'
+import {
+  openWindowsSnippingTool,
+  captureScreenFrame,
+  downloadShareXCustomUploader
+} from '../../utils/screenCapture'
 import axios from 'axios'
 import {
   X,
@@ -54,7 +58,9 @@ import {
   Scissors,
   AlertTriangle,
   ShieldCheck,
-  Tag
+  Tag,
+  Download,
+  Monitor
 } from 'lucide-vue-next'
 
 const lineupStore = useLineupStore()
@@ -560,7 +566,71 @@ async function handlePastePosFromClipboard() {
 const isSnappingScreen = ref(false)
 const activeSnapSlot = ref<'aim' | 'standing' | 'landing'>('aim')
 const snapNotification = ref<string | null>(null)
+const showCaptureAppsGuide = ref(true)
 let snapNotificationTimer: ReturnType<typeof setTimeout> | null = null
+
+function handleDownloadShareXUploader() {
+  const origin = typeof window !== 'undefined' ? window.location.origin : undefined
+  const token = (authStore as any).token || undefined
+  downloadShareXCustomUploader(origin, token)
+  snapNotification.value =
+    '⚡ Downloaded CS2Nades-ShareX-Uploader.sxcu! Double-click the .sxcu file to add CS2Nades as your 1-click ShareX screenshot & MP4 clip uploader.'
+  if (snapNotificationTimer) clearTimeout(snapNotificationTimer)
+  snapNotificationTimer = setTimeout(() => {
+    snapNotification.value = null
+  }, 9000)
+}
+
+async function handleBrowserWindowGrab(slot: 'aim' | 'standing' | 'landing') {
+  activeSnapSlot.value = slot
+  isSnappingScreen.value = true
+  try {
+    const frame = await captureScreenFrame()
+    if (frame && frame.dataUrl) {
+      let finalUrl = frame.dataUrl
+      try {
+        const res = await axios.post('/api/upload', {
+          image: frame.dataUrl,
+          filename: `cs2-${slot}-${frame.timestamp}.jpg`
+        })
+        if (res.data?.url) {
+          finalUrl = res.data.url
+        }
+      } catch {
+        // Fallback to local dataUrl
+      }
+
+      if (slot === 'aim') {
+        formData.aimScreenshot = finalUrl
+        formData.imageUrl = finalUrl
+      } else if (slot === 'standing') {
+        formData.standingScreenshot = finalUrl
+      } else if (slot === 'landing') {
+        formData.landingScreenshot = finalUrl
+      }
+
+      const slotName =
+        slot === 'aim'
+          ? 'Crosshair / Aim Spot'
+          : slot === 'standing'
+            ? 'Standing Spot'
+            : 'Landing Target'
+      snapNotification.value = `✓ Captured CS2 window frame (${frame.width}×${frame.height}) into ${slotName}!`
+      if (snapNotificationTimer) clearTimeout(snapNotificationTimer)
+      snapNotificationTimer = setTimeout(() => {
+        snapNotification.value = null
+      }, 5000)
+    }
+  } catch (err: any) {
+    snapNotification.value = `⚠️ Window frame capture cancelled or unsupported: ${err?.message || 'Try ShareX or Win+Shift+S'}`
+    if (snapNotificationTimer) clearTimeout(snapNotificationTimer)
+    snapNotificationTimer = setTimeout(() => {
+      snapNotification.value = null
+    }, 5000)
+  } finally {
+    isSnappingScreen.value = false
+  }
+}
 
 function handleDirectScreenSnap(slot: 'aim' | 'standing' | 'landing') {
   activeSnapSlot.value = slot
@@ -622,7 +692,7 @@ async function handleImageFile(file: File, slot: 'aim' | 'standing' | 'landing' 
 const isUploadingVideo = ref(false)
 const showClipSoftwareGuide = ref(false)
 
-async function handleVideoFile(file: File) {
+async function uploadVideoFile(file: File) {
   if (!file) return
   isUploadingVideo.value = true
   try {
@@ -653,17 +723,21 @@ async function handleVideoFile(file: File) {
   }
 }
 
+async function handleVideoFile(file: File) {
+  return uploadVideoFile(file)
+}
+
 function handleVideoFileInputChange(e: Event) {
   const target = e.target as HTMLInputElement
   if (target.files && target.files[0]) {
-    handleVideoFile(target.files[0])
+    uploadVideoFile(target.files[0])
   }
 }
 
 function handleVideoDrop(e: DragEvent) {
   e.preventDefault()
   if (e.dataTransfer?.files && e.dataTransfer.files[0]) {
-    handleVideoFile(e.dataTransfer.files[0])
+    uploadVideoFile(e.dataTransfer.files[0])
   }
 }
 
@@ -688,9 +762,12 @@ function handleGlobalPaste(e: ClipboardEvent) {
   if (!items) return
 
   for (let i = 0; i < items.length; i++) {
-    if (items[i] && items[i]!.type.indexOf('image') !== -1) {
-      const blob = items[i]!.getAsFile()
-      if (blob) {
+    const item = items[i]
+    if (!item) continue
+
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) {
         e.preventDefault()
         let targetSlot = activeSnapSlot.value
         if (!targetSlot) {
@@ -700,7 +777,7 @@ function handleGlobalPaste(e: ClipboardEvent) {
           else targetSlot = 'aim'
         }
 
-        handleImageFile(blob, targetSlot)
+        handleImageFile(file, targetSlot)
         activeTab.value = 'screenshots'
 
         const slotLabel =
@@ -714,6 +791,19 @@ function handleGlobalPaste(e: ClipboardEvent) {
         snapNotificationTimer = setTimeout(() => {
           snapNotification.value = null
         }, 4000)
+        break
+      }
+    } else if (item.type.startsWith('video/')) {
+      const file = item.getAsFile()
+      if (file) {
+        e.preventDefault()
+        uploadVideoFile(file)
+        activeTab.value = 'screenshots'
+        snapNotification.value = `✓ Pasted & uploaded video clip (${file.name || 'MP4 Clip'}) into Lineup Video!`
+        if (snapNotificationTimer) clearTimeout(snapNotificationTimer)
+        snapNotificationTimer = setTimeout(() => {
+          snapNotification.value = null
+        }, 5000)
         break
       }
     }
@@ -1794,22 +1884,216 @@ function resetForm() {
             </Transition>
 
             <div
-              class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 text-xs text-amber-300"
+              class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs text-amber-300"
             >
               <div class="flex items-center gap-2">
                 <Sparkles class="w-4 h-4 text-amber-400 shrink-0" />
                 <span>
-                  <strong>Tip:</strong> Click <strong>+ Snap</strong> to launch Windows Snipping
-                  Tool (<kbd
-                    class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]"
-                    >Win+Shift+S</kbd
-                  >), then press
-                  <kbd
-                    class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]"
-                    >Ctrl + V</kbd
-                  >
-                  to paste!
+                  <strong>Instant Paste (<kbd class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]">Ctrl + V</kbd>):</strong>
+                  Paste any screenshot OR video clip directly in this tab! Use
+                  <strong>ShareX</strong>, <strong>Steam Game Recording</strong>, or
+                  <strong>+ Snap (<kbd class="px-1.5 py-0.5 bg-slate-900 border border-amber-500/40 rounded font-mono text-white text-[10px]">Win+Shift+S</kbd>)</strong>.
                 </span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  @click="handleDownloadShareXUploader"
+                  class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow"
+                >
+                  <Download class="w-3.5 h-3.5" />
+                  <span>⚡ Download ShareX 1-Click Auto-Uploader (.sxcu)</span>
+                </button>
+                <button
+                  type="button"
+                  @click="showCaptureAppsGuide = !showCaptureAppsGuide"
+                  class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-amber-500/40 text-amber-300 font-bold text-[11px] rounded-xl transition-all cursor-pointer"
+                >
+                  {{ showCaptureAppsGuide ? 'Hide App Guide' : 'Show Best Apps Guide' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- PROMINENT FAST UPLOAD & BEST APPS GUIDE CARD -->
+            <div
+              v-if="showCaptureAppsGuide"
+              class="p-4 bg-slate-950/95 border-2 border-amber-500/40 rounded-2xl flex flex-col gap-4 shadow-xl animate-fade-in"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                <div class="flex items-center gap-2">
+                  <div class="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30">
+                    <Camera class="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 class="font-black text-white text-xs sm:text-sm tracking-tight">
+                      📸 &amp; 🎥 Best Apps for CS2 Screenshots &amp; Lineup Recording (Fast Upload Guide)
+                    </h3>
+                    <p class="text-[10px] text-slate-400">
+                      Capture in-game crosshair lineups &amp; 60fps throw clips with zero FPS drop and instant
+                      <code class="text-amber-300 font-mono">Ctrl + V</code> or 1-click auto-upload
+                    </p>
+                  </div>
+                </div>
+                <span class="px-2 py-0.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-full text-[10px] font-mono font-bold">
+                  Supports Ctrl+V Images &amp; MP4 Clips
+                </span>
+              </div>
+
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- SECTION 1: BEST SCREENSHOT & INSTANT UPLOAD APPS -->
+                <div class="p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl flex flex-col gap-2.5">
+                  <div class="flex items-center justify-between">
+                    <span class="font-black text-amber-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <Camera class="w-3.5 h-3.5" />
+                      1. Best Screenshot &amp; Instant Upload Apps (Recommended #1: ShareX)
+                    </span>
+                  </div>
+
+                  <div class="flex flex-col gap-2 text-[11px]">
+                    <!-- #1 ShareX -->
+                    <div class="p-2.5 bg-slate-950 border border-amber-500/40 rounded-lg flex flex-col gap-1.5">
+                      <div class="flex flex-wrap items-center justify-between gap-1">
+                        <span class="font-black text-amber-300">
+                          #1 ShareX (Free, Open-Source — Best Overall for Screenshots + Clips + Auto-Upload)
+                        </span>
+                        <span class="px-1.5 py-0.5 bg-amber-500 text-slate-950 font-black text-[9px] rounded uppercase">
+                          #1 Pick
+                        </span>
+                      </div>
+                      <p class="text-slate-300 text-[10px] leading-relaxed">
+                        Custom crosshair/region hotkeys, auto-copies image to clipboard for instant
+                        <kbd class="px-1 bg-slate-900 border border-slate-700 rounded text-amber-300 font-mono">Ctrl+V</kbd>
+                        into Aim/Standing/Landing slots, records lightweight <code class="text-amber-300">.mp4</code> clips, and supports 1-click
+                        <code class="text-amber-300">.sxcu</code> direct upload to CS2Nades.
+                      </p>
+                      <div class="flex flex-wrap items-center gap-2 pt-0.5">
+                        <button
+                          type="button"
+                          @click="handleDownloadShareXUploader"
+                          class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10px] rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow"
+                        >
+                          <Download class="w-3 h-3" />
+                          <span>⚡ Download ShareX 1-Click Auto-Uploader (.sxcu)</span>
+                        </button>
+                        <span class="text-[9px] text-slate-400 font-mono">
+                          Double-click .sxcu once to bind ShareX → CS2Nades
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- #2 Windows Snipping Tool -->
+                    <div class="p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex flex-col gap-1">
+                      <span class="font-black text-sky-300">
+                        #2 Windows Snipping Tool (<kbd class="px-1 bg-slate-900 border border-slate-700 rounded text-white font-mono">Win + Shift + S</kbd> or <code class="text-amber-300">+ Snap</code> button → <kbd class="px-1 bg-slate-900 border border-slate-700 rounded text-white font-mono">Ctrl + V</kbd>)
+                      </span>
+                      <p class="text-slate-400 text-[10px] leading-relaxed">
+                        Zero install required; snip any CS2 frame and press
+                        <kbd class="px-1 bg-slate-900 border border-slate-700 rounded text-amber-300 font-mono">Ctrl + V</kbd>
+                        directly inside Tab 3 to populate Aim, Standing, or Landing slots.
+                      </p>
+                    </div>
+
+                    <!-- #3 Built-in Browser CS2 Window Frame Grabber -->
+                    <div class="p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex flex-col gap-1.5">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="font-black text-emerald-300">
+                          #3 Built-in Browser CS2 Window Frame Grabber
+                        </span>
+                        <div class="flex items-center gap-1">
+                          <button
+                            type="button"
+                            @click="handleBrowserWindowGrab('aim')"
+                            :disabled="isSnappingScreen"
+                            class="px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded text-[9px] font-bold cursor-pointer flex items-center gap-1"
+                          >
+                            <Monitor class="w-2.5 h-2.5" />
+                            <span>Grab Aim</span>
+                          </button>
+                          <button
+                            type="button"
+                            @click="handleBrowserWindowGrab('standing')"
+                            :disabled="isSnappingScreen"
+                            class="px-2 py-0.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded text-[9px] font-bold cursor-pointer"
+                          >
+                            <span>Grab Standing</span>
+                          </button>
+                          <button
+                            type="button"
+                            @click="handleBrowserWindowGrab('landing')"
+                            :disabled="isSnappingScreen"
+                            class="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded text-[9px] font-bold cursor-pointer"
+                          >
+                            <span>Grab Landing</span>
+                          </button>
+                        </div>
+                      </div>
+                      <p class="text-slate-400 text-[10px] leading-relaxed">
+                        1-click capture directly from the running CS2 game window via browser screen share.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SECTION 2: BEST LINEUP VIDEO CLIP RECORDERS -->
+                <div class="p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl flex flex-col gap-2.5">
+                  <div class="flex items-center justify-between">
+                    <span class="font-black text-rose-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <Film class="w-3.5 h-3.5" />
+                      2. Best Lineup Video Clip Recorders (1080p60 MP4, 10–15s Throw Clips)
+                    </span>
+                  </div>
+
+                  <div class="flex flex-col gap-2 text-[11px]">
+                    <!-- #1 Steam Game Recording -->
+                    <div class="p-2.5 bg-slate-950 border border-emerald-500/40 rounded-lg flex flex-col gap-1">
+                      <div class="flex flex-wrap items-center justify-between gap-1">
+                        <span class="font-black text-emerald-300">
+                          #1 Steam Game Recording (Built-in <kbd class="px-1 bg-slate-900 border border-slate-700 rounded text-white font-mono">Shift + Tab</kbd> Native CS2 Recorder — Best Overall for Clips)
+                        </span>
+                        <span class="px-1.5 py-0.5 bg-emerald-500 text-slate-950 font-black text-[9px] rounded uppercase">
+                          Native CS2
+                        </span>
+                      </div>
+                      <p class="text-slate-300 text-[10px] leading-relaxed">
+                        Built directly into Steam with zero FPS penalty, automatic utility/round timeline markers, and 1-click
+                        <strong>"Copy to Clipboard"</strong> (<kbd class="px-1 bg-slate-900 border border-slate-700 rounded text-amber-300 font-mono">Ctrl+V</kbd> right here!) or
+                        <strong>"Export MP4 file"</strong> to drag straight into the Video dropzone.
+                      </p>
+                    </div>
+
+                    <!-- #2 OBS Studio (Replay Buffer) -->
+                    <div class="p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex flex-col gap-1">
+                      <span class="font-black text-cyan-300">
+                        #2 OBS Studio (Replay Buffer)
+                      </span>
+                      <p class="text-slate-400 text-[10px] leading-relaxed">
+                        Free &amp; open-source gold standard; set a 15s Replay Buffer (<kbd class="px-1 bg-slate-900 border border-slate-700 rounded text-white font-mono">F8</kbd> hotkey) in
+                        <code class="text-cyan-300">1080p60 NVENC/AMF MP4</code> to save tiny 5–10 MB throw clips ready for instant drag-and-drop.
+                      </p>
+                    </div>
+
+                    <!-- #3 NVIDIA ShadowPlay & AMD Radeon ReLive -->
+                    <div class="p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex flex-col gap-1">
+                      <span class="font-black text-amber-300">
+                        #3 NVIDIA ShadowPlay (<kbd class="px-1 bg-slate-900 border border-slate-700 rounded text-white font-mono">Alt + F10</kbd> / <kbd class="px-1 bg-slate-900 border border-slate-700 rounded text-white font-mono">Alt + F1</kbd>) &amp; AMD Radeon ReLive
+                      </span>
+                      <p class="text-slate-400 text-[10px] leading-relaxed">
+                        Hardware GPU instant replay and screenshot hotkeys with zero performance impact.
+                      </p>
+                    </div>
+
+                    <!-- #4 Medal.tv / SteelSeries Moments -->
+                    <div class="p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex flex-col gap-1">
+                      <span class="font-black text-purple-300">
+                        #4 Medal.tv / SteelSeries Moments
+                      </span>
+                      <p class="text-slate-400 text-[10px] leading-relaxed">
+                        Auto-clipping with quick built-in trimmers before exporting <code class="text-purple-300">.mp4</code>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

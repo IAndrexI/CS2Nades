@@ -169,3 +169,50 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
     reader.readAsDataURL(blob)
   })
 }
+
+/**
+ * Generates and triggers a browser download of a ShareX Custom Uploader (.sxcu)
+ * configuration file named `CS2Nades-ShareX-Uploader.sxcu` for 1-click screenshot
+ * and MP4 clip uploads directly from CS2 into CS2Nades.
+ */
+export function downloadShareXCustomUploader(baseUrl?: string, authToken?: string): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return false
+
+  const origin = (baseUrl || window.location.origin || 'http://localhost:3000').replace(/\/+$/, '')
+  const headers: Record<string, string> = {}
+  if (authToken && authToken.trim()) {
+    headers['Authorization'] = `Bearer ${authToken.trim()}`
+  }
+
+  const sxcuConfig = {
+    Version: '16.1.0',
+    Name: 'CS2Nades Direct Media Uploader',
+    DestinationType: 'ImageUploader, FileUploader',
+    RequestMethod: 'POST',
+    RequestURL: `${origin}/api/upload-media`,
+    Headers: headers,
+    Body: 'MultipartFormData',
+    FileFormName: 'file',
+    URL: '{json:url}'
+  }
+
+  try {
+    const blob = new Blob([JSON.stringify(sxcuConfig, null, 2)], {
+      type: 'application/json;charset=utf-8'
+    })
+    const downloadUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = 'CS2Nades-ShareX-Uploader.sxcu'
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 1500)
+    return true
+  } catch (err) {
+    console.warn('Failed to trigger ShareX .sxcu download:', err)
+    return false
+  }
+}
+

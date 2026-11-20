@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
@@ -126,6 +126,17 @@ async function handleSaveCustomRole() {
     customRoleInput.value = ''
   }
 }
+
+const sortedDropdownMaps = computed(() => {
+  const rank = (m: typeof mapStore.availableMaps[number]) => {
+    if (m.activePool) return 0
+    if (m.poolCategory === 'Reserve Pool') return 1
+    if (m.poolCategory === 'Classic Competitive') return 2
+    if (m.isCustom) return 3
+    return 1
+  }
+  return [...mapStore.availableMaps].sort((a, b) => rank(a) - rank(b))
+})
 
 function selectMap(mapId: string) {
   mapStore.setMap(mapId)
@@ -288,7 +299,7 @@ onUnmounted(() => {
 
             <div class="max-h-72 overflow-y-auto">
               <button
-                v-for="map in mapStore.availableMaps"
+                v-for="map in sortedDropdownMaps"
                 :key="map.id"
                 @click="selectMap(map.id)"
                 :class="[
@@ -308,13 +319,16 @@ onUnmounted(() => {
                   <span>{{ map.name }}</span>
                 </div>
 
-                <span v-if="map.isCustom" class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                <span v-if="map.isCustom" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
                   CUSTOM
                 </span>
-                <span v-else-if="map.activePool" class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 font-black">
-                  PREMIER
+                <span v-else-if="map.activePool" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 font-black">
+                  ACTIVE DUTY
                 </span>
-                <span v-else class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-500">
+                <span v-else-if="map.poolCategory === 'Classic Competitive'" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
+                  CLASSIC
+                </span>
+                <span v-else class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">
                   RESERVE
                 </span>
               </button>

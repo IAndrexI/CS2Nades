@@ -29,7 +29,7 @@ export const DEFAULT_CS2_UPDATES: CS2UpdateItem[] = [
   },
   {
     id: 'valve-patch-train-inferno-geom',
-    title: 'Counter-Strike 2 Release Notes — Train & Inferno Clipping + Subtick Grenade Consistency',
+    title: 'Counter-Strike 2 Release Notes — Train Active Duty Pool Update, Inferno Clipping & Subtick Grenade Consistency',
     date: '2026-11-12',
     category: 'patch_note',
     source: 'Valve Official',
@@ -37,15 +37,16 @@ export const DEFAULT_CS2_UPDATES: CS2UpdateItem[] = [
     sourceUrl: 'https://store.steampowered.com/news/app/730',
     version: '1.40.6.2',
     summary:
-      'Official Valve patch refining skybox collision on Inferno Banana roofs, Train Popdog/A-site train hitboxes, and grenade release velocity on subtick jumps.',
+      'Official Valve patch confirming Train (de_train) in the Active Duty 7-map Premier pool (replacing Vertigo, which moved to the Reserve Pool alongside Overpass), plus skybox collision updates on Inferno Banana and Train Popdog/A-site.',
     details: [
+      'Active Duty 7-Map Pool officially features Mirage, Dust II, Inferno, Nuke, Ancient, Anubis, and Train (Vertigo moved to Reserve Pool).',
       'Adjusted Inferno Banana overhanging roof clip brushes to prevent unintended pixel-bounces on deep Coffins and CT smokes.',
       'Cleaned up Train A-site railcar roof geometry and Ivy archway trims affecting cross-map T-spawn smoke walls.',
       'Improved determinism of simultaneous +jump and -attack release events across variable framerates.'
     ],
-    affectedMaps: ['train', 'inferno'],
+    affectedMaps: ['train', 'vertigo', 'inferno'],
     lineupImpact: 'high',
-    tags: ['valve', 'patch-notes', 'subtick', 'train', 'inferno', 'clipping']
+    tags: ['valve', 'patch-notes', 'active-duty', 'subtick', 'train', 'vertigo', 'inferno', 'clipping']
   },
   {
     id: 'thour-subtick-jumpthrow-analysis',
@@ -75,11 +76,11 @@ export const DEFAULT_CS2_UPDATES: CS2UpdateItem[] = [
     sourceHandle: '@aquaismissing',
     sourceUrl: 'https://x.com/aquaismissing',
     summary:
-      'Map compilation timestamps and localization keys point to upcoming Active Duty pool testing alongside skybox height tweaks on Anubis and Overpass.',
+      'Map compilation timestamps and localization keys point to Classic Competitive testing for Cache and Cobblestone alongside Reserve Pool skybox tweaks on Overpass and Vertigo.',
     details: [
-      'Server staging playlists updated with test slots matching de_cache and de_cbble identifiers.',
-      'Raised skybox ceiling clip on Anubis Canals and Overpass Water to eliminate high-arc flashbang ceiling hits.',
-      'Vertigo A-Ramp scaffolding collision simplified for cleaner Molotov bounce predictability.'
+      'Server staging playlists updated with Classic Competitive slots matching de_cache and de_cbble identifiers.',
+      'Raised skybox ceiling clip on Anubis Canals (Active Duty) and Overpass Water (Reserve Pool) to eliminate high-arc flashbang ceiling hits.',
+      'Vertigo (Reserve Pool after Train joined Active Duty) A-Ramp scaffolding collision simplified for cleaner Molotov bounce predictability.'
     ],
     affectedMaps: ['cobblestone', 'cache', 'anubis', 'overpass', 'vertigo'],
     lineupImpact: 'high',

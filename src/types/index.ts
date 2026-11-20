@@ -97,6 +97,7 @@ export interface MapInfo {
   name: string
   code: string // e.g. de_mirage
   activePool: boolean
+  poolCategory?: 'Active Duty' | 'Reserve Pool' | 'Classic Competitive'
   radarImage: string // Official 1024x1024 radar image
   simpleRadarImage?: string // SimpleRadar high-contrast 1024x1024 radar image
   bannerImage?: string // Scenic map banner image
