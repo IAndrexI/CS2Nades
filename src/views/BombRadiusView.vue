@@ -8,21 +8,26 @@ import {
   radarToWorldCoords
 } from '../core/radar/coordinateEngine'
 import { isPointInMapBounds, snapPointToMapBounds } from '../core/radar/mapBounds'
+import {
+  computeBombShockwaveField,
+  traceShockwavePath,
+  renderShockwaveHeatmapDataUrl
+} from '../core/radar/bombShockwave'
 import type { Point2D, RadarFloorId } from '../types'
 import {
   Bomb,
   Shield,
   ShieldOff,
   Heart,
-  MapPin,
   RotateCcw,
   ZoomIn,
   ZoomOut,
-  Crosshair,
   AlertTriangle,
   CheckCircle2,
   Lock,
-  Unlock
+  Unlock,
+  Terminal,
+  Check
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
@@ -44,9 +49,19 @@ const MAP_C4_RADIUS: Record<string, number> = {
 
 const playerHp = ref<number>(100)
 const hasArmor = ref<boolean>(true)
+const physicsMode = ref<'shockwave' | 'legacy'>('shockwave')
 const lockToSites = ref<boolean>(false)
 const bombFloor = ref<RadarFloorId>('upper')
 const playerFloor = ref<RadarFloorId>('upper')
+const copiedDebugCmd = ref<string | null>(null)
+
+function copyDebugCmd(cmd: string, key: string) {
+  navigator.clipboard?.writeText(cmd).catch(() => {})
+  copiedDebugCmd.value = key
+  setTimeout(() => {
+    copiedDebugCmd.value = null
+  }, 2000)
+}
 
 const bombCoords = ref<Point2D>({
   x: mapStore.currentMap.sites.a.x,
@@ -153,25 +168,79 @@ const blastRings = computed(() => {
     }))
 })
 
+const shockwaveField = computed(() => {
+  if (physicsMode.value !== 'shockwave') return null
+  return computeBombShockwaveField(
+    mapStore.currentMapId,
+    bombCoords.value,
+    bombRadius.value,
+    hasFloors.value ? bombFloor.value : undefined
+  )
+})
+
+const shockwaveHeatmapUrl = computed(() => {
+  if (!shockwaveField.value) return ''
+  return renderShockwaveHeatmapDataUrl(shockwaveField.value, playerHp.value)
+})
+
+const cursorShockwavePath = computed(() => {
+  if (!shockwaveField.value || !cursorPct.value) return []
+  return traceShockwavePath(shockwaveField.value, cursorPct.value)
+})
+
 const cursorMetrics = computed(() => {
   if (!cursorPct.value) return null
   const bWorld = radarToWorldCoords(mapStore.currentMapId, bombCoords.value, 0)
   const cWorld = radarToWorldCoords(mapStore.currentMapId, cursorPct.value, 0)
   const dz = getZOffset()
-  const distHammer = Math.round(
+  const directHammer = Math.round(
     Math.hypot(cWorld.x - bWorld.x, cWorld.y - bWorld.y, dz)
   )
-  const dmg = calculateBombDamage(distHammer, hasArmor.value)
+
+  if (physicsMode.value === 'shockwave' && shockwaveField.value) {
+    const cx = Math.max(0, Math.min(99, Math.floor(cursorPct.value.x)))
+    const cy = Math.max(0, Math.min(99, Math.floor(cursorPct.value.y)))
+    const idx = cy * 100 + cx
+    const pDist = shockwaveField.value.pathDist[idx]!
+    const isBehindWall = shockwaveField.value.behindWall[idx] === 1
+    let dmg = shockwaveField.value.damage[idx]!
+    if (dz > 0 && pDist >= 0) {
+      const eff3D = Math.hypot(shockwaveField.value.effectiveDist[idx]!, dz)
+      dmg = calculateBombDamage(eff3D, false)
+    }
+    const legacyDmg = calculateBombDamage(directHammer, false)
+    const savedByCover = Math.max(0, legacyDmg - dmg)
+    const hpLeft = Math.max(0, playerHp.value - dmg)
+    const survives = hpLeft > 0
+    const distHammer = pDist >= 0 ? Math.round(pDist) : directHammer
+    const distMeters = (distHammer * 0.01905).toFixed(1)
+    return {
+      distHammer,
+      directHammer,
+      distMeters,
+      dmg,
+      hpLeft,
+      survives,
+      isBehindWall,
+      savedByCover,
+      unreachable: pDist < 0
+    }
+  }
+
+  const dmg = calculateBombDamage(directHammer, hasArmor.value)
   const hpLeft = Math.max(0, playerHp.value - dmg)
   const survives = hpLeft > 0
-  // 1 Hammer unit ≈ 0.01905 meters (Source engine standard)
-  const distMeters = (distHammer * 0.01905).toFixed(1)
+  const distMeters = (directHammer * 0.01905).toFixed(1)
   return {
-    distHammer,
+    distHammer: directHammer,
+    directHammer,
     distMeters,
     dmg,
     hpLeft,
-    survives
+    survives,
+    isBehindWall: false,
+    savedByCover: 0,
+    unreachable: false
   }
 })
 
@@ -327,6 +396,27 @@ function handleMapClick(e: MouseEvent) {
             <Unlock v-else class="w-3.5 h-3.5" />
             <span>{{ lockToSites ? 'Sites Only' : 'Free Plant' }}</span>
           </button>
+
+          <div class="inline-flex items-center p-0.5 bg-slate-950/90 border border-white/[0.08] rounded-xl">
+            <button
+              @click="physicsMode = 'shockwave'"
+              :class="[
+                'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer',
+                physicsMode === 'shockwave' ? 'bg-white text-slate-950 font-semibold' : 'text-slate-400 hover:text-white'
+              ]"
+            >
+              CS2 Shockwave (Walls Block)
+            </button>
+            <button
+              @click="physicsMode = 'legacy'"
+              :class="[
+                'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer',
+                physicsMode === 'legacy' ? 'bg-white text-slate-950 font-semibold' : 'text-slate-400 hover:text-white'
+              ]"
+            >
+              Legacy Sphere
+            </button>
+          </div>
         </div>
       </div>
 
@@ -418,9 +508,23 @@ function handleMapClick(e: MouseEvent) {
               <span class="font-semibold" :class="cursorMetrics.survives ? 'text-emerald-300' : 'text-rose-300'">
                 {{ cursorMetrics.survives ? `SURVIVES (${cursorMetrics.hpLeft} HP)` : 'LETHAL BLAST' }}
               </span>
+              <span
+                v-if="physicsMode === 'shockwave'"
+                :class="[
+                  'px-1.5 py-0.5 rounded text-[9px] font-mono uppercase',
+                  cursorMetrics.isBehindWall || cursorMetrics.unreachable
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'bg-rose-500/20 text-rose-300'
+                ]"
+              >
+                {{ cursorMetrics.unreachable ? 'Solid Wall' : cursorMetrics.isBehindWall ? 'Covered by Wall' : 'Direct Blast' }}
+              </span>
             </div>
             <div class="text-[11px] font-mono text-slate-300 mt-1">
               Damage: <strong class="text-white">{{ cursorMetrics.dmg }}</strong> • {{ cursorMetrics.distHammer }}u ({{ cursorMetrics.distMeters }}m)
+            </div>
+            <div v-if="cursorMetrics.savedByCover > 0" class="text-[10px] font-mono text-emerald-400 mt-0.5">
+              Wall Cover Saved: -{{ cursorMetrics.savedByCover }} DMG
             </div>
           </div>
 
@@ -433,8 +537,20 @@ function handleMapClick(e: MouseEvent) {
           >
             <VectorMapBlueprint :map-info="mapStore.currentMap" :show-callouts="false" />
 
-            <!-- CONCENTRIC BLAST RINGS -->
-            <g class="blast-rings-layer pointer-events-none">
+            <!-- CS2 SHOCKWAVE WALL-OCCLUDED HEATMAP OVERLAY -->
+            <image
+              v-if="physicsMode === 'shockwave' && shockwaveHeatmapUrl"
+              :href="shockwaveHeatmapUrl"
+              x="0"
+              y="0"
+              width="1000"
+              height="1000"
+              preserveAspectRatio="none"
+              class="pointer-events-none opacity-90"
+            />
+
+            <!-- LEGACY CONCENTRIC BLAST RINGS (ONLY IN LEGACY SPHERE MODE) -->
+            <g v-if="physicsMode === 'legacy'" class="blast-rings-layer pointer-events-none">
               <circle
                 v-for="ring in blastRings"
                 :key="ring.id"
@@ -450,9 +566,20 @@ function handleMapClick(e: MouseEvent) {
               />
             </g>
 
-            <!-- DISTANCE LINE TO CURSOR -->
+            <!-- SHOCKWAVE CORRIDOR PATH OR DIRECT DISTANCE LINE -->
+            <polyline
+              v-if="physicsMode === 'shockwave' && cursorShockwavePath.length >= 2"
+              :points="cursorShockwavePath.map((p) => `${p.x * 10},${p.y * 10}`).join(' ')"
+              fill="none"
+              :stroke="cursorMetrics?.survives ? '#10b981' : '#ef4444'"
+              stroke-width="2.2"
+              stroke-dasharray="5 3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="pointer-events-none"
+            />
             <line
-              v-if="cursorPct"
+              v-else-if="cursorPct"
               :x1="bombCoords.x * 10"
               :y1="bombCoords.y * 10"
               :x2="cursorPct.x * 10"
@@ -508,14 +635,15 @@ function handleMapClick(e: MouseEvent) {
           </div>
         </div>
 
-        <!-- KEVLAR TOGGLE -->
+        <!-- KEVLAR TOGGLE / CS2 ARMOR NOTE -->
         <div class="flex items-center justify-between p-3 bg-slate-950/70 border border-white/[0.06] rounded-xl">
           <span class="flex items-center gap-2 font-medium text-slate-200">
-            <Shield v-if="hasArmor" class="w-4 h-4 text-sky-400" />
+            <Shield v-if="hasArmor && physicsMode === 'legacy'" class="w-4 h-4 text-sky-400" />
             <ShieldOff v-else class="w-4 h-4 text-slate-500" />
-            Kevlar Armor (50% Reduction)
+            <span>{{ physicsMode === 'shockwave' ? 'CS2 Kevlar (0% C4 Reduction)' : 'Kevlar Armor (50% Reduction)' }}</span>
           </span>
           <button
+            v-if="physicsMode === 'legacy'"
             @click="hasArmor = !hasArmor"
             :class="[
               'px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer',
@@ -524,6 +652,32 @@ function handleMapClick(e: MouseEvent) {
           >
             {{ hasArmor ? 'Equipped' : 'No Armor' }}
           </button>
+          <span v-else class="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px] font-mono">
+            Season 5 Rework
+          </span>
+        </div>
+
+        <!-- IN-GAME VALVE DEBUG COMMANDS -->
+        <div class="flex flex-col gap-2 p-3 bg-slate-950/70 border border-white/[0.06] rounded-xl">
+          <span class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">In-Game CS2 Blast Debug</span>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              @click="copyDebugCmd('sv_cheats 1; cl_bake_bomb_damage_debug 1', 'dbg-a')"
+              class="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-900 hover:bg-slate-800 border border-white/[0.08] rounded-lg text-[11px] text-slate-200 cursor-pointer"
+            >
+              <Check v-if="copiedDebugCmd === 'dbg-a'" class="w-3 h-3 text-emerald-400" />
+              <Terminal v-else class="w-3 h-3 text-sky-400" />
+              <span>{{ copiedDebugCmd === 'dbg-a' ? 'Copied!' : 'Site A Debug' }}</span>
+            </button>
+            <button
+              @click="copyDebugCmd('sv_cheats 1; cl_bake_bomb_damage_debug 2', 'dbg-b')"
+              class="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-900 hover:bg-slate-800 border border-white/[0.08] rounded-lg text-[11px] text-slate-200 cursor-pointer"
+            >
+              <Check v-if="copiedDebugCmd === 'dbg-b'" class="w-3 h-3 text-emerald-400" />
+              <Terminal v-else class="w-3 h-3 text-sky-400" />
+              <span>{{ copiedDebugCmd === 'dbg-b' ? 'Copied!' : 'Site B Debug' }}</span>
+            </button>
+          </div>
         </div>
 
         <!-- FLOOR SELECTOR FOR NUKE / VERTIGO -->
