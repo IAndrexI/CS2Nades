@@ -301,8 +301,12 @@ function handleMouseDown(e: MouseEvent) {
   if (e.button !== 0 || !svgElement.value) return
   didDrag.value = false
   const pt = clientToSvgRadarPct(svgElement.value, e.clientX, e.clientY, true)
-  if (pt && Math.hypot(pt.x - bombCoords.value.x, pt.y - bombCoords.value.y) <= 3.5) {
+  if (
+    pt &&
+    (zoom.value <= 1.01 || Math.hypot(pt.x - bombCoords.value.x, pt.y - bombCoords.value.y) <= 4.5)
+  ) {
     isDraggingBomb.value = true
+    placeBombAt(pt)
     return
   }
   isPanning.value = true
@@ -549,20 +553,20 @@ function handleMapClick(e: MouseEvent) {
               class="pointer-events-none opacity-90"
             />
 
-            <!-- LEGACY CONCENTRIC BLAST RINGS (ONLY IN LEGACY SPHERE MODE) -->
-            <g v-if="physicsMode === 'legacy'" class="blast-rings-layer pointer-events-none">
+            <!-- CONCENTRIC BLAST RINGS (FULL IN LEGACY MODE, SUBTLE REFERENCE IN SHOCKWAVE MODE) -->
+            <g class="blast-rings-layer pointer-events-none">
               <circle
                 v-for="ring in blastRings"
                 :key="ring.id"
                 :cx="bombCoords.x * 10"
                 :cy="bombCoords.y * 10"
                 :r="ring.svgR"
-                :fill="ring.color"
-                :fill-opacity="ring.fillOpacity"
+                :fill="physicsMode === 'legacy' ? ring.color : 'none'"
+                :fill-opacity="physicsMode === 'legacy' ? ring.fillOpacity : 0"
                 :stroke="ring.color"
-                stroke-width="1.6"
+                :stroke-width="physicsMode === 'legacy' ? 1.6 : 1.1"
                 stroke-dasharray="5 4"
-                stroke-opacity="0.85"
+                :stroke-opacity="physicsMode === 'legacy' ? 0.85 : 0.42"
               />
             </g>
 
