@@ -55,6 +55,11 @@ const routes = [
     component: () => import('../views/UpdatesAndLeaksView.vue')
   },
   {
+    path: '/bomb-radius',
+    name: 'bomb-radius',
+    component: () => import('../views/BombRadiusView.vue')
+  },
+  {
     path: '/remote',
     name: 'remote',
     component: () => import('../views/RemoteCompanionView.vue')

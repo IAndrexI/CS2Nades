@@ -45,6 +45,7 @@ import {
   UserX,
   Mic,
   Newspaper,
+  Bomb,
   WifiOff,
   SlidersHorizontal,
   Moon,
@@ -103,6 +104,7 @@ const navLinks = [
   { name: 'Stratbook', path: '/strats', icon: BookOpen },
   { name: 'Library', path: '/library', icon: Grid },
   { name: 'My Book', path: '/my-lineups', icon: BookMarked },
+  { name: 'Bomb Radius', path: '/bomb-radius', icon: Bomb },
   { name: 'Updates', path: '/updates', icon: Newspaper }
 ]
 
