@@ -16,6 +16,11 @@ import {
   getMapSwitchConsoleCommand,
   getLineupSetupConsoleCommand
 } from '../core/radar/mapBounds'
+import {
+  computeMapCalloutZones,
+  clipBoxToMapPolygon,
+  type ComputedCalloutZone
+} from '../core/radar/calloutPolygons'
 import type { CalloutBox, GrenadeType, Lineup, Point2D, RadarFloorId } from '../types'
 import {
   Layers,
@@ -44,7 +49,8 @@ import {
   Eye,
   Edit3,
   BookOpen,
-  UserCheck
+  UserCheck,
+  Hexagon
 } from 'lucide-vue-next'
 
 type CalloutEntry = CalloutItem & {
@@ -53,7 +59,7 @@ type CalloutEntry = CalloutItem & {
   commonNades?: string[]
 }
 
-type CanvasToolMode = 'select' | 'draw_box' | 'place_pin'
+type CanvasToolMode = 'select' | 'draw_box' | 'draw_polygon' | 'place_pin'
 type LayerVisibilityMode = 'both' | 'boxes' | 'pins'
 
 const PERSONAL_COLOR_PALETTE = [
@@ -81,7 +87,8 @@ const layerVisibility = ref<LayerVisibilityMode>('both')
 // New / Editing Personal Callout or Box State
 const draftCoords = ref<Point2D | null>(null)
 const draftBox = ref<CalloutBox | null>(null)
-const draftShape = ref<'box' | 'pin'>('box')
+const draftPolygon = ref<Point2D[] | null>(null)
+const draftShape = ref<'box' | 'polygon' | 'pin'>('box')
 const draftName = ref('')
 const draftSite = ref<'A' | 'B' | 'Mid' | 'Spawn' | 'Other'>('Mid')
 const draftColor = ref<string>('#10b981')
@@ -89,10 +96,11 @@ const draftAliases = ref('')
 const editingCalloutId = ref<string | null>(null)
 const snapWarningMessage = ref('')
 
-// Box Dragging State on Radar Canvas
+// Box Dragging & Polygon Drawing State on Radar Canvas
 const isDrawingBox = ref(false)
 const boxDragStart = ref<Point2D | null>(null)
 const boxDragCurrent = ref<Point2D | null>(null)
+const polygonVertices = ref<Point2D[]>([])
 
 // Share & Import Modal State
 const isShareModalOpen = ref(false)
@@ -268,6 +276,19 @@ const selectedCallout = computed<CalloutEntry | null>(() => {
     filteredCallouts.value.find((c) => c.id === selectedCalloutId.value) ??
     (mapStore.currentMapCallouts as CalloutEntry[]).find((c) => c.id === selectedCalloutId.value) ??
     null
+  )
+})
+
+const hoveredCallout = computed<CalloutEntry | null>(() => {
+  if (!hoveredCalloutId.value) return null
+  return filteredCallouts.value.find((c) => c.id === hoveredCalloutId.value) ?? null
+})
+
+const computedZonesMap = computed<Map<string, ComputedCalloutZone>>(() => {
+  return computeMapCalloutZones(
+    mapStore.currentMapId,
+    filteredCallouts.value,
+    effectiveFloorParam.value
   )
 })
 
@@ -533,6 +554,11 @@ function handleMouseUp() {
     draftShape.value = 'box'
     draftCoords.value = centerPt
     draftBox.value = finalBox
+    draftPolygon.value = clipBoxToMapPolygon(
+      mapStore.currentMapId,
+      finalBox,
+      effectiveFloorParam.value
+    )
     isDrawingBox.value = false
     boxDragStart.value = null
     boxDragCurrent.value = null
@@ -550,8 +576,52 @@ function handleMouseLeave() {
   cursorPct.value = null
 }
 
+function finishPolygonDrawing() {
+  if (polygonVertices.value.length < 3) return
+  const pts = [...polygonVertices.value]
+  let sumX = 0
+  let sumY = 0
+  for (const p of pts) {
+    sumX += p.x
+    sumY += p.y
+  }
+  const rawCenter = { x: sumX / pts.length, y: sumY / pts.length }
+  const snapped = snapPointToMapBounds(
+    mapStore.currentMapId,
+    rawCenter,
+    effectiveFloorParam.value
+  )
+  draftShape.value = 'polygon'
+  draftCoords.value = { x: snapped.x, y: snapped.y }
+  draftBox.value = null
+  draftPolygon.value = pts
+  polygonVertices.value = []
+  snapWarningMessage.value = ''
+}
+
 function handleMapClick(e: MouseEvent) {
   if (didDrag.value || !svgElement.value) return
+
+  if (activeTool.value === 'draw_polygon') {
+    const rawPt = clientToSvgRadarPct(svgElement.value, e.clientX, e.clientY, true)
+    if (!rawPt) return
+    const snapped = snapPointToMapBounds(
+      mapStore.currentMapId,
+      rawPt,
+      effectiveFloorParam.value
+    )
+    const pt = { x: snapped.x, y: snapped.y }
+    if (polygonVertices.value.length >= 3) {
+      const first = polygonVertices.value[0]!
+      if (Math.hypot(pt.x - first.x, pt.y - first.y) <= 2.4) {
+        finishPolygonDrawing()
+        return
+      }
+    }
+    polygonVertices.value.push(pt)
+    return
+  }
+
   if (activeTool.value !== 'place_pin') return
 
   const rawPt = clientToSvgRadarPct(svgElement.value, e.clientX, e.clientY, true)
@@ -565,6 +635,7 @@ function handleMapClick(e: MouseEvent) {
   draftShape.value = 'pin'
   draftCoords.value = { x: snapped.x, y: snapped.y }
   draftBox.value = null
+  draftPolygon.value = null
   if (snapped.wasOutOfBounds) {
     snapWarningMessage.value = `Adjusted out-of-bounds click (${rawPt.x}%, ${rawPt.y}%) to nearest playable spot (${snapped.x}%, ${snapped.y}%).`
   } else {
@@ -646,6 +717,7 @@ function handleSaveDraftCallout() {
       coords: { x: snapped.x, y: snapped.y },
       shape: draftShape.value,
       box: boxToSave,
+      ...(draftPolygon.value ? { polygon: draftPolygon.value } : {}),
       color: draftColor.value,
       aliases: aliasesList,
       ...(hasFloors.value ? { floor: activeFloor.value } : {})
@@ -660,6 +732,7 @@ function handleSaveDraftCallout() {
       coords: { x: snapped.x, y: snapped.y },
       shape: draftShape.value,
       ...(boxToSave ? { box: boxToSave } : {}),
+      ...(draftPolygon.value ? { polygon: draftPolygon.value } : {}),
       color: draftColor.value,
       aliases: aliasesList,
       sources: ['Personal'],
@@ -679,6 +752,7 @@ function handleSaveDraftCallout() {
 function handleCancelDraft() {
   draftCoords.value = null
   draftBox.value = null
+  draftPolygon.value = null
   draftName.value = ''
   draftAliases.value = ''
   editingCalloutId.value = null
@@ -686,6 +760,7 @@ function handleCancelDraft() {
   isDrawingBox.value = false
   boxDragStart.value = null
   boxDragCurrent.value = null
+  polygonVertices.value = []
 }
 
 async function handleDeleteCallout(id: string, e?: MouseEvent) {
@@ -1224,10 +1299,24 @@ function getBadgeWidth(name: string): number {
                     ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
                     : 'text-slate-300 hover:text-white hover:bg-white/[0.06]'
                 ]"
-                title="Click and drag on the radar to draw a custom personal callout zone box"
+                title="Click and drag on the radar to draw a map-fitted personal callout zone"
               >
                 <Square class="w-3.5 h-3.5" />
-                <span>Draw Callout Box</span>
+                <span>Map-Fitted Box</span>
+              </button>
+
+              <button
+                @click="setTool('draw_polygon')"
+                :class="[
+                  'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer',
+                  activeTool === 'draw_polygon'
+                    ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-white/[0.06]'
+                ]"
+                title="Click vertices to trace a custom polygon callout zone"
+              >
+                <Hexagon class="w-3.5 h-3.5" />
+                <span>Draw Polygon</span>
               </button>
 
               <button
@@ -1259,15 +1348,54 @@ function getBadgeWidth(name: string): number {
             <!-- FLOATING TOOL INSTRUCTION PILL (BOTTOM-CENTER INSIDE CANVAS WHEN DRAWING) -->
             <div
               v-if="activeTool !== 'select' && !draftCoords"
-              class="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3.5 py-2 bg-slate-900/90 backdrop-blur-xl border border-emerald-500/40 text-white rounded-xl shadow-2xl text-xs font-medium pointer-events-none"
+              class="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3.5 py-2 bg-slate-900/90 backdrop-blur-xl border border-emerald-500/40 text-white rounded-xl shadow-2xl text-xs font-medium"
             >
-              <Crosshair class="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span v-if="activeTool === 'draw_box'">
-                Click &amp; drag across any map region to draw a custom callout zone box
+              <Crosshair class="w-3.5 h-3.5 text-emerald-400 shrink-0 pointer-events-none" />
+              <span v-if="activeTool === 'draw_box'" class="pointer-events-none">
+                Click &amp; drag across any map region to draw a map-fitted callout zone
               </span>
-              <span v-else>
+              <template v-else-if="activeTool === 'draw_polygon'">
+                <span class="pointer-events-none">
+                  Click points to trace polygon ({{ polygonVertices.length }} pts) — click start point to close
+                </span>
+                <button
+                  v-if="polygonVertices.length >= 3"
+                  @click.stop="finishPolygonDrawing"
+                  class="px-2 py-0.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold rounded-lg text-[11px] cursor-pointer"
+                >
+                  Finish
+                </button>
+              </template>
+              <span v-else class="pointer-events-none">
                 Click inside playable radar bounds to drop a personal callout pin
               </span>
+            </div>
+
+            <!-- FLOATING HOVER TOOLTIP (CS2JOURNAL STYLE) -->
+            <div
+              v-if="hoveredCallout && activeTool === 'select'"
+              class="absolute bottom-3 right-3 z-30 max-w-[260px] px-3.5 py-2.5 bg-slate-950/90 backdrop-blur-xl border border-white/[0.14] rounded-xl shadow-2xl pointer-events-none"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-semibold text-white uppercase tracking-wide">
+                  {{ hoveredCallout.name }}
+                </span>
+                <span
+                  v-if="hoveredCallout.site"
+                  class="px-1.5 py-0.5 rounded bg-white/[0.08] text-slate-300 text-[10px] font-mono"
+                >
+                  {{ hoveredCallout.site }}
+                </span>
+              </div>
+              <p
+                v-if="hoveredCallout.aliases && hoveredCallout.aliases.length > 0"
+                class="text-[11px] text-slate-400 mt-0.5 truncate"
+              >
+                AKA: {{ hoveredCallout.aliases.join(', ') }}
+              </p>
+              <p class="text-[10px] text-sky-400 font-mono mt-1">
+                {{ getLineupCountForCallout(hoveredCallout) }} linked lineup(s) • Click to inspect
+              </p>
             </div>
 
             <svg
@@ -1285,28 +1413,27 @@ function getBadgeWidth(name: string): number {
                 :show-callouts="false"
               />
 
-              <!-- LAYER 1: SHADED CALLOUT ZONE BOXES (CS2Journal / CS2Flow / Personal Boxes) -->
+              <!-- LAYER 1: MAP-SHAPE-CONFORMING CALLOUT POLYGON ZONES (CS2Journal / TotalCS Style) -->
               <g v-if="showBoxesLayer" class="callout-boxes-layer">
-                <template v-for="callout in filteredCallouts" :key="`box-${callout.id}`">
+                <template v-for="callout in filteredCallouts" :key="`zone-${callout.id}`">
                   <g
-                    v-if="getEffectiveBox(callout)"
-                    class="cursor-pointer transition-opacity"
+                    v-if="computedZonesMap.get(callout.id)"
+                    class="callout-zone-group cursor-pointer"
+                    :data-zone-slug="callout.id"
+                    :data-label-mode="computedZonesMap.get(callout.id)!.labelMode"
                     @click="selectCallout(callout, $event)"
                     @mouseenter="hoveredCalloutId = callout.id"
                     @mouseleave="hoveredCalloutId = null"
                   >
-                    <rect
-                      :x="getEffectiveBox(callout)!.x * 10"
-                      :y="getEffectiveBox(callout)!.y * 10"
-                      :width="getEffectiveBox(callout)!.width * 10"
-                      :height="getEffectiveBox(callout)!.height * 10"
-                      rx="6"
+                    <polygon
+                      class="callout-zone transition-all duration-150"
+                      :points="computedZonesMap.get(callout.id)!.svgPoints"
                       :fill="getCalloutAccentColor(callout)"
                       :fill-opacity="
                         selectedCalloutId === callout.id
-                          ? 0.34
+                          ? 0.38
                           : hoveredCalloutId === callout.id
-                            ? 0.26
+                            ? 0.30
                             : callout.isCustom || callout.isPersonal
                               ? 0.22
                               : 0.14
@@ -1314,35 +1441,94 @@ function getBadgeWidth(name: string): number {
                       :stroke="
                         selectedCalloutId === callout.id
                           ? '#f59e0b'
-                          : getCalloutAccentColor(callout)
+                          : hoveredCalloutId === callout.id
+                            ? '#ffffff'
+                            : getCalloutAccentColor(callout)
                       "
-                      :stroke-width="selectedCalloutId === callout.id ? 2.4 : 1.4"
-                      :stroke-dasharray="callout.isCustom || callout.isPersonal ? 'none' : '4 2'"
+                      :stroke-width="
+                        selectedCalloutId === callout.id
+                          ? 2.2
+                          : hoveredCalloutId === callout.id
+                            ? 1.8
+                            : 1.1
+                      "
                       :stroke-opacity="
                         selectedCalloutId === callout.id || hoveredCalloutId === callout.id
                           ? 0.95
-                          : 0.72
+                          : 0.6
                       "
                     />
 
-                    <!-- If Boxes-Only mode is active, render clean centered typography inside the box -->
+                    <!-- Leader line for compact outside labels (CS2Journal style) -->
+                    <line
+                      v-if="
+                        !showPinsLayer &&
+                        computedZonesMap.get(callout.id)!.labelMode === 'outside' &&
+                        computedZonesMap.get(callout.id)!.leaderFrom &&
+                        computedZonesMap.get(callout.id)!.leaderTo
+                      "
+                      class="callout-zone-arrow-line"
+                      :x1="computedZonesMap.get(callout.id)!.leaderFrom!.x"
+                      :y1="computedZonesMap.get(callout.id)!.leaderFrom!.y"
+                      :x2="computedZonesMap.get(callout.id)!.leaderTo!.x"
+                      :y2="computedZonesMap.get(callout.id)!.leaderTo!.y"
+                      stroke="#ffffff"
+                      stroke-width="1.2"
+                      stroke-opacity="0.85"
+                    />
+
+                    <!-- Clean centered typography inside the map-conforming polygon -->
                     <text
                       v-if="!showPinsLayer"
-                      :x="(getEffectiveBox(callout)!.x + getEffectiveBox(callout)!.width / 2) * 10"
-                      :y="(getEffectiveBox(callout)!.y + getEffectiveBox(callout)!.height / 2) * 10 + 3"
-                      font-size="9.5"
+                      class="callout-zone-label select-none pointer-events-none uppercase"
+                      :x="computedZonesMap.get(callout.id)!.labelX"
+                      :y="computedZonesMap.get(callout.id)!.labelY"
+                      :font-size="computedZonesMap.get(callout.id)!.fontSize"
                       font-weight="800"
                       text-anchor="middle"
-                      fill="#f8fafc"
+                      dominant-baseline="middle"
+                      fill="#ffffff"
                       stroke="#020617"
-                      stroke-width="2.5"
-                      paint-order="stroke"
-                      class="tracking-wide uppercase font-sans select-none"
+                      stroke-width="2.8"
+                      stroke-linejoin="round"
+                      paint-order="stroke fill"
                     >
                       {{ callout.name }}
                     </text>
                   </g>
                 </template>
+
+                <!-- IN-PROGRESS CUSTOM POLYGON PREVIEW -->
+                <g v-if="polygonVertices.length > 0" class="pointer-events-none">
+                  <polyline
+                    :points="polygonVertices.map((p) => `${p.x * 10},${p.y * 10}`).join(' ')"
+                    fill="none"
+                    :stroke="draftColor"
+                    stroke-width="2"
+                    stroke-dasharray="4 3"
+                  />
+                  <circle
+                    v-for="(pt, idx) in polygonVertices"
+                    :key="`poly-pt-${idx}`"
+                    :cx="pt.x * 10"
+                    :cy="pt.y * 10"
+                    :r="idx === 0 ? 5.5 : 3.5"
+                    :fill="idx === 0 ? '#ffffff' : draftColor"
+                    stroke="#020617"
+                    stroke-width="1.5"
+                  />
+                </g>
+
+                <!-- DRAFT CLIPPED POLYGON PREVIEW -->
+                <polygon
+                  v-if="draftPolygon && draftPolygon.length >= 3"
+                  :points="draftPolygon.map((p) => `${p.x * 10},${p.y * 10}`).join(' ')"
+                  :fill="draftColor"
+                  fill-opacity="0.28"
+                  :stroke="draftColor"
+                  stroke-width="2"
+                  class="pointer-events-none"
+                />
               </g>
 
               <!-- LAYER 2: CALLOUT PINS & CRISP TYPOGRAPHY BADGES -->

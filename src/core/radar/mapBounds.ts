@@ -297,3 +297,28 @@ export function getLineupSetupConsoleCommand(lineup: {
   const weapon = getGrenadeWeaponClass(lineup.grenadeType)
   return `setpos_exact ${x.toFixed(2)} ${y.toFixed(2)} ${z.toFixed(2)}; setang ${pitch.toFixed(2)} ${yaw.toFixed(2)} 0; give ${weapon}; slot4`
 }
+
+/**
+ * Returns a 10,000-byte (100x100) binary playable grid for the specified map & floor
+ * where 1 = playable radar pixel and 0 = wall / void.
+ */
+export function getPlayableMaskGrid(
+  mapId: string,
+  floor?: 'upper' | 'lower'
+): Uint8Array | null {
+  const keys = resolveMaskKeys(mapId, floor)
+  const masks = keys.map(getMaskBytes).filter((m): m is Uint8Array => m !== null)
+  if (masks.length === 0) return null
+
+  const grid = new Uint8Array(10000)
+  for (const mask of masks) {
+    for (let cy = 0; cy < 100; cy++) {
+      for (let cx = 0; cx < 100; cx++) {
+        if (isMaskCellBitSet(mask, cx, cy)) {
+          grid[cy * 100 + cx] = 1
+        }
+      }
+    }
+  }
+  return grid
+}
