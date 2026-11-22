@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useMapStore, type CalloutItem, type CalloutMapMode } from '../stores/mapStore'
 import { useLineupStore } from '../stores/lineupStore'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
-import { CALLOUT_REFERENCE_SOURCES, deriveCalloutBox } from '../data/mapsData'
+import { deriveCalloutBox } from '../data/mapsData'
 import VectorMapBlueprint from '../components/map/VectorMapBlueprint.vue'
 import {
   clientToSvgRadarPct,
@@ -45,7 +45,6 @@ import {
   Share2,
   Upload,
   Download,
-  ExternalLink,
   Eye,
   Edit3,
   BookOpen,
@@ -78,7 +77,6 @@ const { confirmAction } = useConfirmDialog()
 
 const searchQuery = ref('')
 const siteFilter = ref<'all' | 'A' | 'B' | 'Mid' | 'Spawn'>('all')
-const sourceFilter = ref<string>('all')
 
 // In-Map Floating Canvas Tool State
 const activeTool = ref<CanvasToolMode>('select')
@@ -238,16 +236,6 @@ const filteredCallouts = computed<CalloutEntry[]>(() => {
         return false
       }
     }
-    if (sourceFilter.value !== 'all') {
-      if (sourceFilter.value === 'Personal') {
-        if (!c.isCustom && !c.isPersonal) return false
-      } else {
-        const srcs = c.sources || []
-        if (!srcs.some((s) => s.toLowerCase() === sourceFilter.value.toLowerCase())) {
-          return false
-        }
-      }
-    }
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.toLowerCase().trim()
       const inName = c.name.toLowerCase().includes(q)
@@ -346,9 +334,6 @@ watch(
 
 function setCalloutViewMode(mode: CalloutMapMode) {
   mapStore.setCalloutMapMode(mode)
-  if (mode === 'personal' && sourceFilter.value !== 'all' && sourceFilter.value !== 'Personal') {
-    sourceFilter.value = 'all'
-  }
 }
 
 function setTool(tool: CanvasToolMode) {
@@ -987,7 +972,7 @@ function getBadgeWidth(name: string): number {
               </span>
             </div>
             <p class="text-xs text-slate-400 mt-0.5">
-              Compare CS2Journal &amp; CS2Flow shaded callout zones, build your Personal Callouts Map with custom boxes, and share with your roster
+              Unified most-popular CS2 callouts mapped to playable walls, plus your Personal Callouts Map with custom shapes and sharing
             </p>
           </div>
         </div>
@@ -1090,7 +1075,7 @@ function getBadgeWidth(name: string): number {
             ]"
           >
             <BookOpen class="w-3.5 h-3.5" />
-            <span>General Callouts ({{ generalCalloutCount }})</span>
+            <span>Most Popular Callouts ({{ generalCalloutCount }})</span>
           </button>
 
           <button
@@ -1118,58 +1103,6 @@ function getBadgeWidth(name: string): number {
             <Layers class="w-3.5 h-3.5" />
             <span>Combined Overlay</span>
           </button>
-        </div>
-
-        <!-- Source Filter Pills & Reference Links -->
-        <div class="flex flex-wrap items-center gap-1.5">
-          <button
-            @click="sourceFilter = 'all'"
-            :class="[
-              'px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors cursor-pointer',
-              sourceFilter === 'all'
-                ? 'bg-white/15 text-white border-white/25'
-                : 'bg-slate-950/60 text-slate-400 border-white/[0.06] hover:text-white'
-            ]"
-          >
-            All Sources
-          </button>
-
-          <button
-            v-for="src in CALLOUT_REFERENCE_SOURCES"
-            :key="src.id"
-            @click="sourceFilter = sourceFilter === src.id ? 'all' : src.id"
-            :class="[
-              'px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors cursor-pointer',
-              sourceFilter === src.id
-                ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
-                : 'bg-slate-950/60 text-slate-400 border-white/[0.06] hover:text-white'
-            ]"
-            :title="src.description"
-          >
-            {{ src.label }}
-          </button>
-
-          <a
-            href="https://cs2journal.com/callouts/"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-950/80 text-sky-400 hover:text-sky-300 border border-sky-500/25 transition-colors"
-            title="Open CS2Journal Callouts Reference Atlas"
-          >
-            <span>CS2Journal Atlas</span>
-            <ExternalLink class="w-3 h-3" />
-          </a>
-
-          <a
-            :href="cs2FlowMapUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-950/80 text-emerald-400 hover:text-emerald-300 border border-emerald-500/25 transition-colors"
-            title="Open CS2Flow Interactive Map & Callouts"
-          >
-            <span>CS2Flow {{ mapStore.currentMap.name }}</span>
-            <ExternalLink class="w-3 h-3" />
-          </a>
         </div>
       </div>
     </div>

@@ -281,9 +281,9 @@ onUnmounted(() => {
       <div class="flex items-center gap-3 shrink-0">
         <router-link to="/" class="flex items-center gap-2.5 group cursor-pointer">
           <img
-            src="/logo.png"
-            alt="Protutech"
-            class="w-7 h-7 rounded-lg object-cover border border-white/15 group-hover:scale-105 transition-transform flex-shrink-0"
+            src="/protutech-cs2-logo.svg"
+            alt="Protutech CS2"
+            class="w-7 h-7 rounded-lg object-cover border border-amber-500/40 group-hover:scale-105 transition-transform flex-shrink-0"
           />
           <span class="text-sm font-semibold tracking-tight text-white group-hover:text-amber-400 transition-colors">
             Protutech

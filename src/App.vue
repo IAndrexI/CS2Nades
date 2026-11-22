@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Navbar from './components/layout/Navbar.vue'
+import SpaceBackground from './components/common/SpaceBackground.vue'
 import AuthModal from './components/auth/AuthModal.vue'
 import GlobalConfirmModal from './components/common/GlobalConfirmModal.vue'
 import VoiceCommandHub from './components/common/VoiceCommandHub.vue'
@@ -87,11 +88,12 @@ watch(() => [authStore.isAuthenticated, isStandaloneView.value], ([isAuth, isSta
 
 <template>
   <div 
-    class="app-root min-h-screen text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950 transition-colors duration-200"
+    class="app-root relative min-h-screen text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950 transition-colors duration-200"
     :style="{ backgroundColor: themeStore.effectiveBgColor || themeStore.customBgColor }"
   >
+    <SpaceBackground />
     <!-- NAVBAR (HIDDEN ON STANDALONE HUD & REMOTE) -->
-    <Navbar v-if="!isStandaloneView" />
+    <Navbar v-if="!isStandaloneView" class="relative z-10" />
 
     <!-- FLOATING VOICE COMMAND HUD (DESKTOP NOTIFICATION) -->
     <Teleport to="body">
@@ -151,7 +153,7 @@ watch(() => [authStore.isAuthenticated, isStandaloneView.value], ([isAuth, isSta
     </Teleport>
 
     <!-- MAIN VIEW ROUTER CONTENT -->
-    <main class="flex-grow" :class="themeStore.isPhoneMode && !isStandaloneView ? 'pb-16' : ''">
+    <main class="flex-grow relative z-10" :class="themeStore.isPhoneMode && !isStandaloneView ? 'pb-16' : ''">
       <router-view />
     </main>
 
