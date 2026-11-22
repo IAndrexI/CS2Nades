@@ -4,10 +4,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { useMapStore } from '../../stores/mapStore'
 import { useLineupStore } from '../../stores/lineupStore'
 import { useAuthStore } from '../../stores/authStore'
-import { useAdminStore } from '../../stores/adminStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { useGameRoomStore } from '../../stores/gameRoomStore'
-import { BRANDING, NAV_LABELS } from '../../config/site'
 import DataSyncModal from '../common/DataSyncModal.vue'
 import MapSettingsModal from '../map/MapSettingsModal.vue'
 import LineupConflictModal from '../lineups/LineupConflictModal.vue'
@@ -21,43 +19,42 @@ import { useCompanionStore } from '../../stores/companionStore'
 import { usePwaStore } from '../../stores/pwaStore'
 import { useVoiceStore } from '../../stores/voiceStore'
 
-import { 
-  Crosshair, 
-  Map as MapIcon, 
-  BookOpen, 
-  Grid, 
-  Plus, 
-  ChevronDown, 
-  Settings2, 
-  Layers, 
-  User, 
+import {
+  Map as MapIcon,
+  BookOpen,
+  Grid,
+  Plus,
+  ChevronDown,
+  Settings2,
+  Layers,
+  User,
   Users,
   Gamepad2,
-  Ghost,
-  ShieldCheck, 
-  LogOut, 
-  BookMarked, 
-  Radio, 
+  ShieldCheck,
+  LogOut,
+  BookMarked,
+  Radio,
   RefreshCw,
   MessageSquare,
   Smartphone,
   Monitor,
-  Download,
   Menu,
   X,
   PenTool,
-  Check,
   Eye,
   UserX,
   Mic,
   Newspaper,
-  WifiOff
+  WifiOff,
+  SlidersHorizontal,
+  Moon,
+  Sun,
+  ExternalLink
 } from 'lucide-vue-next'
 
 const mapStore = useMapStore()
 const lineupStore = useLineupStore()
 const authStore = useAuthStore()
-const adminStore = useAdminStore()
 const themeStore = useThemeStore()
 const gameRoomStore = useGameRoomStore()
 const companionStore = useCompanionStore()
@@ -67,6 +64,7 @@ const router = useRouter()
 const route = useRoute()
 
 const isMapDropdownOpen = ref(false)
+const isToolsDropdownOpen = ref(false)
 const isUserDropdownOpen = ref(false)
 const isDataModalOpen = ref(false)
 const isMobileMenuOpen = ref(false)
@@ -83,12 +81,8 @@ function openDirectMessageWith(userId: string) {
   isDirectMessagesOpen.value = true
 }
 
-function handleJoinRoomFromPeople(roomCode: string, isGhost = false) {
+function handleJoinRoomFromPeople(roomCode: string) {
   router.push(`/tactics?room=${roomCode}`)
-}
-
-function handleNavClick(e: MouseEvent, path: string) {
-  // Guests can enter Live Tactics in view-only mode
 }
 
 function handleNewNadeClick() {
@@ -103,13 +97,13 @@ function handleNewNadeClick() {
 const customRoleInput = ref('')
 
 const navLinks = [
-  { name: NAV_LABELS.radar, path: '/', icon: MapIcon },
+  { name: 'Radar', path: '/', icon: MapIcon },
   { name: 'Live Tactics', path: '/tactics', icon: PenTool },
-  { name: NAV_LABELS.callouts, path: '/callouts', icon: Layers },
-  { name: NAV_LABELS.strats, path: '/strats', icon: BookOpen },
-  { name: NAV_LABELS.library, path: '/library', icon: Grid },
-  { name: NAV_LABELS.myLineups, path: '/my-lineups', icon: BookMarked },
-  { name: 'Updates & Leaks', path: '/updates', icon: Newspaper }
+  { name: 'Callouts', path: '/callouts', icon: Layers },
+  { name: 'Stratbook', path: '/strats', icon: BookOpen },
+  { name: 'Library', path: '/library', icon: Grid },
+  { name: 'My Book', path: '/my-lineups', icon: BookMarked },
+  { name: 'Updates', path: '/updates', icon: Newspaper }
 ]
 
 const inGameRoles = ['IGL', 'Entry Fragger', 'Support', 'AWPer', 'Lurker', 'Anchor', 'Flex']
@@ -127,13 +121,46 @@ async function handleSaveCustomRole() {
   }
 }
 
+const ACTIVE_DUTY_IDS = new Set(['mirage', 'dust2', 'inferno', 'nuke', 'ancient', 'anubis', 'cache'])
+
+function getMapPoolBadge(map: typeof mapStore.availableMaps[number]): {
+  label: 'Active' | 'Reserve' | 'Classic' | 'Custom'
+  classes: string
+} {
+  if (map.isCustom) {
+    return {
+      label: 'Custom',
+      classes: 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+    }
+  }
+  const isActive = map.activePool || ACTIVE_DUTY_IDS.has(map.id)
+  if (isActive && map.id !== 'train') {
+    return {
+      label: 'Active',
+      classes: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+    }
+  }
+  if (map.poolCategory === 'Classic Competitive' || map.id === 'cobblestone') {
+    return {
+      label: 'Classic',
+      classes: 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+    }
+  }
+  return {
+    label: 'Reserve',
+    classes: 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+  }
+}
+
+const currentMapBadge = computed(() => getMapPoolBadge(mapStore.currentMap))
+
 const sortedDropdownMaps = computed(() => {
   const rank = (m: typeof mapStore.availableMaps[number]) => {
-    if (m.activePool) return 0
-    if (m.poolCategory === 'Reserve Pool') return 1
-    if (m.poolCategory === 'Classic Competitive') return 2
-    if (m.isCustom) return 3
-    return 1
+    const b = getMapPoolBadge(m).label
+    if (b === 'Active') return 0
+    if (b === 'Reserve') return 1
+    if (b === 'Classic') return 2
+    return 3
   }
   return [...mapStore.availableMaps].sort((a, b) => rank(a) - rank(b))
 })
@@ -158,6 +185,9 @@ function handleGlobalClick(e: MouseEvent) {
   }
   if (isMapDropdownOpen.value && !target.closest('.map-dropdown-container')) {
     isMapDropdownOpen.value = false
+  }
+  if (isToolsDropdownOpen.value && !target.closest('.tools-dropdown-container')) {
+    isToolsDropdownOpen.value = false
   }
 }
 
@@ -185,32 +215,32 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <header 
-    class="navbar-wrapper w-full bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 sticky top-0"
+  <header
+    class="navbar-wrapper w-full backdrop-blur-2xl bg-slate-950/80 border-b border-white/[0.07] sticky top-0"
     style="z-index: 999999 !important; position: sticky;"
   >
     <!-- GUEST PREVIEW MODE BANNER (ACTIVE WHEN ADMIN TOGGLES GUEST VIEW) -->
     <div
       v-if="authStore.isGuestPreviewMode"
-      class="bg-gradient-to-r from-amber-950 via-amber-900 to-yellow-950 border-b border-amber-500/40 text-amber-200 px-4 py-1.5 text-xs font-bold flex flex-wrap items-center justify-between gap-2 shadow-lg"
+      class="bg-amber-950/90 border-b border-amber-500/30 text-amber-200 px-4 py-1.5 text-xs font-medium flex flex-wrap items-center justify-between gap-2"
     >
       <div class="flex items-center gap-2">
-        <UserX class="w-4 h-4 text-amber-400 animate-pulse flex-shrink-0" />
+        <UserX class="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
         <span>
-          <strong class="text-white uppercase tracking-wider">Guest Mode (Admin Testing):</strong>
-          Previewing website as an unverified guest (limited access, view-only tactics, save restrictions).
+          <strong class="text-white font-semibold">Guest Preview Mode:</strong>
+          Viewing site as an unverified guest (view-only tactics, save limits).
         </span>
       </div>
       <div class="flex items-center gap-2">
         <button
           @click="authStore.toggleUserPreviewMode()"
-          class="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-lg text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow hover:scale-105"
+          class="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg text-[11px] transition-colors cursor-pointer"
         >
           Switch to User Mode
         </button>
         <button
           @click="authStore.resetPreviewModes()"
-          class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow hover:scale-105"
+          class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg text-[11px] transition-colors cursor-pointer"
         >
           Exit to Admin Mode
         </button>
@@ -220,452 +250,502 @@ onUnmounted(() => {
     <!-- USER PREVIEW MODE BANNER (ACTIVE WHEN ADMIN TOGGLES USER VIEW) -->
     <div
       v-if="authStore.isUserPreviewMode"
-      class="bg-gradient-to-r from-purple-950 via-purple-900 to-indigo-950 border-b border-purple-500/40 text-purple-200 px-4 py-1.5 text-xs font-bold flex flex-wrap items-center justify-between gap-2 shadow-lg"
+      class="bg-purple-950/90 border-b border-purple-500/30 text-purple-200 px-4 py-1.5 text-xs font-medium flex flex-wrap items-center justify-between gap-2"
     >
       <div class="flex items-center gap-2">
-        <Eye class="w-4 h-4 text-purple-400 animate-pulse flex-shrink-0" />
+        <Eye class="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
         <span>
-          <strong class="text-white uppercase tracking-wider">User View Mode (Admin Testing):</strong>
-          Previewing website and live board as a standard verified player.
+          <strong class="text-white font-semibold">User Preview Mode:</strong>
+          Viewing site and live board as a standard verified player.
         </span>
       </div>
       <div class="flex items-center gap-2">
         <button
           @click="authStore.toggleGuestPreviewMode()"
-          class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-slate-950 font-black rounded-lg text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow hover:scale-105"
+          class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg text-[11px] transition-colors cursor-pointer"
         >
           Switch to Guest Mode
         </button>
         <button
           @click="authStore.resetPreviewModes()"
-          class="px-2.5 py-1 bg-purple-500 hover:bg-purple-400 text-slate-950 font-black rounded-lg text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow hover:scale-105"
+          class="px-2.5 py-1 bg-purple-500 hover:bg-purple-400 text-slate-950 font-semibold rounded-lg text-[11px] transition-colors cursor-pointer"
         >
           Exit to Admin Mode
         </button>
       </div>
     </div>
 
-    <div class="max-w-[1600px] mx-auto px-3 sm:px-5 py-2 2xl:py-0 2xl:h-16 flex flex-wrap 2xl:flex-nowrap items-center justify-between gap-2 sm:gap-3">
-      <!-- LOGO & BRANDING -->
-      <div class="order-1 flex items-center gap-2.5 sm:gap-4">
+    <!-- MAIN APPLE-STYLE FROSTED HEADER BAR -->
+    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+      <!-- LEFT CLUSTER: MINIMAL BRAND MARK + CLEAN MAP SELECTOR PILL -->
+      <div class="flex items-center gap-3 shrink-0">
         <router-link to="/" class="flex items-center gap-2.5 group cursor-pointer">
-          <img 
-            src="/logo.png" 
-            alt="Protutech" 
-            class="w-8 h-8 rounded-xl object-cover shadow-lg border border-amber-500/40 group-hover:scale-105 transition-transform flex-shrink-0"
+          <img
+            src="/logo.png"
+            alt="Protutech"
+            class="w-7 h-7 rounded-lg object-cover border border-white/15 group-hover:scale-105 transition-transform flex-shrink-0"
           />
-          <div class="flex flex-col">
-            <span class="text-sm font-black tracking-wider text-white uppercase group-hover:text-amber-400 transition-colors">
-              Protutech
-            </span>
-            <span class="text-[9px] font-mono text-amber-500/90 font-bold -mt-0.5 tracking-widest uppercase hidden sm:inline">
-              Tactical Hub
-            </span>
-          </div>
+          <span class="text-sm font-semibold tracking-tight text-white group-hover:text-amber-400 transition-colors">
+            Protutech
+          </span>
         </router-link>
 
-        <!-- MAP SELECTOR DROPDOWN -->
+        <div class="h-4 w-px bg-white/10 hidden sm:block"></div>
+
+        <!-- MAP SELECTOR PILL -->
         <div class="relative map-dropdown-container">
           <button
             @click="isMapDropdownOpen = !isMapDropdownOpen"
-            class="flex items-center gap-2 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
+            class="flex items-center gap-2 px-2.5 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-xs font-medium text-slate-100 transition-all cursor-pointer"
           >
-            <img 
-              v-if="mapStore.currentMap.icon" 
-              :src="mapStore.currentMap.icon" 
-              :alt="mapStore.currentMap.name" 
+            <img
+              v-if="mapStore.currentMap.icon"
+              :src="mapStore.currentMap.icon"
+              :alt="mapStore.currentMap.name"
               class="w-4 h-4 object-contain"
             />
-            <span v-else class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-            <span class="uppercase tracking-wide font-mono" :style="{ color: themeStore.customAccentColor }">{{ mapStore.currentMap.name }}</span>
+            <span v-else class="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span class="font-semibold text-white">{{ mapStore.currentMap.name }}</span>
+            <span
+              :class="[
+                'px-1.5 py-0.2 rounded-full text-[10px] font-medium border hidden sm:inline-block',
+                currentMapBadge.classes
+              ]"
+            >
+              {{ currentMapBadge.label }}
+            </span>
             <ChevronDown class="w-3.5 h-3.5 text-slate-400" />
           </button>
 
-          <!-- DROPDOWN MENU -->
-          <div 
+          <!-- MAP DROPDOWN MENU -->
+          <div
             v-if="isMapDropdownOpen"
-            class="absolute top-full left-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col py-1 animate-fade-in"
+            class="absolute top-full left-0 mt-2 w-68 bg-slate-900/95 backdrop-blur-2xl border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col py-1.5 animate-fade-in"
           >
-            <div class="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+            <div class="px-3.5 py-1.5 text-[11px] font-medium text-slate-400 border-b border-white/[0.07] flex items-center justify-between">
               <span>Select Map</span>
-              <button 
-                @click="mapStore.isMapSettingsOpen = true; isMapDropdownOpen = false" 
-                class="text-amber-400 hover:underline flex items-center gap-1 text-[10px] lowercase"
+              <button
+                @click="mapStore.isMapSettingsOpen = true; isMapDropdownOpen = false"
+                class="text-amber-400 hover:underline flex items-center gap-1 text-[11px] cursor-pointer"
               >
                 <Settings2 class="w-3 h-3" />
-                <span>custom radars</span>
+                <span>Custom Radars</span>
               </button>
             </div>
 
-            <div class="max-h-72 overflow-y-auto">
+            <div class="max-h-80 overflow-y-auto py-1">
               <button
                 v-for="map in sortedDropdownMaps"
                 :key="map.id"
                 @click="selectMap(map.id)"
                 :class="[
-                  'w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-left transition-colors cursor-pointer',
-                  mapStore.currentMapId === map.id 
-                    ? 'bg-amber-500/20 text-amber-400 font-bold' 
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  'w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium text-left transition-colors cursor-pointer',
+                  mapStore.currentMapId === map.id
+                    ? 'bg-white/[0.08] text-white font-semibold'
+                    : 'text-slate-300 hover:bg-white/[0.04] hover:text-white'
                 ]"
               >
-                <div class="flex items-center gap-2">
-                  <img 
-                    v-if="map.icon" 
-                    :src="map.icon" 
-                    :alt="map.name" 
+                <div class="flex items-center gap-2.5">
+                  <img
+                    v-if="map.icon"
+                    :src="map.icon"
+                    :alt="map.name"
                     class="w-4 h-4 object-contain flex-shrink-0"
                   />
                   <span>{{ map.name }}</span>
                 </div>
 
-                <span v-if="map.isCustom" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                  CUSTOM
+                <span
+                  :class="[
+                    'text-[10px] font-medium px-2 py-0.5 rounded-full border',
+                    getMapPoolBadge(map).classes
+                  ]"
+                >
+                  {{ getMapPoolBadge(map).label }}
                 </span>
-                <span v-else-if="map.activePool" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 font-black">
-                  ACTIVE DUTY
-                </span>
-                <span v-else-if="map.poolCategory === 'Classic Competitive'" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
-                  CLASSIC
-                </span>
-                <span v-else class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">
-                  RESERVE
-                </span>
-              </button>
-            </div>
-
-            <div class="p-2 border-t border-slate-800 bg-slate-950/60">
-              <button 
-                @click="mapStore.isMapSettingsOpen = true; isMapDropdownOpen = false" 
-                class="w-full py-1.5 px-2 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Layers class="w-3.5 h-3.5 text-amber-400" />
-                <span>Custom Radar / Settings</span>
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- MAIN NAVIGATION TABS -->
+      <!-- CENTER CLUSTER: SEGMENTED NAVIGATION PILL -->
       <nav
         :class="[
-          themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex',
-          'order-3 w-full justify-center 2xl:order-2 2xl:w-auto items-center gap-1 p-1 bg-slate-900/80 rounded-xl border border-slate-800'
+          themeStore.isPhoneMode ? 'hidden' : 'hidden lg:flex',
+          'items-center gap-0.5 p-1 bg-white/[0.04] rounded-full border border-white/[0.07]'
         ]"
       >
         <router-link
           v-for="link in navLinks"
           :key="link.path"
           :to="link.path"
-          @click="handleNavClick($event, link.path)"
           :class="[
-            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap',
-            route.path === link.path 
-              ? 'bg-slate-800 text-amber-400 shadow-sm border border-slate-700' 
-              : 'text-slate-400 hover:text-slate-200'
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap',
+            route.path === link.path
+              ? 'bg-white/[0.12] text-white font-semibold shadow-sm'
+              : 'text-slate-400 hover:text-slate-100 hover:bg-white/[0.04]'
           ]"
         >
-          <component :is="link.icon" class="w-3.5 h-3.5" />
+          <component :is="link.icon" class="w-3.5 h-3.5 opacity-85" />
           <span>{{ link.name }}</span>
         </router-link>
       </nav>
 
-      <!-- RIGHT ACTIONS: LAYOUT MODE, VOICE NAV, PHONE DECK + DISCONNECT, LIVE SYNC, INSTALL APP, PRACTICE SERVER, PEOPLE & GROUPS, THEME & PALETTE, USER PROFILE, NEW NADE -->
-      <div class="order-2 2xl:order-3 flex items-center gap-1.5">
-        <!-- EXPLICIT DESKTOP / MOBILE LAYOUT MODE SWITCHER -->
-        <button
-          @click="themeStore.togglePhoneMode()"
-          :class="[
-            'items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border',
-            themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex',
-            themeStore.isPhoneMode
-              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 hover:bg-cyan-500/30'
-              : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-slate-700 text-slate-300'
-          ]"
-          :title="themeStore.isPhoneMode ? 'Currently in Mobile Layout Mode — Click to switch to Desktop Layout' : 'Currently in Desktop Layout Mode — Click to switch to Mobile Layout'"
-        >
-          <Smartphone v-if="themeStore.isPhoneMode" class="w-3.5 h-3.5 text-cyan-400" />
-          <Monitor v-else class="w-3.5 h-3.5 text-amber-400" />
-          <span class="hidden 2xl:inline">{{ themeStore.isPhoneMode ? 'Mobile Mode' : 'Desktop Mode' }}</span>
-        </button>
-
-        <!-- VOICE NAVIGATION BUTTON -->
-        <button
-          @click="voiceStore.isPanelOpen = true"
-          :class="[
-            'items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border',
-            themeStore.isPhoneMode ? 'hidden' : 'hidden sm:flex',
-            voiceStore.isListening
-              ? 'bg-rose-500/20 text-rose-300 border-rose-500/60 animate-pulse'
-              : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-amber-500/40 text-amber-400'
-          ]"
-          title="Voice Navigation & Hands-Free Lineup Search"
-        >
-          <Mic class="w-3.5 h-3.5" />
-          <span class="hidden 2xl:inline">{{ voiceStore.isListening ? 'Listening...' : 'Voice Nav' }}</span>
-        </button>
-
-        <!-- PHONE REMOTE / STREAM DECK BUTTON + 1-CLICK DISCONNECT -->
-        <div class="flex items-center gap-1">
+      <!-- RIGHT CLUSTER: DECLUTTERED — ONLY 3 CLEAN CONTROLS -->
+      <div class="flex items-center gap-2 shrink-0">
+        <!-- 1. SYNC / PHONE STATUS PILL (+ DISCONNECT IF PAIRED) -->
+        <div class="hidden sm:flex items-center gap-1">
           <button
-            @click="isRemoteModalOpen = true"
-            :class="[
-              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border group',
-              companionStore.isPaired 
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/30' 
-                : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-cyan-500/40 text-cyan-400'
-            ]"
-            title="Connect Phone as Touch Deck & Voice Controller"
+            @click="lineupStore.syncWithServer()"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-200 transition-all cursor-pointer"
+            :title="lineupStore.lastSyncTime ? `Last synced at ${lineupStore.lastSyncTime} — Click to sync now` : 'Click to sync lineups with server'"
           >
-            <Smartphone class="w-4 h-4 group-hover:scale-110 transition-transform" />
-            <span class="hidden lg:inline">{{ companionStore.isPaired ? 'Phone Live' : 'Phone Deck' }}</span>
-            <span class="hidden sm:inline lg:hidden">Phone</span>
-            <span 
-              v-if="companionStore.isPaired" 
-              class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5"
+            <span
+              :class="[
+                'w-2 h-2 rounded-full',
+                lineupStore.syncStatus === 'syncing'
+                  ? 'bg-amber-400 animate-pulse'
+                  : lineupStore.syncStatus === 'offline'
+                    ? 'bg-rose-400'
+                    : 'bg-emerald-400'
+              ]"
             ></span>
+            <span class="hidden xl:inline text-[11px] text-slate-300">
+              {{
+                companionStore.isPaired
+                  ? 'Phone Live'
+                  : lineupStore.syncStatus === 'syncing'
+                    ? 'Syncing'
+                    : lineupStore.syncStatus === 'offline'
+                      ? 'Offline'
+                      : 'Synced'
+              }}
+            </span>
           </button>
 
           <button
             v-if="companionStore.isPaired"
             @click.stop="companionStore.disconnectPhone()"
-            class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600/20 hover:bg-rose-600/35 text-rose-400 hover:text-rose-200 border border-rose-500/50 transition-all cursor-pointer shadow-sm"
+            class="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-medium bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition-all cursor-pointer"
             title="Disconnect Paired Phone"
           >
-            <WifiOff class="w-3.5 h-3.5" />
-            <span class="hidden sm:inline">Disconnect</span>
+            <WifiOff class="w-3 h-3" />
+            <span class="hidden md:inline">Disconnect Phone</span>
           </button>
         </div>
 
-        <!-- LIVE SYNC STATUS BADGE -->
-        <button
-          @click="lineupStore.syncWithServer()"
-          :class="[
-            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border',
-            lineupStore.syncStatus === 'syncing'
-              ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
-              : lineupStore.syncStatus === 'offline'
-                ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 hover:bg-rose-500/25'
-                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-          ]"
-          :title="lineupStore.lastSyncTime ? `Last synced at ${lineupStore.lastSyncTime} — Click to sync now` : 'Click to sync lineups with server'"
-        >
-          <RefreshCw
-            class="w-3.5 h-3.5 flex-shrink-0"
-            :class="{ 'animate-spin': lineupStore.syncStatus === 'syncing' }"
-          />
-          <span class="hidden lg:inline">
-            {{ lineupStore.syncStatus === 'syncing' ? 'Syncing...' : lineupStore.syncStatus === 'offline' ? 'Offline' : 'Synced' }}
-          </span>
-        </button>
-
-        <!-- INSTALL APP / PWA BUTTON -->
-        <button
-          @click="isInstallAppModalOpen = true"
-          :class="themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex'"
-          class="items-center gap-1.5 px-2 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-emerald-500/40 text-emerald-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
-          title="Install CS2 Stratbook App (Desktop & Mobile) - 100% Server Synced"
-        >
-          <Monitor class="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-          <span class="hidden 2xl:inline">{{ pwaStore.isStandaloneMode ? 'App Live' : 'Install App' }}</span>
-          <span 
-            v-if="pwaStore.isStandaloneMode" 
-            class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5"
-          ></span>
-        </button>
-
-        <!-- PRACTICE SERVER & CFG STUDIO BUTTON -->
-        <button
-          @click="isPracticeModalOpen = true"
-          :class="themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex'"
-          class="items-center gap-1.5 px-2 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-amber-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm group"
-          title="Host & Configure Practice Server / Generate practice.cfg"
-        >
-          <Gamepad2 class="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
-          <span class="hidden 2xl:inline">Practice Server</span>
-        </button>
-
-        <!-- PEOPLE & SQUAD GROUPS (ICON ONLY WITH UNREAD NOTIFICATION BADGE) -->
-        <button
-          @click="isPeopleGroupsOpen = true; unreadMessageCount = 0"
-          :class="themeStore.isPhoneMode ? 'hidden' : 'hidden sm:flex'"
-          class="relative p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm group"
-          title="People & Squads Directory / Chat"
-        >
-          <Users class="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-          <span 
-            v-if="themeStore.showUnreadNotificationBadge && unreadMessageCount > 0" 
-            class="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white shadow-lg animate-pulse"
+        <!-- 2. TOOLS & WORKSPACE POPOVER MENU (APPLE CONTROL-CENTER STYLE) -->
+        <div class="relative tools-dropdown-container">
+          <button
+            @click="isToolsDropdownOpen = !isToolsDropdownOpen"
+            class="relative flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-xs font-medium text-slate-200 transition-all cursor-pointer"
+            title="Tools & Workspace Control Center"
           >
-            {{ unreadMessageCount > 9 ? '9+' : unreadMessageCount }}
-          </span>
-        </button>
+            <SlidersHorizontal class="w-3.5 h-3.5 text-slate-300" />
+            <span class="hidden md:inline">Tools</span>
+            <span
+              v-if="(themeStore.showUnreadNotificationBadge && unreadMessageCount > 0) || voiceStore.isListening"
+              class="w-2 h-2 rounded-full bg-amber-400"
+            ></span>
+          </button>
 
-        <!-- GITHUB REPOSITORY LINK -->
-        <a
-          href="https://github.com/IAndrexI/CS2Nades"
-          target="_blank"
-          rel="noopener noreferrer"
-          :class="themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex'"
-          class="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-xl transition-all shadow-sm group items-center justify-center cursor-pointer"
-          title="View on GitHub (IAndrexI/CS2Nades)"
-        >
-          <svg class="w-4 h-4 fill-current group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
-            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-          </svg>
-        </a>
-
-        <!-- PROTUTECH THEME & PALETTE SWITCHER -->
-        <div
-          :class="themeStore.isPhoneMode ? 'hidden' : 'hidden md:flex'"
-          class="items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-xl shadow-sm"
-        >
-          <select 
-            :value="themeStore.palette"
-            @change="(e) => themeStore.setPalette((e.target as HTMLSelectElement).value as any)"
-            aria-label="Switch Theme Palette"
-            class="bg-transparent text-slate-200 text-xs font-semibold px-2 py-1 rounded-lg border border-slate-800 hover:border-slate-700 outline-none cursor-pointer"
-            title="Switch Theme Palette"
+          <!-- APPLE CONTROL-CENTER POPOVER -->
+          <div
+            v-if="isToolsDropdownOpen"
+            class="absolute top-full right-0 mt-2 w-80 bg-slate-900/95 backdrop-blur-2xl border border-white/[0.1] rounded-2xl shadow-2xl p-3 z-50 flex flex-col gap-3 animate-fade-in text-xs"
           >
-            <option value="protutech-obsidian" class="bg-slate-900 text-white">Obsidian Neon</option>
-            <option value="adobe-classic" class="bg-slate-900 text-white">Adobe Classic</option>
-            <option value="cyber-emerald" class="bg-slate-900 text-white">Cyber Emerald</option>
-            <option value="sunset-ember" class="bg-slate-900 text-white">Sunset Ember</option>
-          </select>
+            <div class="flex items-center justify-between px-1">
+              <span class="text-[11px] font-semibold text-slate-400 tracking-tight">Tools &amp; Workspace</span>
+              <button
+                @click="lineupStore.syncWithServer()"
+                class="flex items-center gap-1 text-[11px] text-emerald-400 hover:underline cursor-pointer"
+              >
+                <RefreshCw class="w-3 h-3" :class="{ 'animate-spin': lineupStore.syncStatus === 'syncing' }" />
+                <span>{{ lineupStore.syncStatus === 'syncing' ? 'Syncing...' : 'Sync Server' }}</span>
+              </button>
+            </div>
 
-          <div class="flex items-center bg-slate-950/70 rounded-lg p-0.5 border border-slate-800">
-            <button
-              @click="themeStore.setTheme('dark')"
-              :class="[
-                'px-2 py-0.5 text-[11px] font-bold rounded-md transition-colors flex items-center gap-1 cursor-pointer',
-                themeStore.theme === 'dark'
-                  ? 'bg-slate-800 text-amber-400 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              ]"
-              title="Switch to Dark Mode"
-            >
-              <span>🌙</span>
-              <span class="hidden lg:inline">Dark</span>
-            </button>
-            <button
-              @click="themeStore.setTheme('light')"
-              :class="[
-                'px-2 py-0.5 text-[11px] font-bold rounded-md transition-colors flex items-center gap-1 cursor-pointer',
-                themeStore.theme === 'light'
-                  ? 'bg-amber-500 text-slate-950 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              ]"
-              title="Switch to Light Mode"
-            >
-              <span>☀️</span>
-              <span class="hidden lg:inline">Light</span>
-            </button>
+            <!-- QUICK TILES GRID -->
+            <div class="grid grid-cols-2 gap-1.5">
+              <!-- Practice Server & CFG -->
+              <button
+                @click="isPracticeModalOpen = true; isToolsDropdownOpen = false"
+                class="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-left transition-colors cursor-pointer"
+              >
+                <div class="p-1.5 rounded-lg bg-amber-500/15 text-amber-400">
+                  <Gamepad2 class="w-4 h-4" />
+                </div>
+                <div class="min-w-0">
+                  <div class="font-semibold text-white truncate">Practice CFG</div>
+                  <div class="text-[10px] text-slate-400 truncate">Server &amp; Binds</div>
+                </div>
+              </button>
+
+              <!-- Phone StreamDeck Remote -->
+              <button
+                @click="isRemoteModalOpen = true; isToolsDropdownOpen = false"
+                class="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-left transition-colors cursor-pointer"
+              >
+                <div class="p-1.5 rounded-lg bg-sky-500/15 text-sky-400">
+                  <Smartphone class="w-4 h-4" />
+                </div>
+                <div class="min-w-0">
+                  <div class="font-semibold text-white truncate">
+                    {{ companionStore.isPaired ? 'Phone Connected' : 'Phone Deck' }}
+                  </div>
+                  <div class="text-[10px] text-slate-400 truncate">Touch Remote</div>
+                </div>
+              </button>
+
+              <!-- Voice Navigation -->
+              <button
+                @click="voiceStore.isPanelOpen = true; isToolsDropdownOpen = false"
+                class="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-left transition-colors cursor-pointer"
+              >
+                <div class="p-1.5 rounded-lg bg-rose-500/15 text-rose-400">
+                  <Mic class="w-4 h-4" />
+                </div>
+                <div class="min-w-0">
+                  <div class="font-semibold text-white truncate">
+                    {{ voiceStore.isListening ? 'Listening...' : 'Voice Nav' }}
+                  </div>
+                  <div class="text-[10px] text-slate-400 truncate">Hands-Free</div>
+                </div>
+              </button>
+
+              <!-- People & Squads -->
+              <button
+                @click="isPeopleGroupsOpen = true; unreadMessageCount = 0; isToolsDropdownOpen = false"
+                class="relative flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-left transition-colors cursor-pointer"
+              >
+                <div class="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400">
+                  <Users class="w-4 h-4" />
+                </div>
+                <div class="min-w-0">
+                  <div class="font-semibold text-white truncate">Squads</div>
+                  <div class="text-[10px] text-slate-400 truncate">People &amp; Chat</div>
+                </div>
+                <span
+                  v-if="themeStore.showUnreadNotificationBadge && unreadMessageCount > 0"
+                  class="absolute top-1.5 right-1.5 px-1.5 py-0.2 rounded-full bg-rose-500 text-[9px] font-bold text-white"
+                >
+                  {{ unreadMessageCount > 9 ? '9+' : unreadMessageCount }}
+                </span>
+              </button>
+
+              <!-- Desktop / Mobile Layout Mode -->
+              <button
+                @click="themeStore.togglePhoneMode(); isToolsDropdownOpen = false"
+                class="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-left transition-colors cursor-pointer"
+              >
+                <div class="p-1.5 rounded-lg bg-purple-500/15 text-purple-400">
+                  <Smartphone v-if="themeStore.isPhoneMode" class="w-4 h-4" />
+                  <Monitor v-else class="w-4 h-4" />
+                </div>
+                <div class="min-w-0">
+                  <div class="font-semibold text-white truncate">
+                    {{ themeStore.isPhoneMode ? 'Mobile View' : 'Desktop View' }}
+                  </div>
+                  <div class="text-[10px] text-slate-400 truncate">Switch Layout</div>
+                </div>
+              </button>
+
+              <!-- Install App -->
+              <button
+                @click="isInstallAppModalOpen = true; isToolsDropdownOpen = false"
+                class="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-left transition-colors cursor-pointer"
+              >
+                <div class="p-1.5 rounded-lg bg-cyan-500/15 text-cyan-400">
+                  <Monitor class="w-4 h-4" />
+                </div>
+                <div class="min-w-0">
+                  <div class="font-semibold text-white truncate">
+                    {{ pwaStore.isStandaloneMode ? 'App Installed' : 'Install App' }}
+                  </div>
+                  <div class="text-[10px] text-slate-400 truncate">Desktop &amp; PWA</div>
+                </div>
+              </button>
+            </div>
+
+            <!-- APPEARANCE: THEME DARK/LIGHT & PALETTE SWITCHER -->
+            <div class="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] flex flex-col gap-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-medium text-slate-400">Appearance</span>
+                <div class="flex items-center bg-slate-950/80 p-0.5 rounded-lg border border-white/[0.07]">
+                  <button
+                    @click="themeStore.setTheme('dark')"
+                    :class="[
+                      'px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors flex items-center gap-1 cursor-pointer',
+                      themeStore.theme === 'dark'
+                        ? 'bg-white/[0.12] text-white'
+                        : 'text-slate-400 hover:text-slate-200'
+                    ]"
+                  >
+                    <Moon class="w-3 h-3" />
+                    <span>Dark</span>
+                  </button>
+                  <button
+                    @click="themeStore.setTheme('light')"
+                    :class="[
+                      'px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors flex items-center gap-1 cursor-pointer',
+                      themeStore.theme === 'light'
+                        ? 'bg-amber-500 text-slate-950 font-semibold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    ]"
+                  >
+                    <Sun class="w-3 h-3" />
+                    <span>Light</span>
+                  </button>
+                </div>
+              </div>
+
+              <select
+                :value="themeStore.palette"
+                @change="(e) => themeStore.setPalette((e.target as HTMLSelectElement).value as any)"
+                aria-label="Switch Theme Palette"
+                class="w-full bg-slate-950/90 text-slate-200 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-white/[0.08] outline-none cursor-pointer"
+              >
+                <option value="protutech-obsidian" class="bg-slate-900 text-white">Obsidian Neon</option>
+                <option value="adobe-classic" class="bg-slate-900 text-white">Adobe Classic</option>
+                <option value="cyber-emerald" class="bg-slate-900 text-white">Cyber Emerald</option>
+                <option value="sunset-ember" class="bg-slate-900 text-white">Sunset Ember</option>
+              </select>
+            </div>
+
+            <!-- COMMUNITY & REPOSITORY LINKS -->
+            <div class="flex items-center justify-between gap-2 pt-1 border-t border-white/[0.07]">
+              <a
+                href="https://github.com/IAndrexI/CS2Nades"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white text-[11px] font-medium transition-colors"
+              >
+                <span>GitHub</span>
+                <ExternalLink class="w-3 h-3 opacity-70" />
+              </a>
+              <a
+                href="https://discord.gg/XEDqfYEW5h"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white text-[11px] font-medium transition-colors"
+              >
+                <span>Discord</span>
+                <ExternalLink class="w-3 h-3 opacity-70" />
+              </a>
+            </div>
           </div>
         </div>
 
-        <!-- USER PROFILE / LOGIN BUTTON -->
+        <!-- 3. PRIMARY CREATE LINEUP BUTTON + USER PROFILE AVATAR -->
+        <button
+          @click="handleNewNadeClick"
+          class="flex items-center gap-1.5 px-3 py-1.5 font-semibold text-slate-950 text-xs rounded-full shadow-sm transition-all cursor-pointer hover:opacity-95"
+          :style="{ backgroundColor: themeStore.customAccentColor }"
+        >
+          <Plus class="w-3.5 h-3.5 stroke-[2.5]" />
+          <span class="hidden sm:inline">Create Lineup</span>
+        </button>
+
+        <!-- USER PROFILE / SIGN IN -->
         <div class="relative user-dropdown-container" style="z-index: 999999 !important;">
           <template v-if="authStore.isAuthenticated">
             <button
               @click="isUserDropdownOpen = !isUserDropdownOpen"
-              class="flex items-center gap-2 p-1.5 pl-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 transition-colors cursor-pointer shadow-sm"
+              class="flex items-center gap-2 p-1 pr-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-xs font-medium text-slate-200 transition-colors cursor-pointer"
             >
-              <div class="flex flex-col text-right leading-none hidden sm:flex">
-                <span class="text-white text-xs font-bold truncate max-w-[90px]">{{ authStore.currentUser?.username }}</span>
-                <span class="text-[9px] text-amber-400 font-mono font-semibold">{{ authStore.currentUser?.inGameRole || 'Player' }}</span>
-              </div>
               <div class="relative">
-                <img 
-                  :src="authStore.currentUser?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${authStore.currentUser?.username}`" 
-                  class="w-6 h-6 rounded-lg bg-slate-950 border border-slate-700 object-cover flex-shrink-0" 
+                <img
+                  :src="authStore.currentUser?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${authStore.currentUser?.username}`"
+                  class="w-6 h-6 rounded-full bg-slate-950 border border-white/15 object-cover flex-shrink-0"
                 />
-                <span 
+                <span
                   :class="[
                     'absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-slate-950',
                     authStore.currentUserStatus === 'online' ? 'bg-emerald-500' : 'bg-amber-500'
                   ]"
                 ></span>
               </div>
+              <span class="text-white text-xs font-medium truncate max-w-[84px] hidden sm:inline">
+                {{ authStore.currentUser?.username }}
+              </span>
             </button>
 
             <!-- USER DROPDOWN -->
-            <div 
+            <div
               v-if="isUserDropdownOpen"
-              class="absolute top-full right-0 mt-2 w-64 bg-slate-900/98 backdrop-blur-2xl border border-slate-700 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col py-1 animate-fade-in text-xs"
+              class="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-2xl border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden flex flex-col py-1.5 animate-fade-in text-xs"
               style="z-index: 9999999 !important;"
             >
-              <div class="p-3 border-b border-slate-800 flex flex-col gap-1 bg-slate-950/60">
+              <div class="p-3 border-b border-white/[0.07] flex flex-col gap-1">
                 <div class="flex items-center justify-between">
-                  <span class="font-bold text-white text-sm">{{ authStore.currentUser?.username }}</span>
-                  <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-mono font-black uppercase">{{ authStore.currentUser?.role }}</span>
+                  <span class="font-semibold text-white text-sm">{{ authStore.currentUser?.username }}</span>
+                  <span class="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-[10px] font-medium uppercase">
+                    {{ authStore.currentUser?.role }}
+                  </span>
                 </div>
-                <!-- CURRENT ROLE & SWITCHER -->
-                <div class="flex items-center justify-between pt-1 border-t border-slate-800/60">
-                  <span class="text-[10px] text-slate-400">Tactical Role:</span>
-                  <span class="text-[10px] text-amber-400 font-bold font-mono">{{ authStore.currentUser?.inGameRole || 'Player' }}</span>
+                <div class="flex items-center justify-between pt-1">
+                  <span class="text-[11px] text-slate-400">Tactical Role</span>
+                  <span class="text-[11px] text-amber-400 font-medium">{{ authStore.currentUser?.inGameRole || 'Player' }}</span>
                 </div>
               </div>
 
-              <!-- ROLE SELECTOR LIST & CUSTOM ROLE INPUT -->
-              <div class="p-2 border-b border-slate-800 flex flex-col gap-2">
-                <span class="text-[10px] text-slate-400 font-bold uppercase block px-1">Active Tactical Role</span>
+              <!-- ROLE SELECTOR LIST -->
+              <div class="p-2.5 border-b border-white/[0.07] flex flex-col gap-2">
+                <span class="text-[10px] text-slate-400 font-medium uppercase tracking-wider px-1">Tactical Role</span>
                 <div class="grid grid-cols-2 gap-1">
                   <button
                     v-for="r in inGameRoles"
                     :key="r"
                     @click="changeRole(r)"
                     :class="[
-                      'px-2 py-1 rounded text-[10px] font-bold text-left transition-colors cursor-pointer',
+                      'px-2 py-1 rounded-lg text-[11px] font-medium text-left transition-colors cursor-pointer',
                       authStore.currentUser?.inGameRole === r
-                        ? 'bg-amber-500 text-slate-950 font-black'
-                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        ? 'bg-amber-500 text-slate-950 font-semibold'
+                        : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
                     ]"
                   >
                     {{ r }}
                   </button>
                 </div>
 
-                <!-- WRITE-IN CUSTOM ROLE -->
-                <div class="flex items-center gap-1 mt-1 pt-1.5 border-t border-slate-800/80">
+                <div class="flex items-center gap-1 mt-1 pt-1.5 border-t border-white/[0.06]">
                   <input
                     v-model="customRoleInput"
                     @keyup.enter="handleSaveCustomRole"
                     type="text"
                     placeholder="Custom role..."
-                    class="flex-grow bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-amber-500"
+                    class="flex-grow bg-slate-950 border border-white/[0.1] rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-amber-500"
                   />
                   <button
                     @click="handleSaveCustomRole"
-                    class="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[10px] cursor-pointer"
+                    class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg text-[11px] cursor-pointer"
                   >
                     Set
                   </button>
                 </div>
               </div>
 
-              <!-- PROFILE & ACCOUNT SETTINGS -->
               <button
                 @click="isUserSettingsOpen = true; isUserDropdownOpen = false"
-                class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors w-full text-left cursor-pointer"
+                class="flex items-center gap-2.5 px-3.5 py-2 text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors w-full text-left cursor-pointer"
               >
-                <Settings2 class="w-4 h-4 text-amber-400" />
-                <span>Profile & Settings</span>
+                <Settings2 class="w-4 h-4 text-slate-400" />
+                <span>Profile &amp; Settings</span>
               </button>
 
-              <!-- DIRECT MESSAGES -->
               <button
                 @click="isDirectMessagesOpen = true; isUserDropdownOpen = false"
-                class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors w-full text-left cursor-pointer"
+                class="flex items-center gap-2.5 px-3.5 py-2 text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors w-full text-left cursor-pointer"
               >
-                <MessageSquare class="w-4 h-4 text-amber-400" />
+                <MessageSquare class="w-4 h-4 text-slate-400" />
                 <span>Private Messages</span>
               </button>
 
               <router-link
                 to="/game-room"
                 @click="isUserDropdownOpen = false"
-                class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                class="flex items-center gap-2.5 px-3.5 py-2 text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors"
               >
                 <Radio class="w-4 h-4 text-emerald-400" />
                 <span>Tactical Live Room</span>
@@ -674,56 +754,53 @@ onUnmounted(() => {
               <router-link
                 to="/my-lineups"
                 @click="isUserDropdownOpen = false"
-                class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                class="flex items-center gap-2.5 px-3.5 py-2 text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors"
               >
                 <BookMarked class="w-4 h-4 text-amber-400" />
-                <span>My Personal Lineups</span>
+                <span>My Personal Book</span>
               </router-link>
 
               <router-link
                 v-if="authStore.isAdmin"
                 to="/admin"
                 @click="isUserDropdownOpen = false"
-                class="flex items-center gap-2 px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                class="flex items-center gap-2.5 px-3.5 py-2 text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors"
               >
                 <ShieldCheck class="w-4 h-4 text-amber-400" />
                 <span>Admin Dashboard</span>
               </router-link>
 
-              <!-- ADMIN VIEW TOGGLES: USER MODE & GUEST MODE -->
-              <div v-if="authStore.isActualAdmin" class="flex flex-col border-t border-slate-800/80 bg-slate-950/40">
+              <div v-if="authStore.isActualAdmin" class="flex flex-col border-t border-white/[0.07] bg-slate-950/40">
                 <button
                   @click="authStore.toggleUserPreviewMode()"
-                  class="flex items-center justify-between px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors w-full text-left cursor-pointer"
-                  title="Preview as normal registered user"
+                  class="flex items-center justify-between px-3.5 py-2 text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors w-full text-left cursor-pointer"
                 >
                   <div class="flex items-center gap-2">
                     <Eye class="w-4 h-4 text-purple-400" />
                     <span>Preview User Mode</span>
                   </div>
-                  <span :class="['px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase tracking-wider', authStore.isUserPreviewMode ? 'bg-purple-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400']">
-                    {{ authStore.isUserPreviewMode ? 'ACTIVE' : 'OFF' }}
+                  <span :class="['px-1.5 py-0.5 rounded text-[10px] font-medium', authStore.isUserPreviewMode ? 'bg-purple-500 text-slate-950 font-semibold' : 'bg-white/[0.06] text-slate-400']">
+                    {{ authStore.isUserPreviewMode ? 'On' : 'Off' }}
                   </span>
                 </button>
 
                 <button
                   @click="authStore.toggleGuestPreviewMode()"
-                  class="flex items-center justify-between px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors w-full text-left cursor-pointer border-t border-slate-900"
-                  title="Preview as unverified guest with spectator mode & limits"
+                  class="flex items-center justify-between px-3.5 py-2 text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors w-full text-left cursor-pointer"
                 >
                   <div class="flex items-center gap-2">
                     <UserX class="w-4 h-4 text-amber-400" />
                     <span>Preview Guest Mode</span>
                   </div>
-                  <span :class="['px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase tracking-wider', authStore.isGuestPreviewMode ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400']">
-                    {{ authStore.isGuestPreviewMode ? 'ACTIVE' : 'OFF' }}
+                  <span :class="['px-1.5 py-0.5 rounded text-[10px] font-medium', authStore.isGuestPreviewMode ? 'bg-amber-500 text-slate-950 font-semibold' : 'bg-white/[0.06] text-slate-400']">
+                    {{ authStore.isGuestPreviewMode ? 'On' : 'Off' }}
                   </span>
                 </button>
               </div>
 
               <button
                 @click="handleLogout"
-                class="flex items-center gap-2 px-3 py-2 text-rose-400 hover:bg-rose-500/10 transition-colors w-full text-left border-t border-slate-800 cursor-pointer"
+                class="flex items-center gap-2.5 px-3.5 py-2 text-rose-400 hover:bg-rose-500/10 transition-colors w-full text-left border-t border-white/[0.07] cursor-pointer"
               >
                 <LogOut class="w-4 h-4" />
                 <span>Sign Out</span>
@@ -734,7 +811,7 @@ onUnmounted(() => {
           <template v-else>
             <button
               @click="authStore.authMode = 'steam'; authStore.isAuthModalOpen = true"
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-200 hover:text-amber-400 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-200 hover:text-white text-xs font-medium rounded-full transition-colors cursor-pointer"
             >
               <User class="w-3.5 h-3.5 text-amber-400" />
               <span class="hidden sm:inline">Sign In</span>
@@ -742,21 +819,11 @@ onUnmounted(() => {
           </template>
         </div>
 
-        <!-- NEW NADE BUTTON -->
-        <button
-          @click="handleNewNadeClick"
-          class="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 font-black text-slate-950 text-xs rounded-xl shadow-lg transition-all cursor-pointer"
-          :style="{ backgroundColor: themeStore.customAccentColor }"
-        >
-          <Plus class="w-3.5 h-3.5 stroke-[3]" />
-          <span class="hidden sm:inline">New Nade</span>
-        </button>
-
         <!-- MOBILE HAMBURGER MENU BUTTON -->
         <button
           @click="isMobileMenuOpen = !isMobileMenuOpen"
-          :class="themeStore.isPhoneMode ? 'flex' : 'md:hidden flex'"
-          class="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 rounded-xl items-center justify-center cursor-pointer"
+          :class="themeStore.isPhoneMode ? 'flex' : 'lg:hidden flex'"
+          class="p-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-300 rounded-full items-center justify-center cursor-pointer"
           aria-label="Toggle Navigation Menu"
         >
           <Menu v-if="!isMobileMenuOpen" class="w-4 h-4" />
@@ -766,10 +833,10 @@ onUnmounted(() => {
     </div>
 
     <!-- MOBILE NAVIGATION DRAWER -->
-    <div 
+    <div
       v-if="isMobileMenuOpen"
-      :class="themeStore.isPhoneMode ? 'flex' : 'md:hidden flex'"
-      class="border-t border-slate-800 bg-slate-950/95 p-3 flex-col gap-1.5 animate-fade-in max-h-[82vh] overflow-y-auto"
+      :class="themeStore.isPhoneMode ? 'flex' : 'lg:hidden flex'"
+      class="border-t border-white/[0.07] bg-slate-950/95 backdrop-blur-2xl p-3 flex-col gap-1.5 animate-fade-in max-h-[82vh] overflow-y-auto"
     >
       <router-link
         v-for="link in navLinks"
@@ -777,174 +844,47 @@ onUnmounted(() => {
         :to="link.path"
         @click="isMobileMenuOpen = false"
         :class="[
-          'flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all',
-          route.path === link.path 
-            ? 'bg-slate-800 text-amber-400 border border-slate-700' 
-            : 'text-slate-300 hover:bg-slate-900'
+          'flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-all',
+          route.path === link.path
+            ? 'bg-white/[0.1] text-white font-semibold'
+            : 'text-slate-300 hover:bg-white/[0.04]'
         ]"
       >
         <component :is="link.icon" class="w-4 h-4" />
         <span>{{ link.name }}</span>
       </router-link>
 
-      <!-- MOBILE THEME MODE & PALETTE SELECTOR -->
-      <div class="my-1 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col gap-2">
+      <div class="my-1 p-3 rounded-xl bg-white/[0.03] border border-white/[0.07] flex flex-col gap-2">
         <div class="flex items-center justify-between gap-2">
-          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Theme &amp; Palette</span>
-          <div class="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+          <span class="text-[11px] font-medium text-slate-400">Appearance</span>
+          <div class="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-white/[0.07]">
             <button
               @click="themeStore.setTheme('dark')"
               :class="[
-                'px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1',
+                'px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1',
                 themeStore.theme === 'dark'
-                  ? 'bg-slate-800 text-amber-400 shadow-sm'
+                  ? 'bg-white/[0.12] text-white'
                   : 'text-slate-400 hover:text-slate-200'
               ]"
             >
-              <span>🌙</span>
+              <Moon class="w-3 h-3" />
               <span>Dark</span>
             </button>
             <button
               @click="themeStore.setTheme('light')"
               :class="[
-                'px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1',
+                'px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1',
                 themeStore.theme === 'light'
-                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  ? 'bg-amber-500 text-slate-950 font-semibold'
                   : 'text-slate-400 hover:text-slate-200'
               ]"
             >
-              <span>☀️</span>
+              <Sun class="w-3 h-3" />
               <span>Light</span>
             </button>
           </div>
         </div>
-
-        <select
-          :value="themeStore.palette"
-          @change="(e) => themeStore.setPalette((e.target as HTMLSelectElement).value as any)"
-          aria-label="Select Theme Palette"
-          class="w-full bg-slate-950 text-slate-200 text-xs font-semibold px-2.5 py-2 rounded-lg border border-slate-800 outline-none cursor-pointer"
-        >
-          <option value="protutech-obsidian" class="bg-slate-900 text-white">Obsidian Neon</option>
-          <option value="adobe-classic" class="bg-slate-900 text-white">Adobe Classic</option>
-          <option value="cyber-emerald" class="bg-slate-900 text-white">Cyber Emerald</option>
-          <option value="sunset-ember" class="bg-slate-900 text-white">Sunset Ember</option>
-        </select>
       </div>
-
-      <!-- MOBILE DISCONNECT PHONE BUTTON (WHEN PAIRED) -->
-      <button
-        v-if="companionStore.isPaired"
-        @click="companionStore.disconnectPhone(); isMobileMenuOpen = false"
-        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-rose-600/20 text-rose-400 hover:bg-rose-600/30 border border-rose-500/40 transition-all text-left cursor-pointer"
-      >
-        <WifiOff class="w-4 h-4" />
-        <span>Disconnect Phone</span>
-      </button>
-
-      <!-- MOBILE LIVE SYNC TRIGGER -->
-      <button
-        @click="lineupStore.syncWithServer()"
-        class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-200 hover:bg-slate-900 transition-all text-left cursor-pointer"
-      >
-        <span class="flex items-center gap-2">
-          <RefreshCw class="w-4 h-4 text-emerald-400" :class="{ 'animate-spin': lineupStore.syncStatus === 'syncing' }" />
-          <span>Sync Lineups with Server</span>
-        </span>
-        <span
-          :class="[
-            'text-[10px] font-mono px-2 py-0.5 rounded-md',
-            lineupStore.syncStatus === 'syncing'
-              ? 'bg-amber-500/20 text-amber-300'
-              : lineupStore.syncStatus === 'offline'
-                ? 'bg-rose-500/20 text-rose-300'
-                : 'bg-emerald-500/20 text-emerald-400'
-          ]"
-        >
-          {{ lineupStore.syncStatus === 'syncing' ? 'Syncing...' : lineupStore.syncStatus === 'offline' ? 'Offline' : 'Synced' }}
-        </span>
-      </button>
-
-      <button
-        @click="themeStore.togglePhoneMode(); isMobileMenuOpen = false"
-        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-cyan-300 hover:bg-slate-900 transition-all text-left cursor-pointer"
-      >
-        <Monitor v-if="themeStore.isPhoneMode" class="w-4 h-4" />
-        <Smartphone v-else class="w-4 h-4" />
-        <span>{{ themeStore.isPhoneMode ? 'Switch to Desktop Layout' : 'Switch to Mobile Layout' }}</span>
-      </button>
-
-      <button
-        @click="voiceStore.isPanelOpen = true; isMobileMenuOpen = false"
-        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-amber-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
-      >
-        <Mic class="w-4 h-4" />
-        <span>Voice Navigation</span>
-      </button>
-
-      <button
-        @click="isPeopleGroupsOpen = true; unreadMessageCount = 0; isMobileMenuOpen = false"
-        class="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-200 hover:bg-slate-900 transition-all text-left cursor-pointer"
-      >
-        <span class="flex items-center gap-2">
-          <Users class="w-4 h-4 text-amber-400" />
-          <span>People &amp; Squads</span>
-        </span>
-        <span
-          v-if="themeStore.showUnreadNotificationBadge && unreadMessageCount > 0"
-          class="px-1.5 py-0.5 rounded-full bg-rose-500 text-[10px] font-black text-white"
-        >
-          {{ unreadMessageCount > 9 ? '9+' : unreadMessageCount }}
-        </span>
-      </button>
-
-      <button
-        @click="isInstallAppModalOpen = true; isMobileMenuOpen = false"
-        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-emerald-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
-      >
-        <Monitor class="w-4 h-4" />
-        <span>Install Desktop / Mobile App</span>
-      </button>
-
-      <button
-        @click="isRemoteModalOpen = true; isMobileMenuOpen = false"
-        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-cyan-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
-      >
-        <Smartphone class="w-4 h-4" />
-        <span>Phone StreamDeck & Voice Remote</span>
-      </button>
-
-      <button
-        @click="isPracticeModalOpen = true; isMobileMenuOpen = false"
-        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-amber-400 hover:bg-slate-900 transition-all text-left cursor-pointer"
-      >
-        <Gamepad2 class="w-4 h-4" />
-        <span>Practice Server & CFG Studio</span>
-      </button>
-
-      <a
-        href="https://github.com/IAndrexI/CS2Nades"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-900 transition-all"
-      >
-        <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
-          <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-        </svg>
-        <span>GitHub: IAndrexI/CS2Nades</span>
-      </a>
-
-      <a
-        href="https://discord.gg/XEDqfYEW5h"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-[#5865F2] hover:bg-slate-900 transition-all"
-      >
-        <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
-          <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
-        </svg>
-        <span>Protutech Discord</span>
-      </a>
     </div>
 
     <!-- MODALS -->
@@ -952,9 +892,9 @@ onUnmounted(() => {
       :is-open="isInstallAppModalOpen"
       @close="isInstallAppModalOpen = false"
     />
-    <DataSyncModal 
-      :is-open="isDataModalOpen" 
-      @close="isDataModalOpen = false" 
+    <DataSyncModal
+      :is-open="isDataModalOpen"
+      @close="isDataModalOpen = false"
     />
     <MapSettingsModal
       :is-open="mapStore.isMapSettingsOpen"

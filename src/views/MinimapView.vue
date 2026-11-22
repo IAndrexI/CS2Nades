@@ -17,25 +17,25 @@ const lineupStore = useLineupStore()
 </script>
 
 <template>
-  <div class="minimap-view flex flex-col lg:flex-row gap-6 max-w-[1600px] mx-auto px-4 sm:px-6 py-6 animate-fade-in">
+  <div class="minimap-view flex flex-col lg:flex-row gap-5 max-w-[1600px] mx-auto px-4 sm:px-6 py-6 animate-fade-in">
     <!-- LEFT SIDE: MAP SELECTION WITH THUMBNAIL IMAGES -->
     <div class="w-full lg:w-60 xl:w-64 flex-shrink-0">
       <MapSelectorSidebar />
     </div>
 
-    <!-- RIGHT SIDE / MAIN CONTENT: FILTERS, RADAR MINIMAP, LINEUP GRID -->
-    <div class="flex-grow flex flex-col gap-6 min-w-0">
+    <!-- RIGHT SIDE / MAIN CONTENT: FILTERS, COMMAND BAR, RADAR MINIMAP, LINEUP GRID -->
+    <div class="flex-grow flex flex-col gap-5 min-w-0">
       <!-- NADE FILTER BAR -->
       <NadeFilterBar />
 
-      <!-- ⚡ QUICK-ADD BAR (1-TYPE / 1-PUSH) -->
+      <!-- QUICK ADD & CONSOLE COMMANDS BAR -->
       <QuickAddBar />
 
       <!-- INTERACTIVE RADAR MINIMAP -->
       <InteractiveMinimap />
 
       <!-- LINEUP GRID / DIRECTORY BELOW MAP -->
-      <div class="pt-4 border-t border-slate-800/80">
+      <div class="pt-4 border-t border-white/[0.07]">
         <LineupGrid />
       </div>
     </div>
@@ -44,13 +44,13 @@ const lineupStore = useLineupStore()
     <LineupModal />
     <AddLineupModal />
     <CreateExecuteModal />
-    <CommunityPresetsModal 
-      v-if="lineupStore.isPresetsModalOpen" 
-      @close="lineupStore.isPresetsModalOpen = false" 
+    <CommunityPresetsModal
+      v-if="lineupStore.isPresetsModalOpen"
+      @close="lineupStore.isPresetsModalOpen = false"
     />
-    <MapSettingsModal 
-      :is-open="mapStore.isMapSettingsOpen" 
-      @close="mapStore.isMapSettingsOpen = false" 
+    <MapSettingsModal
+      :is-open="mapStore.isMapSettingsOpen"
+      @close="mapStore.isMapSettingsOpen = false"
     />
   </div>
 </template>

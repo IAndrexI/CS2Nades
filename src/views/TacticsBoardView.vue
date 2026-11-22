@@ -97,13 +97,13 @@ async function handleSaveToServerAndSwitch() {
 </script>
 
 <template>
-  <div class="tactics-view flex flex-col lg:flex-row gap-6 max-w-[1650px] mx-auto px-4 sm:px-6 py-6 animate-fade-in">
+  <div class="tactics-view flex flex-col lg:flex-row gap-5 max-w-[1720px] mx-auto px-4 sm:px-6 py-5 animate-fade-in">
     <!-- LEFT SIDE: MAP SELECTION SIDEBAR (MATCHING LINEUPS) -->
-    <div class="w-full lg:w-60 xl:w-64 flex-shrink-0">
+    <div class="w-full lg:w-56 xl:w-60 flex-shrink-0">
       <MapSelectorSidebar :custom-handler="true" @select="handleMapSelect" />
     </div>
 
-    <!-- RIGHT SIDE / MAIN CONTENT: TACTICS BOARD CANVAS & TOOLBAR -->
+    <!-- RIGHT SIDE / MAIN CONTENT: TACTICS BOARD CANVAS & IN-MAP FLOATING HUD -->
     <div class="flex-grow flex flex-col gap-4 min-w-0">
       <TacticsBoard />
     </div>

@@ -62,11 +62,27 @@ export interface CS2WorldCoords {
   roll?: number
 }
 
+export interface CalloutBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type CalloutSourceSite = 'CS2Journal' | 'CS2Flow' | 'TotalCS' | 'Scope.gg' | 'Leetify' | 'Custom'
+
 export interface MapCallout {
   id: string
   name: string
   site?: 'A' | 'B' | 'Mid' | 'Spawn' | 'Other'
   coords: Coordinates
+  box?: CalloutBox
+  polygon?: Coordinates[]
+  shape?: 'pin' | 'box' | 'polygon'
+  color?: string
+  sources?: string[]
+  isPersonal?: boolean
+  isCustom?: boolean
   floor?: RadarFloorId
   description?: string
   commonNades?: string[]
@@ -253,6 +269,9 @@ export interface Strategy {
   tacticsDrawings?: TacticsElement[]
   tags: string[]
   executeId?: string
+  sourceWebsite?: string
+  sourceUrl?: string
+  author?: string
   isCustom?: boolean
   createdAt: string
   updatedAt?: string

@@ -189,20 +189,20 @@ async function handleDelete(e: MouseEvent) {
   <div
     v-if="effectiveMode === 'all_images'"
     :class="[
-      'lineup-card-all-images w-full bg-slate-900/95 border rounded-2xl overflow-hidden shadow-xl transition-all duration-200 flex flex-col gap-3 p-4',
+      'lineup-card-all-images w-full bg-slate-900/60 backdrop-blur-xl border rounded-2xl overflow-hidden shadow-lg transition-all duration-200 flex flex-col gap-3 p-4',
       selected
-        ? 'border-amber-500 ring-2 ring-amber-500/30'
-        : 'border-slate-800 hover:border-slate-700'
+        ? 'border-amber-500 ring-1 ring-amber-500/30'
+        : 'border-white/[0.08] hover:border-white/[0.16]'
     ]"
   >
     <!-- Header Bar -->
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex flex-wrap items-center gap-2 min-w-0">
-        <!-- Quick-Select Checkbox -->
+        <!-- Selection Checkbox -->
         <label
           v-if="selectable"
           @click.stop
-          class="flex items-center justify-center p-1 rounded-lg bg-slate-950 border border-slate-700 cursor-pointer hover:border-amber-500"
+          class="flex items-center justify-center p-1 rounded-lg bg-slate-950 border border-white/[0.12] cursor-pointer hover:border-amber-500"
           title="Select for Personal Book"
         >
           <input
@@ -213,29 +213,29 @@ async function handleDelete(e: MouseEvent) {
           />
         </label>
 
-        <div class="p-1.5 bg-slate-950 rounded-lg border border-slate-800 flex items-center">
+        <div class="p-1.5 bg-white/[0.05] rounded-lg border border-white/[0.08] flex items-center">
           <NadeIcon :type="lineup.grenadeType" :size="18" :filled="true" />
         </div>
 
         <button
           @click="handleOpenViewer"
-          class="text-left font-black text-sm text-white hover:text-amber-400 transition-colors cursor-pointer truncate max-w-[320px] sm:max-w-md"
+          class="text-left font-semibold text-sm text-white hover:text-amber-400 transition-colors cursor-pointer truncate max-w-[320px] sm:max-w-md"
         >
           {{ lineup.title }}
         </button>
 
-        <span class="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px] font-bold uppercase text-amber-400">
+        <span class="px-2 py-0.5 rounded-md bg-white/[0.06] border border-white/[0.08] text-[10px] font-medium uppercase text-amber-300">
           {{ mapName }}
         </span>
 
         <span
           :class="[
-            'px-2 py-0.5 rounded text-[10px] font-bold uppercase',
+            'px-2 py-0.5 rounded-md text-[10px] font-medium uppercase border',
             lineup.side === 't'
-              ? 'bg-amber-600/80 text-white'
+              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
               : lineup.side === 'ct'
-                ? 'bg-sky-600/80 text-white'
-                : 'bg-slate-700 text-white'
+                ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                : 'bg-white/[0.06] text-slate-300 border-white/[0.08]'
           ]"
         >
           {{ lineup.side }}
@@ -243,23 +243,23 @@ async function handleDelete(e: MouseEvent) {
 
         <span
           v-if="lineup.radarFloor"
-          class="px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 text-[10px] font-bold uppercase"
+          class="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 text-[10px] font-medium uppercase"
         >
           {{ lineup.radarFloor }}
         </span>
 
         <span
           v-if="lineup.sourceWebsite"
-          class="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold"
+          class="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-300 border border-sky-500/25 text-[10px] font-medium"
         >
           {{ lineup.sourceWebsite }}
         </span>
 
         <span
           v-if="lineup.proPlayer"
-          class="px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 text-[10px] font-bold"
+          class="px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/30 text-[10px] font-medium"
         >
-          ★ {{ lineup.proPlayer }}<template v-if="lineup.proTeam"> · {{ lineup.proTeam }}</template>
+          {{ lineup.proPlayer }}<template v-if="lineup.proTeam"> · {{ lineup.proTeam }}</template>
         </span>
       </div>
 
@@ -268,40 +268,40 @@ async function handleDelete(e: MouseEvent) {
         <button
           @click="handleToggleBook"
           :class="[
-            'flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer',
+            'flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-medium border transition-all cursor-pointer',
             isInBook
-              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
-              : 'bg-amber-500/15 text-amber-300 border-amber-500/35 hover:bg-amber-500/25'
+              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+              : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border-white/[0.08]'
           ]"
           :title="isInBook ? 'Remove from Personal Book' : 'Add to Personal Book'"
         >
           <BookmarkCheck v-if="isInBook" class="w-3.5 h-3.5" />
           <BookmarkPlus v-else class="w-3.5 h-3.5" />
-          <span>{{ isInBook ? '✓ In My Book' : '+ My Book' }}</span>
+          <span>{{ isInBook ? 'In My Book' : 'Save to Book' }}</span>
         </button>
 
         <button
           @click="handleCopySetupCmd"
-          class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold transition-colors cursor-pointer"
+          class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/[0.08] text-[11px] font-medium transition-colors cursor-pointer"
           title="Copy setpos + setang + grenade setup console command"
         >
           <Check v-if="copiedCmd" class="w-3.5 h-3.5 text-emerald-400" />
-          <Terminal v-else class="w-3.5 h-3.5" />
-          <span>{{ copiedCmd ? 'Copied!' : 'Setup CMD' }}</span>
+          <Terminal v-else class="w-3.5 h-3.5 text-emerald-400" />
+          <span>{{ copiedCmd ? 'Copied' : 'Setup CMD' }}</span>
         </button>
 
         <button
           @click="handlePinOnRadar"
-          class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-sky-300 border border-sky-500/30 text-[11px] font-bold transition-colors cursor-pointer"
-          title="Select & pin on interactive radar"
+          class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/[0.08] text-[11px] font-medium transition-colors cursor-pointer"
+          title="Select and pin on interactive radar"
         >
-          <Radar class="w-3.5 h-3.5" />
+          <Radar class="w-3.5 h-3.5 text-sky-400" />
           <span>Radar</span>
         </button>
 
         <button
           @click="handleOpenViewer"
-          class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-black transition-colors cursor-pointer shadow"
+          class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-semibold transition-colors cursor-pointer"
           title="Open Full Viewer Modal"
         >
           <Maximize2 class="w-3.5 h-3.5" />
@@ -310,7 +310,7 @@ async function handleDelete(e: MouseEvent) {
 
         <button
           @click.stop="lineupStore.toggleFavorite(lineup.id)"
-          class="p-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+          class="p-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
           title="Toggle Favorite"
         >
           <Heart class="w-3.5 h-3.5" :class="{ 'fill-rose-500 text-rose-500': lineupStore.isFavorite(lineup.id) }" />
@@ -319,7 +319,7 @@ async function handleDelete(e: MouseEvent) {
         <button
           v-if="lineup.isCustom"
           @click="handleDelete"
-          class="p-1.5 rounded-xl bg-slate-950 hover:bg-rose-600 border border-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+          class="p-1.5 rounded-xl bg-white/[0.04] hover:bg-rose-600 border border-white/[0.08] text-slate-400 hover:text-white transition-colors cursor-pointer"
           title="Delete Lineup"
         >
           <Trash2 class="w-3.5 h-3.5" />
@@ -328,19 +328,19 @@ async function handleDelete(e: MouseEvent) {
     </div>
 
     <!-- Compact Spot & Movement Strip -->
-    <div class="flex flex-wrap items-center gap-2 px-3 py-2 bg-slate-950/90 border border-slate-800 rounded-xl text-[11px]">
-      <span class="font-bold text-amber-300">📍 Stand: {{ lineup.startLocation }}</span>
+    <div class="flex flex-wrap items-center gap-2 px-3 py-2 bg-slate-950/70 border border-white/[0.07] rounded-xl text-[11px]">
+      <span class="font-medium text-amber-300">Stand: {{ lineup.startLocation }}</span>
       <ArrowRight class="w-3 h-3 text-slate-500" />
-      <span class="font-bold text-emerald-300">🎯 Target: {{ lineup.endLocation }}</span>
-      <span class="h-3 w-px bg-slate-800 hidden sm:inline"></span>
-      <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 font-bold text-sky-300 capitalize">
-        🏃 Movement: {{ movementText }}
+      <span class="font-medium text-emerald-300">Target: {{ lineup.endLocation }}</span>
+      <span class="h-3 w-px bg-white/[0.1] hidden sm:inline"></span>
+      <span class="px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.07] font-medium text-sky-300 capitalize">
+        Movement: {{ movementText }}
       </span>
-      <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono font-bold text-amber-400 uppercase">
-        ⚡ {{ throwText }}
+      <span class="px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.07] font-mono font-medium text-amber-300 uppercase">
+        {{ throwText }}
       </span>
-      <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono font-bold text-slate-300 uppercase">
-        🖱️ {{ clickText }} click
+      <span class="px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.07] font-mono font-medium text-slate-300 uppercase">
+        {{ clickText }} click
       </span>
       <span
         v-if="lineup.movementDetails"
@@ -353,7 +353,7 @@ async function handleDelete(e: MouseEvent) {
     <!-- 3 Visual Stages Side-by-Side (Immediately Visible) -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
       <!-- Stage 1: Stand Spot -->
-      <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex flex-col">
+      <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-white/[0.08] flex flex-col">
         <div class="relative aspect-video w-full overflow-hidden bg-slate-950">
           <img
             :src="standingImg"
@@ -364,10 +364,10 @@ async function handleDelete(e: MouseEvent) {
           />
           <div class="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950 via-slate-950/75 to-transparent pointer-events-none"></div>
 
-          <div class="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-950/90 border border-sky-500/40 text-[10px] font-black uppercase text-sky-300">
-            1. Stand Spot: {{ lineup.startLocation }}
+          <div class="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-950/85 border border-white/[0.12] text-[10px] font-semibold uppercase text-sky-300">
+            1. Stand: {{ lineup.startLocation }}
           </div>
-          <div class="absolute top-2 right-2 px-2 py-0.5 rounded bg-slate-950/90 border border-slate-700 text-[10px] font-bold text-slate-300 capitalize">
+          <div class="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-slate-950/85 border border-white/[0.1] text-[10px] font-medium text-slate-300 capitalize">
             {{ movementText }}
           </div>
           <div class="absolute bottom-2 inset-x-2 text-[11px] font-medium text-white leading-snug line-clamp-2 drop-shadow">
@@ -377,7 +377,7 @@ async function handleDelete(e: MouseEvent) {
       </div>
 
       <!-- Stage 2: Aim Point + Crosshair Reticle -->
-      <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex flex-col">
+      <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-white/[0.08] flex flex-col">
         <div class="relative aspect-video w-full overflow-hidden bg-slate-950">
           <img
             :src="aimImg"
@@ -386,7 +386,6 @@ async function handleDelete(e: MouseEvent) {
             decoding="async"
             class="w-full h-full object-cover opacity-95"
           />
-          <!-- Crosshair Reticle Overlay -->
           <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div class="relative flex items-center justify-center">
               <div class="w-7 h-7 rounded-full border-2 border-emerald-400/90 bg-emerald-500/10 shadow"></div>
@@ -396,11 +395,11 @@ async function handleDelete(e: MouseEvent) {
           </div>
           <div class="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950 via-slate-950/75 to-transparent pointer-events-none"></div>
 
-          <div class="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-950/90 border border-amber-500/40 text-[10px] font-black uppercase text-amber-300 flex items-center gap-1">
+          <div class="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-950/85 border border-white/[0.12] text-[10px] font-semibold uppercase text-amber-300 flex items-center gap-1">
             <Crosshair class="w-3 h-3" />
             <span>2. Aim Point</span>
           </div>
-          <div class="absolute top-2 right-2 px-2 py-0.5 rounded bg-slate-950/90 border border-slate-700 text-[10px] font-mono text-emerald-300">
+          <div class="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-slate-950/85 border border-white/[0.1] text-[10px] font-mono text-emerald-300">
             {{ stepCaptions.aimNote }}
           </div>
           <div class="absolute bottom-2 inset-x-2 text-[11px] font-medium text-white leading-snug line-clamp-2 drop-shadow">
@@ -410,7 +409,7 @@ async function handleDelete(e: MouseEvent) {
       </div>
 
       <!-- Stage 3: Throw & Result -->
-      <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex flex-col">
+      <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-white/[0.08] flex flex-col">
         <div class="relative aspect-video w-full overflow-hidden bg-slate-950">
           <img
             :src="landingImg"
@@ -421,10 +420,10 @@ async function handleDelete(e: MouseEvent) {
           />
           <div class="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950 via-slate-950/75 to-transparent pointer-events-none"></div>
 
-          <div class="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-950/90 border border-emerald-500/40 text-[10px] font-black uppercase text-emerald-300">
-            3. Throw &amp; Result: {{ lineup.endLocation }}
+          <div class="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-950/85 border border-white/[0.12] text-[10px] font-semibold uppercase text-emerald-300">
+            3. Result: {{ lineup.endLocation }}
           </div>
-          <div class="absolute top-2 right-2 px-2 py-0.5 rounded bg-slate-950/90 border border-slate-700 text-[10px] font-mono uppercase text-amber-300">
+          <div class="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-slate-950/85 border border-white/[0.1] text-[10px] font-mono uppercase text-amber-300">
             {{ throwText }} • {{ clickText }}
           </div>
           <div class="absolute bottom-2 inset-x-2 text-[11px] font-medium text-white leading-snug line-clamp-2 drop-shadow">
@@ -441,18 +440,18 @@ async function handleDelete(e: MouseEvent) {
   <div
     v-else-if="effectiveMode === 'spot_movement'"
     :class="[
-      'lineup-card-spot-movement group w-full bg-slate-900/90 hover:bg-slate-850 border rounded-xl px-3 py-2.5 shadow-md transition-all flex flex-wrap items-center justify-between gap-2.5',
+      'lineup-card-spot-movement group w-full bg-slate-900/60 hover:bg-slate-900/90 backdrop-blur-xl border rounded-xl px-3.5 py-2.5 shadow-sm transition-all flex flex-wrap items-center justify-between gap-2.5',
       selected
-        ? 'border-amber-500 ring-2 ring-amber-500/30'
-        : 'border-slate-800 hover:border-slate-700'
+        ? 'border-amber-500 ring-1 ring-amber-500/30'
+        : 'border-white/[0.08] hover:border-white/[0.16]'
     ]"
   >
     <!-- Left: Checkbox + Nade + Title + Map + Source -->
-    <div class="flex items-center gap-2 min-w-0 flex-1">
+    <div class="flex items-center gap-2.5 min-w-0 flex-1">
       <label
         v-if="selectable"
         @click.stop
-        class="flex items-center justify-center p-1 rounded bg-slate-950 border border-slate-700 cursor-pointer shrink-0"
+        class="flex items-center justify-center p-1 rounded bg-slate-950 border border-white/[0.12] cursor-pointer shrink-0"
       >
         <input
           type="checkbox"
@@ -462,7 +461,7 @@ async function handleDelete(e: MouseEvent) {
         />
       </label>
 
-      <div class="p-1.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0">
+      <div class="p-1.5 bg-white/[0.05] rounded-lg border border-white/[0.08] shrink-0">
         <NadeIcon :type="lineup.grenadeType" :size="16" :filled="true" />
       </div>
 
@@ -470,24 +469,24 @@ async function handleDelete(e: MouseEvent) {
         <div class="flex flex-wrap items-center gap-1.5">
           <button
             @click="handleOpenViewer"
-            class="text-left font-bold text-xs text-white group-hover:text-amber-400 transition-colors truncate max-w-[220px] cursor-pointer"
+            class="text-left font-semibold text-xs text-white group-hover:text-amber-400 transition-colors truncate max-w-[220px] cursor-pointer"
           >
             {{ lineup.title }}
           </button>
-          <span class="px-1.5 py-0.2 rounded bg-slate-950 border border-slate-800 text-[9px] font-bold uppercase text-amber-400">
+          <span class="px-1.5 py-0.2 rounded bg-white/[0.06] border border-white/[0.08] text-[9px] font-medium uppercase text-amber-300">
             {{ mapName }}
           </span>
           <span
             :class="[
-              'px-1.5 py-0.2 rounded text-[9px] font-bold uppercase',
-              lineup.side === 't' ? 'bg-amber-600/80 text-white' : lineup.side === 'ct' ? 'bg-sky-600/80 text-white' : 'bg-slate-700 text-white'
+              'px-1.5 py-0.2 rounded text-[9px] font-medium uppercase',
+              lineup.side === 't' ? 'bg-amber-500/20 text-amber-300' : lineup.side === 'ct' ? 'bg-sky-500/20 text-sky-300' : 'bg-white/[0.08] text-white'
             ]"
           >
             {{ lineup.side }}
           </span>
           <span
             v-if="lineup.sourceWebsite"
-            class="px-1.5 py-0.2 rounded bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[9px] font-semibold"
+            class="px-1.5 py-0.2 rounded bg-sky-500/10 border border-sky-500/25 text-sky-300 text-[9px] font-medium"
           >
             {{ lineup.sourceWebsite }}
           </span>
@@ -495,21 +494,21 @@ async function handleDelete(e: MouseEvent) {
 
         <!-- Core Spot + Movement Essentials -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-          <span class="text-amber-300 font-semibold">
-            📍 Stand: {{ lineup.startLocation }}
+          <span class="text-slate-300 font-medium">
+            Stand: <strong class="text-amber-300 font-medium">{{ lineup.startLocation }}</strong>
           </span>
           <span class="text-slate-500">→</span>
-          <span class="text-emerald-300 font-semibold">
-            🎯 Target: {{ lineup.endLocation }}
+          <span class="text-slate-300 font-medium">
+            Target: <strong class="text-emerald-300 font-medium">{{ lineup.endLocation }}</strong>
           </span>
-          <span class="px-1.5 py-0.2 rounded bg-slate-950 border border-slate-800 text-sky-300 font-semibold capitalize text-[10px]">
-            🏃 Movement: {{ movementText }}
+          <span class="px-1.5 py-0.2 rounded bg-white/[0.04] border border-white/[0.07] text-sky-300 font-medium capitalize text-[10px]">
+            {{ movementText }}
           </span>
-          <span class="px-1.5 py-0.2 rounded bg-slate-950 border border-slate-800 text-amber-400 font-mono uppercase font-bold text-[10px]">
-            ⚡ {{ throwText }}
+          <span class="px-1.5 py-0.2 rounded bg-white/[0.04] border border-white/[0.07] text-amber-300 font-mono uppercase font-medium text-[10px]">
+            {{ throwText }}
           </span>
-          <span class="px-1.5 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-300 font-mono uppercase text-[10px]">
-            🖱️ {{ clickText }}
+          <span class="px-1.5 py-0.2 rounded bg-white/[0.04] border border-white/[0.07] text-slate-300 font-mono uppercase text-[10px]">
+            {{ clickText }}
           </span>
         </div>
       </div>
@@ -520,39 +519,39 @@ async function handleDelete(e: MouseEvent) {
       <button
         @click="handleToggleBook"
         :class="[
-          'flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer',
+          'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium border transition-colors cursor-pointer',
           isInBook
-            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-            : 'bg-amber-500/15 text-amber-300 border-amber-500/35 hover:bg-amber-500/25'
+            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+            : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border-white/[0.08]'
         ]"
       >
         <BookmarkCheck v-if="isInBook" class="w-3 h-3" />
         <BookmarkPlus v-else class="w-3 h-3" />
-        <span>{{ isInBook ? '✓ In My Book' : '+ My Book' }}</span>
+        <span>{{ isInBook ? 'In My Book' : 'Save' }}</span>
       </button>
 
       <button
         @click="handleCopySetupCmd"
-        class="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold transition-colors cursor-pointer"
+        class="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/[0.08] text-[10px] font-medium transition-colors cursor-pointer"
         title="Copy Setup Console Command"
       >
         <Check v-if="copiedCmd" class="w-3 h-3 text-emerald-400" />
-        <Copy v-else class="w-3 h-3" />
-        <span>{{ copiedCmd ? 'Copied!' : 'Setup CMD' }}</span>
+        <Copy v-else class="w-3 h-3 text-emerald-400" />
+        <span>{{ copiedCmd ? 'Copied' : 'Setup CMD' }}</span>
       </button>
 
       <button
         @click="handlePinOnRadar"
-        class="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-sky-300 border border-sky-500/30 text-[10px] font-bold transition-colors cursor-pointer"
+        class="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/[0.08] text-[10px] font-medium transition-colors cursor-pointer"
         title="Pin on Radar"
       >
-        <Radar class="w-3 h-3" />
+        <Radar class="w-3 h-3 text-sky-400" />
         <span>Radar</span>
       </button>
 
       <button
         @click="handleOpenViewer"
-        class="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-amber-400 border border-slate-800 transition-colors cursor-pointer"
+        class="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white border border-white/[0.08] transition-colors cursor-pointer"
         title="Open Full Viewer"
       >
         <Maximize2 class="w-3 h-3" />
@@ -567,14 +566,14 @@ async function handleDelete(e: MouseEvent) {
     v-else
     @click="handleOpenViewer"
     :class="[
-      'lineup-card group relative bg-slate-900/90 hover:bg-slate-850 border rounded-xl overflow-hidden shadow-lg transition-all duration-200 cursor-pointer flex flex-col',
+      'lineup-card group relative bg-slate-900/60 hover:bg-slate-900/90 backdrop-blur-xl border rounded-2xl overflow-hidden shadow-lg transition-all duration-200 cursor-pointer flex flex-col',
       selected
-        ? 'border-amber-500 ring-2 ring-amber-500/30'
-        : 'border-slate-800 hover:border-slate-700'
+        ? 'border-amber-500 ring-1 ring-amber-500/30'
+        : 'border-white/[0.08] hover:border-white/[0.16]'
     ]"
   >
     <!-- TOP THUMBNAIL / PREVIEW -->
-    <div class="relative w-full h-32 bg-slate-950 overflow-hidden flex items-center justify-center">
+    <div class="relative w-full h-34 bg-slate-950 overflow-hidden flex items-center justify-center">
       <img
         :src="cardThumbnail"
         :alt="lineup.title"
@@ -588,7 +587,7 @@ async function handleDelete(e: MouseEvent) {
         <label
           v-if="selectable"
           @click.stop
-          class="p-1 bg-slate-950/90 backdrop-blur-md rounded-lg border border-slate-700 shadow-md flex items-center cursor-pointer hover:border-amber-400"
+          class="p-1 bg-slate-950/90 backdrop-blur-md rounded-lg border border-white/[0.15] shadow-md flex items-center cursor-pointer hover:border-amber-400"
           title="Select for Personal Book"
         >
           <input
@@ -599,25 +598,25 @@ async function handleDelete(e: MouseEvent) {
           />
         </label>
 
-        <div class="p-1.5 bg-slate-950/85 backdrop-blur-md rounded-lg border border-slate-800 shadow-md flex items-center gap-1.5">
+        <div class="p-1.5 bg-slate-950/85 backdrop-blur-md rounded-lg border border-white/[0.1] shadow-md flex items-center gap-1.5">
           <NadeIcon :type="lineup.grenadeType" :size="16" :filled="true" />
         </div>
       </div>
 
       <!-- TOP RIGHT: SIDE + MAP + DELETE -->
       <div class="absolute top-2.5 right-2.5 flex items-center gap-1.5">
-        <span class="px-1.5 py-0.5 rounded bg-slate-950/85 border border-slate-800 text-[9px] font-bold uppercase text-amber-300 backdrop-blur-md">
+        <span class="px-2 py-0.5 rounded-full bg-slate-950/85 border border-white/[0.12] text-[9px] font-medium uppercase text-slate-200 backdrop-blur-md">
           {{ mapName }}
         </span>
 
         <span
           :class="[
-            'px-2 py-0.5 rounded text-[10px] font-bold uppercase backdrop-blur-md',
+            'px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase backdrop-blur-md',
             lineup.side === 't'
-              ? 'bg-amber-600/80 text-white'
+              ? 'bg-amber-500/85 text-slate-950'
               : lineup.side === 'ct'
-                ? 'bg-sky-600/80 text-white'
-                : 'bg-slate-700/80 text-white'
+                ? 'bg-sky-500/85 text-slate-950'
+                : 'bg-slate-700/85 text-white'
           ]"
         >
           {{ lineup.side }}
@@ -626,7 +625,7 @@ async function handleDelete(e: MouseEvent) {
         <button
           v-if="lineup.isCustom"
           @click="handleDelete"
-          class="p-1 bg-slate-950/80 hover:bg-rose-600 backdrop-blur-md rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+          class="p-1 bg-slate-950/80 hover:bg-rose-600 backdrop-blur-md rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
           title="Delete Lineup"
         >
           <Trash2 class="w-3 h-3" />
@@ -636,7 +635,7 @@ async function handleDelete(e: MouseEvent) {
       <!-- VIDEO INDICATOR -->
       <div
         v-if="lineup.videoUrl"
-        class="absolute bottom-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 bg-slate-950/80 backdrop-blur-md rounded text-[10px] text-slate-200 font-semibold border border-slate-800"
+        class="absolute bottom-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 bg-slate-950/80 backdrop-blur-md rounded-md text-[10px] text-slate-200 font-medium border border-white/[0.1]"
       >
         <Play class="w-2.5 h-2.5 fill-current text-amber-400" />
         <span>Video</span>
@@ -645,7 +644,7 @@ async function handleDelete(e: MouseEvent) {
       <!-- FAVORITE BUTTON -->
       <button
         @click.stop="lineupStore.toggleFavorite(lineup.id)"
-        class="absolute bottom-2.5 right-2.5 p-1.5 bg-slate-950/80 hover:bg-slate-900 backdrop-blur-md rounded-lg text-slate-400 hover:text-rose-500 border border-slate-800 transition-colors cursor-pointer"
+        class="absolute bottom-2.5 right-2.5 p-1.5 bg-slate-950/80 hover:bg-slate-900 backdrop-blur-md rounded-lg text-slate-400 hover:text-rose-500 border border-white/[0.1] transition-colors cursor-pointer"
         title="Toggle Favorite"
       >
         <Heart class="w-3.5 h-3.5" :class="{ 'fill-rose-500 text-rose-500': lineupStore.isFavorite(lineup.id) }" />
@@ -654,7 +653,7 @@ async function handleDelete(e: MouseEvent) {
 
     <!-- CONTENT -->
     <div class="p-3.5 flex flex-col flex-grow gap-2">
-      <h3 class="font-bold text-xs text-white group-hover:text-amber-400 transition-colors line-clamp-1">
+      <h3 class="font-semibold text-xs text-white group-hover:text-amber-400 transition-colors line-clamp-1">
         {{ lineup.title }}
       </h3>
 
@@ -666,10 +665,10 @@ async function handleDelete(e: MouseEvent) {
 
       <!-- Movement + Throw Type Pill -->
       <div class="flex flex-wrap items-center gap-1 text-[10px]">
-        <span class="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-sky-300 font-semibold capitalize">
+        <span class="px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.07] text-sky-300 font-medium capitalize">
           {{ movementText }} • {{ throwText }}
         </span>
-        <span class="px-1.5 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-slate-400 font-mono uppercase">
+        <span class="px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.07] text-slate-400 font-mono uppercase">
           {{ clickText }}
         </span>
       </div>
@@ -677,50 +676,50 @@ async function handleDelete(e: MouseEvent) {
       <div v-if="lineup.proPlayer || lineup.sourceWebsite" class="flex flex-wrap items-center gap-1">
         <span
           v-if="lineup.proPlayer"
-          class="px-1.5 py-0.5 bg-purple-500/15 text-purple-300 border border-purple-500/30 rounded font-bold text-[9px] truncate max-w-[140px]"
+          class="px-1.5 py-0.5 bg-purple-500/15 text-purple-300 border border-purple-500/25 rounded-md font-medium text-[9px] truncate max-w-[140px]"
           :title="lineup.proTeam ? `${lineup.proPlayer} (${lineup.proTeam})` : lineup.proPlayer"
         >
-          ★ {{ lineup.proPlayer }}<template v-if="lineup.proTeam"> · {{ lineup.proTeam }}</template>
+          {{ lineup.proPlayer }}<template v-if="lineup.proTeam"> · {{ lineup.proTeam }}</template>
         </span>
         <span
           v-if="lineup.sourceWebsite"
-          class="px-1.5 py-0.5 bg-slate-800/90 text-amber-400/90 border border-amber-500/20 rounded font-semibold text-[9px]"
+          class="px-1.5 py-0.5 bg-white/[0.05] text-slate-300 border border-white/[0.08] rounded-md font-medium text-[9px]"
         >
           {{ lineup.sourceWebsite }}
         </span>
       </div>
 
       <!-- Quick Action Row -->
-      <div class="flex items-center justify-between gap-1.5 pt-2 mt-auto border-t border-slate-800 text-[10px]">
+      <div class="flex items-center justify-between gap-1.5 pt-2.5 mt-auto border-t border-white/[0.06] text-[10px]">
         <button
           @click="handleToggleBook"
           :class="[
-            'flex items-center gap-1 px-2 py-1 rounded-lg font-bold border transition-colors cursor-pointer',
+            'flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium border transition-colors cursor-pointer',
             isInBook
-              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-              : 'bg-amber-500/15 text-amber-300 border-amber-500/35 hover:bg-amber-500/25'
+              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+              : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border-white/[0.08]'
           ]"
           :title="isInBook ? 'In Personal Book (click to remove)' : 'Save to Personal Book'"
         >
           <BookmarkCheck v-if="isInBook" class="w-3 h-3" />
           <BookmarkPlus v-else class="w-3 h-3" />
-          <span>{{ isInBook ? '✓ In My Book' : '+ My Book' }}</span>
+          <span>{{ isInBook ? 'In My Book' : 'Save to Book' }}</span>
         </button>
 
         <div class="flex items-center gap-1">
           <button
             @click="handleCopySetupCmd"
-            class="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30 font-bold transition-colors cursor-pointer"
+            class="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/[0.08] font-medium transition-colors cursor-pointer"
             title="Copy Setup CMD"
           >
             <Check v-if="copiedCmd" class="w-3 h-3 text-emerald-400" />
-            <Terminal v-else class="w-3 h-3" />
-            <span>{{ copiedCmd ? 'Copied!' : 'Setup CMD' }}</span>
+            <Terminal v-else class="w-3 h-3 text-emerald-400" />
+            <span>{{ copiedCmd ? 'Copied' : 'Setup CMD' }}</span>
           </button>
 
           <button
             @click="handlePinOnRadar"
-            class="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-sky-300 border border-sky-500/30 transition-colors cursor-pointer"
+            class="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-sky-300 border border-white/[0.08] transition-colors cursor-pointer"
             title="Pin on Radar"
           >
             <Radar class="w-3 h-3" />

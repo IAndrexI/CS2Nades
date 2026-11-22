@@ -76,17 +76,17 @@ const sourceTabs = [
 
 const mapTabs = [
   'all',
-  'cobblestone',
   'mirage',
   'dust2',
   'inferno',
   'nuke',
   'ancient',
   'anubis',
-  'overpass',
-  'vertigo',
+  'cache',
   'train',
-  'cache'
+  'vertigo',
+  'overpass',
+  'cobblestone'
 ] as const
 
 const MAP_DISPLAY_NAMES: Record<string, string> = {
@@ -167,7 +167,7 @@ async function fetchUpdates(refresh = false) {
     })
 
     if (refresh) {
-      syncStatusMessage.value = `Synced ${items.length} live CS2 news & patch items`
+      syncStatusMessage.value = `Synced ${items.length} live CS2 news and patch items`
       setTimeout(() => {
         syncStatusMessage.value = ''
       }, 4000)
@@ -263,7 +263,6 @@ async function submitCustomUpdate() {
       formSuccess.value = ''
     }, 3500)
   } catch {
-    // Graceful local fallback if server is offline
     const localItem: CS2UpdateItem = {
       ...payload,
       id: `local-update-${Date.now()}`
@@ -321,15 +320,15 @@ const filteredUpdates = computed(() => {
 function getSourceBadgeClass(source: CS2UpdateItem['source']) {
   switch (source) {
     case 'Valve Official':
-      return 'bg-amber-500/15 text-amber-400 border-amber-500/40'
+      return 'bg-amber-500/15 text-amber-300 border-amber-500/35'
     case 'Gabe Follower':
-      return 'bg-purple-500/15 text-purple-300 border-purple-500/40'
+      return 'bg-purple-500/15 text-purple-300 border-purple-500/35'
     case 'ThourCS':
-      return 'bg-sky-500/15 text-sky-400 border-sky-500/40'
+      return 'bg-sky-500/15 text-sky-300 border-sky-500/35'
     case 'Aquarius':
-      return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40'
+      return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
     default:
-      return 'bg-slate-800 text-slate-300 border-slate-700'
+      return 'bg-white/[0.06] text-slate-300 border-white/[0.1]'
   }
 }
 
@@ -340,34 +339,34 @@ function getCategoryLabel(cat: CS2UpdateItem['category']) {
 }
 
 function getCategoryBadgeClass(cat: CS2UpdateItem['category']) {
-  if (cat === 'patch_note') return 'bg-sky-500/10 text-sky-400 border-sky-500/30'
-  if (cat === 'lineup_impact') return 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-  return 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
+  if (cat === 'patch_note') return 'bg-sky-500/10 text-sky-300 border-sky-500/25'
+  if (cat === 'lineup_impact') return 'bg-rose-500/10 text-rose-300 border-rose-500/25'
+  return 'bg-indigo-500/10 text-indigo-300 border-indigo-500/25'
 }
 
 function getImpactBadgeClass(impact?: CS2UpdateItem['lineupImpact']) {
   switch (impact) {
     case 'high':
-      return 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+      return 'bg-rose-500/15 text-rose-300 border-rose-500/35'
     case 'medium':
-      return 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+      return 'bg-amber-500/15 text-amber-300 border-amber-500/35'
     case 'low':
-      return 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+      return 'bg-sky-500/15 text-sky-300 border-sky-500/30'
     default:
-      return 'bg-slate-800 text-slate-400 border-slate-700'
+      return 'bg-white/[0.05] text-slate-400 border-white/[0.08]'
   }
 }
 
 function getImpactLabel(impact?: CS2UpdateItem['lineupImpact']) {
   switch (impact) {
     case 'high':
-      return 'HIGH LINEUP IMPACT'
+      return 'High Lineup Impact'
     case 'medium':
-      return 'MEDIUM LINEUP IMPACT'
+      return 'Medium Lineup Impact'
     case 'low':
-      return 'LOW LINEUP IMPACT'
+      return 'Low Lineup Impact'
     default:
-      return 'NO LINEUP IMPACT'
+      return 'No Lineup Impact'
   }
 }
 
@@ -398,58 +397,58 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="updates-leaks-view max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6 animate-fade-in">
+  <div class="updates-leaks-view max-w-[1600px] mx-auto px-4 sm:px-6 py-6 flex flex-col gap-5 animate-fade-in">
     <!-- HEADER -->
-    <div class="flex flex-wrap items-center justify-between gap-4 p-5 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl">
+    <div class="flex flex-wrap items-center justify-between gap-4 p-5 bg-slate-900/60 backdrop-blur-xl border border-white/[0.08] rounded-2xl shadow-lg">
       <div class="flex items-center gap-3.5">
-        <div class="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl">
-          <Newspaper class="w-6 h-6 stroke-[2.2]" />
+        <div class="p-3 bg-white/[0.05] border border-white/[0.08] text-amber-400 rounded-2xl">
+          <Newspaper class="w-5 h-5" />
         </div>
         <div>
           <div class="flex flex-wrap items-center gap-2">
-            <h1 class="text-xl font-black uppercase text-white tracking-wide">
+            <h1 class="text-lg font-semibold text-white tracking-tight">
               CS2 Updates, Patch Notes &amp; Leaks
             </h1>
-            <span class="px-2 py-0.5 rounded bg-slate-800 text-amber-400 text-xs font-mono font-bold">
+            <span class="px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-amber-300 text-xs font-mono font-medium">
               {{ filteredUpdates.length }} Entries
             </span>
             <span
               v-if="lastSyncedAt"
-              class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold"
+              class="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono font-medium"
             >
               Synced {{ lastSyncedAt }}
             </span>
           </div>
           <p class="text-xs text-slate-400 mt-0.5">
-            Track official Valve Steam patch notes, geometry/voxel changes, and datamined CS2 intel from Gabe Follower, ThourCS &amp; Aquarius
+            Track official Valve Steam patch notes, geometry and voxel changes, and datamined CS2 intel from Gabe Follower, ThourCS and Aquarius.
           </p>
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2.5">
+      <div class="flex flex-wrap items-center gap-2">
         <!-- SYNC LIVE STEAM CS2 NEWS -->
         <button
           @click="fetchUpdates(true)"
           :disabled="isSyncingSteam"
-          class="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-sky-400 border border-sky-500/40 rounded-xl font-bold text-xs transition-all cursor-pointer"
+          class="flex items-center gap-2 px-3.5 py-2 bg-white/[0.04] hover:bg-white/[0.08] disabled:opacity-60 text-slate-200 border border-white/[0.08] rounded-xl font-medium text-xs transition-all cursor-pointer"
         >
-          <RefreshCw :class="['w-3.5 h-3.5', isSyncingSteam ? 'animate-spin' : '']" />
-          <span>{{ isSyncingSteam ? 'Syncing Steam News...' : 'Sync Live Steam CS2 News' }}</span>
+          <RefreshCw :class="['w-3.5 h-3.5 text-sky-400', isSyncingSteam ? 'animate-spin' : '']" />
+          <span>{{ isSyncingSteam ? 'Syncing Steam News...' : 'Sync Steam News' }}</span>
         </button>
 
         <!-- LOG CUSTOM UPDATE / LEAK TOGGLE -->
         <button
           @click="showCreateForm = !showCreateForm"
           :class="[
-            'flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-lg',
+            'flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-semibold text-xs transition-all cursor-pointer shadow-sm',
             showCreateForm
               ? 'bg-rose-500 text-white'
-              : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black'
+              : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
           ]"
         >
-          <X v-if="showCreateForm" class="w-4 h-4" />
-          <Plus v-else class="w-4 h-4 stroke-[2.5]" />
-          <span>{{ showCreateForm ? 'Close Form' : 'Log Custom Update / Leak' }}</span>
+          <X v-if="showCreateForm" class="w-3.5 h-3.5" />
+          <Plus v-else class="w-3.5 h-3.5 stroke-[2.5]" />
+          <span>{{ showCreateForm ? 'Close Form' : 'Log Update or Leak' }}</span>
         </button>
       </div>
     </div>
@@ -457,29 +456,29 @@ onUnmounted(() => {
     <!-- STATUS / FEEDBACK BANNERS -->
     <div
       v-if="syncStatusMessage || formSuccess"
-      class="flex items-center gap-2.5 px-4 py-3 bg-emerald-500/10 border border-emerald-500/40 rounded-xl text-emerald-400 text-xs font-bold"
+      class="flex items-center gap-2.5 px-4 py-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-medium"
     >
-      <CheckCircle2 class="w-4 h-4 shrink-0" />
+      <CheckCircle2 class="w-4 h-4 shrink-0 text-emerald-400" />
       <span>{{ formSuccess || syncStatusMessage }}</span>
     </div>
 
     <div
       v-if="syncErrorMessage"
-      class="flex items-center gap-2.5 px-4 py-3 bg-amber-500/10 border border-amber-500/40 rounded-xl text-amber-400 text-xs font-bold"
+      class="flex items-center gap-2.5 px-4 py-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-medium"
     >
-      <Radio class="w-4 h-4 shrink-0" />
+      <Radio class="w-4 h-4 shrink-0 text-amber-400" />
       <span>{{ syncErrorMessage }}</span>
     </div>
 
     <!-- TOGGLEABLE LOG CUSTOM UPDATE / LEAK FORM -->
     <div
       v-if="showCreateForm"
-      class="p-5 bg-slate-900/95 border border-amber-500/30 rounded-2xl shadow-2xl flex flex-col gap-4"
+      class="p-5 bg-slate-900/80 backdrop-blur-xl border border-white/[0.1] rounded-2xl shadow-2xl flex flex-col gap-4"
     >
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div class="flex items-center justify-between border-b border-white/[0.07] pb-3">
         <div class="flex items-center gap-2">
           <Sparkles class="w-4 h-4 text-amber-400" />
-          <h2 class="text-sm font-black uppercase text-white tracking-wider">
+          <h2 class="text-sm font-semibold text-white tracking-tight">
             Log Custom CS2 Update, Geometry Alert or Leak
           </h2>
         </div>
@@ -491,102 +490,102 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div v-if="formError" class="px-3 py-2 bg-rose-500/10 border border-rose-500/40 rounded-lg text-rose-400 text-xs font-bold">
+      <div v-if="formError" class="px-3 py-2 bg-rose-500/15 border border-rose-500/35 rounded-lg text-rose-300 text-xs font-medium">
         {{ formError }}
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div class="md:col-span-2 flex flex-col gap-1.5">
-          <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Title *</label>
+          <label class="text-[11px] font-medium text-slate-400">Title *</label>
           <input
             v-model="formTitle"
             type="text"
-            placeholder="e.g. Cobblestone B-Plat Clip Update or New Subtick Smoke Fix"
-            class="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+            placeholder="e.g. Cache A-Main Skybox Update or Subtick Smoke Fix"
+            class="w-full px-3.5 py-2 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
           />
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Category</label>
+          <label class="text-[11px] font-medium text-slate-400">Category</label>
           <select
             v-model="formCategory"
-            class="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+            class="w-full px-3.5 py-2 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
           >
-            <option value="leak">Leak &amp; Datamine</option>
-            <option value="patch_note">Official Patch Note</option>
-            <option value="lineup_impact">Lineup Impact</option>
+            <option value="leak" class="bg-slate-900">Leak &amp; Datamine</option>
+            <option value="patch_note" class="bg-slate-900">Official Patch Note</option>
+            <option value="lineup_impact" class="bg-slate-900">Lineup Impact</option>
           </select>
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Source</label>
+          <label class="text-[11px] font-medium text-slate-400">Source</label>
           <select
             v-model="formSource"
-            class="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+            class="w-full px-3.5 py-2 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
           >
-            <option value="Valve Official">Valve Official</option>
-            <option value="Gabe Follower">Gabe Follower</option>
-            <option value="ThourCS">ThourCS</option>
-            <option value="Aquarius">Aquarius</option>
-            <option value="Community Datamine">Community Datamine</option>
+            <option value="Valve Official" class="bg-slate-900">Valve Official</option>
+            <option value="Gabe Follower" class="bg-slate-900">Gabe Follower</option>
+            <option value="ThourCS" class="bg-slate-900">ThourCS</option>
+            <option value="Aquarius" class="bg-slate-900">Aquarius</option>
+            <option value="Community Datamine" class="bg-slate-900">Community Datamine</option>
           </select>
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Lineup Impact Severity</label>
+          <label class="text-[11px] font-medium text-slate-400">Lineup Impact Severity</label>
           <select
             v-model="formLineupImpact"
-            class="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+            class="w-full px-3.5 py-2 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
           >
-            <option value="high">High (Breaks / Alters Lineups)</option>
-            <option value="medium">Medium (Verify Key Smokes)</option>
-            <option value="low">Low (Minor Edge Case)</option>
-            <option value="none">None (Informational)</option>
+            <option value="high" class="bg-slate-900">High (Breaks / Alters Lineups)</option>
+            <option value="medium" class="bg-slate-900">Medium (Verify Key Smokes)</option>
+            <option value="low" class="bg-slate-900">Low (Minor Edge Case)</option>
+            <option value="none" class="bg-slate-900">None (Informational)</option>
           </select>
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Source Handle / Version</label>
+          <label class="text-[11px] font-medium text-slate-400">Source Handle / Version</label>
           <div class="flex gap-2">
             <input
               v-model="formSourceHandle"
               type="text"
               placeholder="@handle"
-              class="w-1/2 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+              class="w-1/2 px-3 py-2 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
             />
             <input
               v-model="formVersion"
               type="text"
               placeholder="v1.40.x"
-              class="w-1/2 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+              class="w-1/2 px-3 py-2 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
             />
           </div>
         </div>
 
         <div class="md:col-span-2 flex flex-col gap-1.5">
-          <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Source Link URL (optional)</label>
+          <label class="text-[11px] font-medium text-slate-400">Source Link URL (optional)</label>
           <input
             v-model="formSourceUrl"
             type="url"
             placeholder="https://x.com/... or https://store.steampowered.com/news/app/730"
-            class="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+            class="w-full px-3.5 py-2 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
           />
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tags (comma-separated)</label>
+          <label class="text-[11px] font-medium text-slate-400">Tags (comma-separated)</label>
           <input
             v-model="formTagsText"
             type="text"
-            placeholder="cobblestone, smoke, skybox"
-            class="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+            placeholder="cache, smoke, skybox"
+            class="w-full px-3.5 py-2 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
           />
         </div>
       </div>
 
       <!-- AFFECTED MAPS PICKER -->
       <div class="flex flex-col gap-2">
-        <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Affected Maps</label>
+        <label class="text-[11px] font-medium text-slate-400">Affected Maps</label>
         <div class="flex flex-wrap gap-1.5">
           <button
             v-for="m in mapTabs.filter(id => id !== 'all')"
@@ -594,10 +593,10 @@ onUnmounted(() => {
             type="button"
             @click="toggleFormMap(m)"
             :class="[
-              'px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase border transition-all cursor-pointer',
+              'px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all cursor-pointer',
               formAffectedMaps.includes(m)
-                ? 'bg-amber-500/20 text-amber-400 border-amber-500/50'
-                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-semibold'
+                : 'bg-white/[0.03] text-slate-400 border-white/[0.07] hover:text-white'
             ]"
           >
             {{ MAP_DISPLAY_NAMES[m] || m }}
@@ -607,31 +606,31 @@ onUnmounted(() => {
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="flex flex-col gap-1.5">
-          <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Summary</label>
+          <label class="text-[11px] font-medium text-slate-400">Summary</label>
           <textarea
             v-model="formSummary"
             rows="3"
             placeholder="Brief tactical summary of what changed or was leaked..."
-            class="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+            class="w-full px-3.5 py-2 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
           ></textarea>
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Bullet Details (one per line)</label>
+          <label class="text-[11px] font-medium text-slate-400">Bullet Details (one per line)</label>
           <textarea
             v-model="formDetailsText"
             rows="3"
             placeholder="Line 1: Specific skybox or clip brush change&#10;Line 2: Impacted lineups to re-verify"
-            class="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+            class="w-full px-3.5 py-2 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
           ></textarea>
         </div>
       </div>
 
-      <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
+      <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-white/[0.07]">
         <button
           type="button"
           @click="resetForm(); showCreateForm = false"
-          class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold cursor-pointer"
+          class="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 rounded-xl text-xs font-medium cursor-pointer"
         >
           Cancel
         </button>
@@ -639,7 +638,7 @@ onUnmounted(() => {
           type="button"
           @click="submitCustomUpdate"
           :disabled="isSubmitting"
-          class="px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer"
+          class="px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-950 rounded-xl text-xs font-semibold cursor-pointer"
         >
           {{ isSubmitting ? 'Publishing...' : 'Publish to Squad Feed' }}
         </button>
@@ -647,11 +646,11 @@ onUnmounted(() => {
     </div>
 
     <!-- FILTER TOOLBAR -->
-    <div class="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col gap-4 shadow-lg">
+    <div class="p-4 bg-slate-900/60 backdrop-blur-xl border border-white/[0.08] rounded-2xl flex flex-col gap-3.5 shadow-lg">
       <!-- TOP ROW: SEARCH + CATEGORY TABS -->
       <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-1.5">
-          <span class="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">
+          <span class="flex items-center gap-1 text-[11px] font-medium text-slate-400 mr-1">
             <Filter class="w-3 h-3" /> Category:
           </span>
           <button
@@ -659,10 +658,10 @@ onUnmounted(() => {
             :key="tab.id"
             @click="selectedCategory = tab.id"
             :class="[
-              'px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border',
+              'px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer border',
               selectedCategory === tab.id
-                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                ? 'bg-white/[0.12] text-white border-white/[0.16] font-semibold'
+                : 'bg-white/[0.03] text-slate-400 border-white/[0.07] hover:text-white'
             ]"
           >
             {{ tab.label }}
@@ -676,44 +675,44 @@ onUnmounted(() => {
             v-model="searchQuery"
             type="text"
             placeholder="Search patch notes, leaks, skybox..."
-            class="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+            class="w-full pl-9 pr-3 py-1.5 bg-slate-950/80 border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-amber-400/70"
           />
         </div>
       </div>
 
       <!-- SOURCE FILTER TABS -->
-      <div class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-800/80">
-        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Source:</span>
+      <div class="flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-white/[0.06]">
+        <span class="text-[11px] font-medium text-slate-400 mr-1">Source:</span>
         <button
           v-for="src in sourceTabs"
           :key="src"
           @click="selectedSource = src"
           :class="[
-            'px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer border',
+            'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer border',
             selectedSource === src
-              ? 'bg-sky-500/20 text-sky-400 border-sky-500/40'
-              : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+              ? 'bg-sky-500/15 text-sky-300 border-sky-500/35 font-semibold'
+              : 'bg-white/[0.03] text-slate-400 border-white/[0.07] hover:text-white'
           ]"
         >
-          {{ src === 'all' ? 'All' : src }}
+          {{ src === 'all' ? 'All Sources' : src }}
         </button>
       </div>
 
       <!-- MAP FILTER TABS -->
-      <div class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-800/80">
-        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Map:</span>
+      <div class="flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-white/[0.06]">
+        <span class="text-[11px] font-medium text-slate-400 mr-1">Map:</span>
         <button
           v-for="m in mapTabs"
           :key="m"
           @click="selectedMap = m"
           :class="[
-            'px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase font-mono transition-all cursor-pointer border',
+            'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer border',
             selectedMap === m
-              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-              : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35 font-semibold'
+              : 'bg-white/[0.03] text-slate-400 border-white/[0.07] hover:text-white'
           ]"
         >
-          {{ m === 'all' ? 'All' : m }}
+          {{ MAP_DISPLAY_NAMES[m] || m }}
         </button>
       </div>
     </div>
@@ -721,27 +720,27 @@ onUnmounted(() => {
     <!-- EMPTY STATE -->
     <div
       v-if="filteredUpdates.length === 0"
-      class="p-10 bg-slate-900/70 border border-slate-800 rounded-2xl text-center flex flex-col items-center gap-3"
+      class="p-12 bg-slate-900/40 border border-dashed border-white/[0.1] rounded-2xl text-center flex flex-col items-center gap-3"
     >
-      <Newspaper class="w-10 h-10 text-slate-600" />
-      <h3 class="text-sm font-bold text-white uppercase tracking-wider">No matching CS2 updates or leaks</h3>
+      <Newspaper class="w-8 h-8 text-slate-500" />
+      <h3 class="text-sm font-semibold text-white">No Matching CS2 Updates or Leaks</h3>
       <p class="text-xs text-slate-400 max-w-md">
         Try clearing your search or switching Category, Source, or Map filter tabs.
       </p>
       <button
         @click="selectedCategory = 'all'; selectedSource = 'all'; selectedMap = 'all'; searchQuery = ''"
-        class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl text-xs font-bold cursor-pointer"
+        class="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 rounded-xl text-xs font-medium cursor-pointer"
       >
         Reset All Filters
       </button>
     </div>
 
     <!-- UPDATES & LEAKS FEED -->
-    <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <article
         v-for="item in filteredUpdates"
         :key="item.id"
-        class="p-5 bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-2xl shadow-xl flex flex-col justify-between gap-4 transition-all"
+        class="p-5 bg-slate-900/60 backdrop-blur-xl border border-white/[0.08] hover:border-white/[0.15] rounded-2xl shadow-lg flex flex-col justify-between gap-4 transition-all"
       >
         <div class="flex flex-col gap-3">
           <!-- META TOP BAR -->
@@ -749,7 +748,7 @@ onUnmounted(() => {
             <div class="flex flex-wrap items-center gap-2">
               <span
                 :class="[
-                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-black border',
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border',
                   getSourceBadgeClass(item.source)
                 ]"
               >
@@ -759,14 +758,14 @@ onUnmounted(() => {
 
               <span
                 v-if="item.sourceHandle"
-                class="text-[11px] font-mono font-bold text-slate-400"
+                class="text-[11px] font-mono text-slate-400"
               >
                 {{ item.sourceHandle }}
               </span>
 
               <span
                 :class="[
-                  'px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border',
+                  'px-2 py-0.5 rounded-md text-[10px] font-medium border',
                   getCategoryBadgeClass(item.category)
                 ]"
               >
@@ -777,7 +776,7 @@ onUnmounted(() => {
             <div class="flex items-center gap-2">
               <span
                 v-if="item.version"
-                class="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[10px] font-mono font-bold"
+                class="px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.08] text-slate-300 text-[10px] font-mono font-medium"
               >
                 v{{ item.version }}
               </span>
@@ -790,7 +789,7 @@ onUnmounted(() => {
             <div class="flex items-center gap-2">
               <span
                 :class="[
-                  'inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider border',
+                  'inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide border',
                   getImpactBadgeClass(item.lineupImpact)
                 ]"
               >
@@ -798,7 +797,7 @@ onUnmounted(() => {
               </span>
             </div>
 
-            <h2 class="text-base font-black text-white leading-snug">
+            <h2 class="text-base font-semibold text-white leading-snug tracking-tight">
               {{ item.title }}
             </h2>
           </div>
@@ -820,17 +819,17 @@ onUnmounted(() => {
         </div>
 
         <!-- FOOTER: AFFECTED MAPS, TAGS & EXTERNAL LINK -->
-        <div class="flex flex-col gap-3 pt-3 border-t border-slate-800/80">
+        <div class="flex flex-col gap-3 pt-3 border-t border-white/[0.06]">
           <!-- CLICKABLE MAP TAGS -> SWITCH MAP & OPEN RADAR -->
           <div v-if="item.affectedMaps && item.affectedMaps.length > 0" class="flex flex-wrap items-center gap-1.5">
-            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-0.5">
+            <span class="text-[11px] font-medium text-slate-400 mr-0.5">
               Open Map:
             </span>
             <button
               v-for="mapId in item.affectedMaps"
               :key="mapId"
               @click="openMapOnRadar(mapId)"
-              class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-950 hover:bg-amber-500/15 text-amber-400 border border-slate-800 hover:border-amber-500/50 rounded-lg text-[11px] font-bold uppercase font-mono transition-colors cursor-pointer"
+              class="inline-flex items-center gap-1 px-2.5 py-1 bg-white/[0.04] hover:bg-white/[0.09] text-amber-300 border border-white/[0.08] rounded-lg text-[11px] font-medium transition-colors cursor-pointer"
               :title="`Switch radar map to ${MAP_DISPLAY_NAMES[mapId] || mapId}`"
             >
               <MapPin class="w-3 h-3" />
@@ -845,7 +844,7 @@ onUnmounted(() => {
               <span
                 v-for="tag in (item.tags || []).slice(0, 5)"
                 :key="tag"
-                class="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-[10px] font-mono text-slate-400"
+                class="px-2 py-0.5 bg-white/[0.04] border border-white/[0.07] rounded-md text-[10px] font-mono text-slate-400"
               >
                 #{{ tag }}
               </span>
@@ -857,7 +856,7 @@ onUnmounted(() => {
               :href="item.sourceUrl"
               target="_blank"
               rel="noopener noreferrer"
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-sky-500/30 rounded-xl text-[11px] font-bold transition-colors shrink-0"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] text-sky-300 border border-white/[0.08] rounded-xl text-[11px] font-medium transition-colors shrink-0"
             >
               <span>View Source</span>
               <ExternalLink class="w-3 h-3" />

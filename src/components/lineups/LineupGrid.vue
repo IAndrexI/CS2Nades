@@ -8,14 +8,14 @@ import {
   BookmarkCheck,
   BookmarkPlus,
   CheckCircle2,
+  CheckSquare,
   Footprints,
   Globe,
   Layers,
   LayoutGrid,
   Search,
   Sparkles,
-  User,
-  Zap
+  User
 } from 'lucide-vue-next'
 
 const lineupStore = useLineupStore()
@@ -143,7 +143,7 @@ function selectAllVisibleGeneral() {
 function handleAddSelected() {
   const count = lineupStore.addQuickSelectedToPersonalBook()
   if (count > 0) {
-    showBatchNotice(`Added ${count} selected lineup${count === 1 ? '' : 's'} to My Personal Book!`)
+    showBatchNotice(`Added ${count} selected lineup${count === 1 ? '' : 's'} to My Personal Book`)
   } else {
     showBatchNotice('Selected lineups are already in your Personal Book.')
   }
@@ -158,10 +158,10 @@ function handleAddAllForMap() {
   }
   if (count > 0) {
     showBatchNotice(
-      `Added ${count} ${mapStore.currentMap.name} lineup${count === 1 ? '' : 's'} to My Personal Book!`
+      `Added ${count} ${mapStore.currentMap.name} lineup${count === 1 ? '' : 's'} to My Personal Book`
     )
   } else {
-    showBatchNotice(`All matching ${mapStore.currentMap.name} lineups are already in My Book!`)
+    showBatchNotice(`All matching ${mapStore.currentMap.name} lineups are already in My Book`)
   }
   lineupStore.clearQuickSelect()
 }
@@ -169,19 +169,19 @@ function handleAddAllForMap() {
 
 <template>
   <div class="lineup-grid-container flex flex-col gap-4">
-    <!-- GRID HEADER: CATALOG TABS + DISPLAY MODE SWITCHER + QUICK-SELECT -->
-    <div class="flex flex-col gap-3 bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800">
+    <!-- GRID HEADER: CATALOG TABS + DISPLAY MODE SWITCHER + SELECT FOR MY BOOK -->
+    <div class="flex flex-col gap-3 bg-slate-900/60 backdrop-blur-xl p-4 rounded-2xl border border-white/[0.08] shadow-lg">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <!-- Title & Map -->
         <div class="flex items-center gap-2.5">
-          <h2 class="text-sm font-black tracking-wider uppercase text-slate-200">
+          <h2 class="text-sm font-semibold tracking-tight text-white">
             Lineups ({{ lineups.length }})
           </h2>
-          <span class="text-xs text-slate-400 font-mono">on {{ mapStore.currentMap.name }}</span>
+          <span class="text-xs text-slate-400">on {{ mapStore.currentMap.name }}</span>
         </div>
 
         <!-- 3-Way Display Mode Switcher -->
-        <div class="flex flex-wrap items-center gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
+        <div class="flex flex-wrap items-center gap-1 p-1 bg-slate-950/80 rounded-xl border border-white/[0.07] text-xs font-medium">
           <button
             v-for="mode in displayModeOptions"
             :key="mode.id"
@@ -189,7 +189,7 @@ function handleAddAllForMap() {
             :class="[
               'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer',
               lineupStore.lineupDisplayMode === mode.id
-                ? 'bg-amber-500 text-slate-950 font-black shadow'
+                ? 'bg-white/[0.12] text-white font-semibold shadow-sm'
                 : 'text-slate-400 hover:text-white'
             ]"
           >
@@ -201,22 +201,22 @@ function handleAddAllForMap() {
         </div>
       </div>
 
-      <!-- Second Row: General vs Personal Catalog Tabs + Quick-Select Controls -->
-      <div class="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-slate-800/80">
+      <!-- Second Row: General vs Personal Catalog Tabs + Select for My Book Controls -->
+      <div class="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-white/[0.06]">
         <!-- Catalog Separation Tabs -->
-        <div class="flex flex-wrap items-center gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
+        <div class="flex flex-wrap items-center gap-1 p-1 bg-slate-950/80 rounded-xl border border-white/[0.07] text-xs font-medium">
           <button
             @click="lineupStore.activeCatalogTab = 'general'"
             :class="[
               'flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer',
               lineupStore.activeCatalogTab === 'general'
-                ? 'bg-amber-500 text-slate-950 font-black'
+                ? 'bg-white/[0.12] text-white font-semibold'
                 : 'text-slate-400 hover:text-white'
             ]"
           >
-            <Globe class="w-3.5 h-3.5" />
-            <span>General Lineups (Meta Sites)</span>
-            <span class="px-1.5 py-0.2 rounded-full bg-slate-900/40 text-[10px] font-mono">
+            <Globe class="w-3.5 h-3.5 text-amber-400" />
+            <span>General Lineups</span>
+            <span class="px-1.5 py-0.2 rounded-full bg-white/[0.08] text-[10px] font-mono">
               {{ generalForMap.length }}
             </span>
           </button>
@@ -226,13 +226,13 @@ function handleAddAllForMap() {
             :class="[
               'flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer',
               lineupStore.activeCatalogTab === 'personal'
-                ? 'bg-emerald-500 text-slate-950 font-black'
+                ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
                 : 'text-slate-400 hover:text-white'
             ]"
           >
-            <User class="w-3.5 h-3.5" />
+            <User class="w-3.5 h-3.5 text-emerald-400" />
             <span>My Personal Book</span>
-            <span class="px-1.5 py-0.2 rounded-full bg-slate-900/40 text-[10px] font-mono">
+            <span class="px-1.5 py-0.2 rounded-full bg-white/[0.08] text-[10px] font-mono">
               {{ personalForMap.length }}
             </span>
           </button>
@@ -242,64 +242,64 @@ function handleAddAllForMap() {
             :class="[
               'flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer',
               lineupStore.activeCatalogTab === 'all'
-                ? 'bg-amber-500 text-slate-950 font-black'
+                ? 'bg-white/[0.12] text-white font-semibold'
                 : 'text-slate-400 hover:text-white'
             ]"
           >
-            <Sparkles class="w-3.5 h-3.5" />
+            <Sparkles class="w-3.5 h-3.5 text-amber-400" />
             <span>All</span>
-            <span class="px-1.5 py-0.2 rounded-full bg-slate-900/40 text-[10px] font-mono">
+            <span class="px-1.5 py-0.2 rounded-full bg-white/[0.08] text-[10px] font-mono">
               {{ allForMap.length }}
             </span>
           </button>
         </div>
 
-        <!-- Quick-Select to Personal Book Controls -->
+        <!-- Select for My Book Controls -->
         <div class="flex flex-wrap items-center gap-2">
           <button
             @click="toggleQuickSelectMode"
             :class="[
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer',
               quickSelectMode
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-amber-500/40 hover:text-amber-300'
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 font-semibold'
+                : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border-white/[0.08]'
             ]"
           >
-            <Zap class="w-3.5 h-3.5 text-amber-400" />
-            <span>{{ quickSelectMode ? '⚡ Quick-Select ON' : '⚡ Quick-Select to Personal Book' }}</span>
+            <CheckSquare class="w-3.5 h-3.5 text-amber-400" />
+            <span>{{ quickSelectMode ? 'Selection Mode Active' : 'Select for My Book' }}</span>
           </button>
 
           <button
             v-if="unbookmarkedForMap.length > 0"
             @click="handleAddAllForMap"
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 text-xs font-bold transition-colors cursor-pointer"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-medium transition-colors cursor-pointer"
           >
             <BookmarkPlus class="w-3.5 h-3.5" />
-            <span>Add All for Map ({{ unbookmarkedForMap.length }})</span>
+            <span>Save All on Map ({{ unbookmarkedForMap.length }})</span>
           </button>
         </div>
       </div>
 
-      <!-- Active Quick-Select Batch Toolbar -->
+      <!-- Active Batch Selection Toolbar -->
       <div
         v-if="quickSelectMode || lineupStore.quickSelectIds.length > 0"
-        class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-950 border border-amber-500/30 rounded-xl text-xs"
+        class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-950/80 border border-white/[0.1] rounded-xl text-xs"
       >
         <div class="flex items-center gap-2 text-slate-300">
-          <span class="font-bold text-amber-400">
+          <span class="font-semibold text-amber-400">
             {{ lineupStore.quickSelectIds.length }} selected
           </span>
           <button
             v-if="unbookmarkedForMap.length > 0"
             @click="selectAllVisibleGeneral"
-            class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold cursor-pointer"
+            class="px-2.5 py-0.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 font-medium cursor-pointer"
           >
             Select Visible ({{ unbookmarkedForMap.length }})
           </button>
           <button
             v-if="lineupStore.quickSelectIds.length > 0"
             @click="lineupStore.clearQuickSelect()"
-            class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-semibold cursor-pointer"
+            class="px-2.5 py-0.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white font-medium cursor-pointer"
           >
             Clear
           </button>
@@ -310,14 +310,14 @@ function handleAddAllForMap() {
             @click="handleAddSelected"
             :disabled="lineupStore.quickSelectIds.length === 0"
             :class="[
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black transition-all',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all',
               lineupStore.quickSelectIds.length > 0
-                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer shadow'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer'
+                : 'bg-white/[0.05] text-slate-500 cursor-not-allowed'
             ]"
           >
             <BookmarkCheck class="w-3.5 h-3.5" />
-            <span>Add Selected ({{ lineupStore.quickSelectIds.length }}) to My Book</span>
+            <span>Save Selected ({{ lineupStore.quickSelectIds.length }}) to My Book</span>
           </button>
         </div>
       </div>
@@ -326,7 +326,7 @@ function handleAddAllForMap() {
     <!-- Batch Add Feedback Banner -->
     <div
       v-if="batchNotice"
-      class="px-4 py-2.5 bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-2"
+      class="px-4 py-2.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-medium flex items-center gap-2"
     >
       <CheckCircle2 class="w-4 h-4 text-emerald-400 shrink-0" />
       <span>{{ batchNotice }}</span>
@@ -347,22 +347,22 @@ function handleAddAllForMap() {
     <!-- EMPTY STATE -->
     <div
       v-else
-      class="flex flex-col items-center justify-center p-12 bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl text-center gap-3"
+      class="flex flex-col items-center justify-center p-12 bg-slate-900/40 border border-dashed border-white/[0.1] rounded-2xl text-center gap-3"
     >
-      <div class="p-3 bg-slate-800/80 rounded-full text-slate-500">
+      <div class="p-3 bg-white/[0.05] rounded-full text-slate-400">
         <Search class="w-6 h-6" />
       </div>
       <div>
-        <h3 class="text-sm font-bold text-slate-300">
+        <h3 class="text-sm font-semibold text-slate-200">
           {{
             lineupStore.activeCatalogTab === 'personal'
               ? `No Personal Book Lineups on ${mapStore.currentMap.name}`
               : 'No Lineups Found'
           }}
         </h3>
-        <p class="text-xs text-slate-500 mt-1 max-w-sm">
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">
           <template v-if="lineupStore.activeCatalogTab === 'personal'">
-            Switch to General Lineups to 1-click save meta lineups into your Personal Book, or create a custom lineup on the radar!
+            Switch to General Lineups to save meta lineups into your Personal Book, or create a custom lineup on the radar.
           </template>
           <template v-else>
             No grenade lineups match your current grenade toggles, team side, or search query for {{ mapStore.currentMap.name }}.
@@ -372,13 +372,13 @@ function handleAddAllForMap() {
       <div class="flex flex-wrap items-center justify-center gap-2">
         <button
           @click="lineupStore.isPresetsModalOpen = true"
-          class="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-lg transition-colors cursor-pointer"
+          class="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
         >
-          Open Potential Lineups Archive ({{ lineupStore.potentialArchiveLineups.length }})
+          Browse Meta Sources ({{ lineupStore.potentialArchiveLineups.length }})
         </button>
         <button
           @click="mapStore.resetFilters()"
-          class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+          class="px-4 py-1.5 bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 text-xs font-medium rounded-xl transition-colors cursor-pointer"
         >
           Reset Filters
         </button>

@@ -24,7 +24,8 @@ import {
   Sparkles,
   MapPin,
   Volume2,
-  ExternalLink
+  ExternalLink,
+  Crown
 } from 'lucide-vue-next'
 
 const gameRoomStore = useGameRoomStore()
@@ -81,33 +82,87 @@ function handleSendChat() {
   chatInput.value = ''
 }
 
-// Live Tactics Board Mouse Events
+// Live Tactics Board Mouse Events (60fps Cached SVG Matrix + Distance Gate)
+let activeSvgMatrix: DOMMatrix | null = null
+let rafDrawId: number | null = null
+let pendingDrawPt: { x: number; y: number } | null = null
+
+function refreshActiveSvgMatrix() {
+  if (!svgBoard.value) {
+    activeSvgMatrix = null
+    return
+  }
+  const ctm = svgBoard.value.getScreenCTM()
+  activeSvgMatrix = ctm ? ctm.inverse() : null
+}
+
 function getSvgCoords(e: MouseEvent) {
   if (!svgBoard.value) return null
-  const pt = svgBoard.value.createSVGPoint()
-  pt.x = e.clientX
-  pt.y = e.clientY
-  const ctm = svgBoard.value.getScreenCTM()
-  if (!ctm) return null
-  const transformed = pt.matrixTransform(ctm.inverse())
-  return { x: Math.round(transformed.x), y: Math.round(transformed.y) }
+  if (!activeSvgMatrix) refreshActiveSvgMatrix()
+  if (activeSvgMatrix) {
+    const pt = svgBoard.value.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const transformed = pt.matrixTransform(activeSvgMatrix)
+    return {
+      x: Math.round(transformed.x * 10) / 10,
+      y: Math.round(transformed.y * 10) / 10
+    }
+  }
+  const rect = svgBoard.value.getBoundingClientRect()
+  if (!rect.width || !rect.height) return null
+  return {
+    x: Math.round(((e.clientX - rect.left) / rect.width) * 10000) / 10,
+    y: Math.round(((e.clientY - rect.top) / rect.height) * 10000) / 10
+  }
 }
 
 function startDrawing(e: MouseEvent) {
+  refreshActiveSvgMatrix()
   const pt = getSvgCoords(e)
   if (!pt) return
   isDrawing.value = true
   currentStrokePoints.value = [pt]
 }
 
+function commitPendingDrawPoint() {
+  rafDrawId = null
+  if (!isDrawing.value || !pendingDrawPt) return
+  const pt = pendingDrawPt
+  pendingDrawPt = null
+  const pts = currentStrokePoints.value
+  const lastPt = pts[pts.length - 1]
+  // 2.5 units in 0..1000 viewBox === 0.25% radar units threshold
+  if (!lastPt || Math.hypot(pt.x - lastPt.x, pt.y - lastPt.y) >= 2.5) {
+    pts.push(pt)
+  }
+}
+
 function draw(e: MouseEvent) {
   if (!isDrawing.value) return
   const pt = getSvgCoords(e)
   if (!pt) return
-  currentStrokePoints.value.push(pt)
+  pendingDrawPt = pt
+  if (rafDrawId === null) {
+    rafDrawId = requestAnimationFrame(commitPendingDrawPoint)
+  }
 }
 
 function endDrawing() {
+  if (rafDrawId !== null) {
+    cancelAnimationFrame(rafDrawId)
+    rafDrawId = null
+  }
+  if (pendingDrawPt && isDrawing.value) {
+    const pts = currentStrokePoints.value
+    const lastPt = pts[pts.length - 1]
+    if (!lastPt || Math.hypot(pendingDrawPt.x - lastPt.x, pendingDrawPt.y - lastPt.y) >= 0.25) {
+      pts.push(pendingDrawPt)
+    }
+    pendingDrawPt = null
+  }
+  activeSvgMatrix = null
+
   if (!isDrawing.value || currentStrokePoints.value.length < 2) {
     isDrawing.value = false
     currentStrokePoints.value = []
@@ -126,6 +181,13 @@ function endDrawing() {
   isDrawing.value = false
   currentStrokePoints.value = []
 }
+
+onUnmounted(() => {
+  if (rafDrawId !== null) {
+    cancelAnimationFrame(rafDrawId)
+    rafDrawId = null
+  }
+})
 
 function getPointsPath(points: Array<{ x: number; y: number }>) {
   if (!points || points.length === 0) return ''
@@ -206,7 +268,7 @@ const availableLineupsForMap = computed(() => {
           >
             <option value="">Public Room (Join by Code / Login)</option>
             <option v-for="grp in gameRoomStore.squadGroups" :key="grp.id" :value="grp.id">
-              🛡️ {{ grp.name }} (Auto-allows members: {{ grp.memberUsernames.join(', ') }})
+              [Squad] {{ grp.name }} (Auto-allows members: {{ grp.memberUsernames.join(', ') }})
             </option>
           </select>
         </div>
@@ -279,60 +341,64 @@ const availableLineupsForMap = computed(() => {
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <!-- LEFT 3 COLS: RADAR TACTICS BOARD -->
         <div class="lg:col-span-3 flex flex-col gap-4">
-          <!-- DRAWING TOOLS BAR -->
-          <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs">
-            <!-- COLORS -->
-            <div class="flex items-center gap-2">
-              <span class="text-slate-400 font-bold text-[11px]">Color:</span>
-              <div class="flex items-center gap-1.5">
-                <button
-                  v-for="c in palette"
-                  :key="c"
-                  @click="activeColor = c"
-                  :class="[
-                    'w-5 h-5 rounded-full border transition-transform cursor-pointer',
-                    activeColor === c ? 'scale-125 border-white shadow-md' : 'border-transparent opacity-70 hover:opacity-100'
-                  ]"
-                  :style="{ backgroundColor: c }"
-                />
+          <!-- RADAR CANVAS WITH LIVE DRAWING LAYER, FLOATING IN-MAP HUD & UTILITY TRAJECTORIES -->
+          <div class="relative w-full h-[640px] bg-slate-950 rounded-3xl overflow-hidden border border-white/10 shadow-2xl flex items-center justify-center">
+            <!-- FLOATING IN-MAP DRAWING TOOLS DOCK -->
+            <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex flex-wrap items-center justify-center gap-3 px-4 py-2.5 backdrop-blur-xl bg-slate-950/85 border border-white/10 rounded-2xl shadow-2xl text-xs">
+              <!-- COLORS -->
+              <div class="flex items-center gap-2">
+                <span class="text-slate-400 font-semibold text-[11px]">Color</span>
+                <div class="flex items-center gap-1.5">
+                  <button
+                    v-for="c in palette"
+                    :key="c"
+                    @click="activeColor = c"
+                    :class="[
+                      'w-5 h-5 rounded-full border transition-transform cursor-pointer',
+                      activeColor === c ? 'scale-125 border-white shadow-md' : 'border-transparent opacity-70 hover:opacity-100'
+                    ]"
+                    :style="{ backgroundColor: c }"
+                  />
+                </div>
               </div>
+
+              <div class="h-4 w-px bg-white/10" />
+
+              <!-- WIDTH -->
+              <div class="flex items-center gap-1.5">
+                <span class="text-slate-400 font-semibold text-[11px]">Weight</span>
+                <button 
+                  @click="activeWidth = 2" 
+                  :class="['px-2 py-0.5 rounded-lg text-[10px] font-mono cursor-pointer transition-colors', activeWidth === 2 ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-900/90 text-slate-400 hover:text-white']"
+                >
+                  2px
+                </button>
+                <button 
+                  @click="activeWidth = 4" 
+                  :class="['px-2 py-0.5 rounded-lg text-[10px] font-mono cursor-pointer transition-colors', activeWidth === 4 ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-900/90 text-slate-400 hover:text-white']"
+                >
+                  4px
+                </button>
+                <button 
+                  @click="activeWidth = 7" 
+                  :class="['px-2 py-0.5 rounded-lg text-[10px] font-mono cursor-pointer transition-colors', activeWidth === 7 ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-900/90 text-slate-400 hover:text-white']"
+                >
+                  7px
+                </button>
+              </div>
+
+              <div class="h-4 w-px bg-white/10" />
+
+              <!-- CLEAR ALL -->
+              <button
+                @click="gameRoomStore.clearDrawings()"
+                class="flex items-center gap-1.5 px-3 py-1 bg-slate-900/90 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 border border-white/10 rounded-xl transition-colors cursor-pointer text-xs font-semibold"
+              >
+                <Trash2 class="w-3.5 h-3.5" />
+                <span>Clear</span>
+              </button>
             </div>
 
-            <!-- WIDTH -->
-            <div class="flex items-center gap-2">
-              <span class="text-slate-400 font-bold text-[11px]">Brush:</span>
-              <button 
-                @click="activeWidth = 2" 
-                :class="['px-2 py-0.5 rounded text-[10px] font-mono', activeWidth === 2 ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-400']"
-              >
-                Fine
-              </button>
-              <button 
-                @click="activeWidth = 4" 
-                :class="['px-2 py-0.5 rounded text-[10px] font-mono', activeWidth === 4 ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-400']"
-              >
-                Medium
-              </button>
-              <button 
-                @click="activeWidth = 7" 
-                :class="['px-2 py-0.5 rounded text-[10px] font-mono', activeWidth === 7 ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-400']"
-              >
-                Thick
-              </button>
-            </div>
-
-            <!-- CLEAR ALL -->
-            <button
-              @click="gameRoomStore.clearDrawings()"
-              class="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 rounded-lg transition-colors cursor-pointer text-xs"
-            >
-              <Trash2 class="w-3.5 h-3.5" />
-              <span>Clear Drawings</span>
-            </button>
-          </div>
-
-          <!-- RADAR CANVAS WITH LIVE DRAWING LAYER & UTILITY TRAJECTORIES -->
-          <div class="relative w-full h-[620px] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center">
             <svg
               ref="svgBoard"
               viewBox="0 0 1000 1000"
@@ -400,6 +466,7 @@ const availableLineupsForMap = computed(() => {
                   :stroke-width="activeWidth"
                   stroke-linecap="round"
                   stroke-linejoin="round"
+                  class="pointer-events-none"
                 />
               </g>
             </svg>
@@ -453,7 +520,7 @@ const availableLineupsForMap = computed(() => {
                   <div class="flex flex-col">
                     <span class="font-bold text-white flex items-center gap-1">
                       {{ member.username }}
-                      <span v-if="member.isHost" class="text-[9px] text-amber-400 font-mono">👑</span>
+                      <Crown v-if="member.isHost" class="w-3 h-3 text-amber-400" />
                     </span>
                     <span class="text-[10px] text-slate-400 font-mono">{{ member.inGameRole || 'Entry' }}</span>
                   </div>

@@ -15,6 +15,7 @@ import {
   BookmarkPlus,
   BookMarked,
   CheckCircle2,
+  CheckSquare,
   Footprints,
   Globe,
   Grid,
@@ -24,8 +25,7 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Sparkles,
-  Zap
+  Sparkles
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -93,10 +93,10 @@ async function fetchLiveCommunityFeed() {
     discoverFeedBanner.value =
       items.length > 0
         ? `Fetched ${items.length} live community lineup${items.length === 1 ? '' : 's'} from server feed.`
-        : 'Live community feed checked — all curated pro & external-site lineups are ready.'
+        : 'Live community feed checked — all curated pro and external-site lineups are ready.'
   } catch {
     discoverFeedBanner.value =
-      'Server discover feed unreachable — showing curated multi-site & community lineups.'
+      'Server discover feed unreachable — showing curated multi-site and community lineups.'
   } finally {
     isFetchingDiscoverFeed.value = false
     setTimeout(() => {
@@ -105,7 +105,6 @@ async function fetchLiveCommunityFeed() {
   }
 }
 
-// General Lineups + Live Community Server Feed (strictly separated from Personal Book clones)
 const combinedLibraryLineups = computed<Lineup[]>(() => {
   const seen = new Set<string>()
   const merged: Lineup[] = []
@@ -239,7 +238,7 @@ function addSelectedToPersonalBook() {
   const added = lineupStore.addQuickSelectedToPersonalBook()
   discoverFeedBanner.value =
     added > 0
-      ? `Added ${added} selected general lineup${added === 1 ? '' : 's'} to your Personal Book!`
+      ? `Added ${added} selected general lineup${added === 1 ? '' : 's'} to your Personal Book`
       : 'Selected lineups are already saved in your Personal Book.'
   quickSelectMode.value = false
   setTimeout(() => {
@@ -255,7 +254,7 @@ function addAllVisibleToPersonalBook() {
   }
   discoverFeedBanner.value =
     added > 0
-      ? `Saved ${added} visible lineup${added === 1 ? '' : 's'} to your Personal Book!`
+      ? `Saved ${added} visible lineup${added === 1 ? '' : 's'} to your Personal Book`
       : 'All matching lineups are already in your Personal Book.'
   lineupStore.clearQuickSelect()
   setTimeout(() => {
@@ -265,24 +264,24 @@ function addAllVisibleToPersonalBook() {
 </script>
 
 <template>
-  <div class="library-view max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-5 animate-fade-in">
+  <div class="library-view max-w-[1600px] mx-auto px-4 sm:px-6 py-6 flex flex-col gap-5 animate-fade-in">
     <!-- HEADER -->
-    <div class="flex flex-wrap items-center justify-between gap-4 p-5 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl">
-      <div class="flex items-center gap-3">
-        <div class="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl">
-          <Grid class="w-6 h-6 stroke-[2.5]" />
+    <div class="flex flex-wrap items-center justify-between gap-4 p-5 bg-slate-900/60 backdrop-blur-xl border border-white/[0.08] rounded-2xl shadow-lg">
+      <div class="flex items-center gap-3.5">
+        <div class="p-3 bg-white/[0.05] border border-white/[0.08] text-amber-400 rounded-2xl">
+          <Grid class="w-5 h-5" />
         </div>
         <div>
-          <div class="flex flex-wrap items-center gap-2">
-            <h1 class="text-xl font-black uppercase text-white tracking-wide">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h1 class="text-lg font-semibold text-white tracking-tight">
               General Lineups Directory
             </h1>
-            <span class="px-2 py-0.5 rounded bg-slate-800 text-amber-400 text-xs font-mono font-bold">
-              {{ allDisplayLineups.length }} Catalog Lineups
+            <span class="px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-amber-300 text-xs font-mono font-medium">
+              {{ allDisplayLineups.length }} Lineups
             </span>
           </div>
           <p class="text-xs text-slate-400 mt-0.5">
-            Multi-site CS2 utility archive across CSNades.gg, CS2Lineups, NadeKing, Pracc.com, Scope.gg, HLTV, Bo3.gg, Refrag.gg &amp; Leetify — cleanly separated from your Personal Book.
+            Multi-site CS2 utility archive across CSNades.gg, CS2Lineups, NadeKing, Pracc.com, Scope.gg, HLTV, Bo3.gg, Refrag.gg and Leetify.
           </p>
         </div>
       </div>
@@ -291,18 +290,18 @@ function addAllVisibleToPersonalBook() {
         <!-- Link to Personal Book -->
         <button
           @click="router.push('/my-lineups')"
-          class="flex items-center gap-1.5 px-3 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          class="flex items-center gap-1.5 px-3 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-medium transition-colors cursor-pointer"
         >
           <BookMarked class="w-3.5 h-3.5" />
-          <span>My Personal Book ({{ lineupStore.personalBookLineups.length }})</span>
+          <span>My Book ({{ lineupStore.personalBookLineups.length }})</span>
         </button>
 
         <!-- META SOURCES MODAL BUTTON -->
         <button
           @click="lineupStore.isPresetsModalOpen = true"
-          class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          class="flex items-center gap-1.5 px-3 py-2 bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/[0.08] rounded-xl text-xs font-medium transition-colors cursor-pointer"
         >
-          <Sparkles class="w-3.5 h-3.5" />
+          <Sparkles class="w-3.5 h-3.5 text-amber-400" />
           <span>Meta Sources</span>
         </button>
 
@@ -310,17 +309,17 @@ function addAllVisibleToPersonalBook() {
         <button
           @click="fetchLiveCommunityFeed"
           :disabled="isFetchingDiscoverFeed"
-          class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+          class="flex items-center gap-1.5 px-3 py-2 bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/[0.08] rounded-xl text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
         >
-          <Globe class="w-3.5 h-3.5 text-cyan-400" :class="{ 'animate-pulse': isFetchingDiscoverFeed }" />
-          <span>Live Community Feed</span>
+          <Globe class="w-3.5 h-3.5 text-sky-400" :class="{ 'animate-pulse': isFetchingDiscoverFeed }" />
+          <span>Community Feed</span>
         </button>
 
         <!-- SYNC BUTTON -->
         <button
           @click="lineupStore.syncWithServer()"
           :disabled="lineupStore.isSyncing"
-          class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          class="flex items-center gap-1.5 px-3 py-2 bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 rounded-xl border border-white/[0.08] text-xs font-medium transition-colors cursor-pointer"
         >
           <RefreshCw class="w-3.5 h-3.5 text-amber-400" :class="{ 'animate-spin': lineupStore.isSyncing }" />
           <span>Sync</span>
@@ -329,10 +328,10 @@ function addAllVisibleToPersonalBook() {
         <!-- ADD LINEUP -->
         <button
           @click="lineupStore.isAddModalOpen = true"
-          class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+          class="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
         >
-          <Plus class="w-4 h-4 stroke-[3]" />
-          <span>Add Lineup</span>
+          <Plus class="w-3.5 h-3.5 stroke-[2.5]" />
+          <span>Create Lineup</span>
         </button>
       </div>
     </div>
@@ -340,17 +339,17 @@ function addAllVisibleToPersonalBook() {
     <!-- BANNER -->
     <div
       v-if="discoverFeedBanner"
-      class="px-4 py-2.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold flex items-center gap-2 animate-fade-in"
+      class="px-4 py-2.5 bg-sky-500/15 border border-sky-500/30 text-sky-300 rounded-xl text-xs font-medium flex items-center gap-2 animate-fade-in"
     >
-      <CheckCircle2 class="w-4 h-4 text-cyan-400 flex-shrink-0" />
+      <CheckCircle2 class="w-4 h-4 text-sky-400 flex-shrink-0" />
       <span>{{ discoverFeedBanner }}</span>
     </div>
 
-    <!-- ⚡ QUICK ADD BAR -->
+    <!-- QUICK ADD & CONSOLE COMMANDS BAR -->
     <QuickAddBar />
 
-    <!-- SITE CHIPS + DISPLAY MODE SWITCHER + QUICK-SELECT BAR -->
-    <div class="flex flex-col gap-3 p-4 bg-slate-900/80 border border-slate-800 rounded-xl text-xs">
+    <!-- SITE CHIPS + DISPLAY MODE SWITCHER + SELECT FOR MY BOOK BAR -->
+    <div class="flex flex-col gap-3 p-4 bg-slate-900/60 backdrop-blur-xl border border-white/[0.08] rounded-2xl text-xs shadow-lg">
       <!-- Top Row: Site Pills + Display Mode Switcher -->
       <div class="flex flex-wrap items-center justify-between gap-3">
         <!-- Quick CS2 Site Chips -->
@@ -358,10 +357,10 @@ function addAllVisibleToPersonalBook() {
           <button
             @click="selectedSourceFilter = 'all'"
             :class="[
-              'px-2.5 py-1 rounded-lg font-bold border transition-colors cursor-pointer',
+              'px-2.5 py-1 rounded-lg font-medium border transition-colors cursor-pointer',
               selectedSourceFilter === 'all'
-                ? 'bg-amber-500 text-slate-950 border-amber-400'
-                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                ? 'bg-white/[0.12] text-white border-white/[0.16] font-semibold'
+                : 'bg-white/[0.03] text-slate-400 border-white/[0.07] hover:text-white'
             ]"
           >
             All Sites
@@ -371,10 +370,10 @@ function addAllVisibleToPersonalBook() {
             :key="site"
             @click="selectedSourceFilter = selectedSourceFilter === site ? 'all' : site"
             :class="[
-              'px-2.5 py-1 rounded-lg font-bold border transition-colors cursor-pointer',
+              'px-2.5 py-1 rounded-lg font-medium border transition-colors cursor-pointer',
               selectedSourceFilter === site
-                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                ? 'bg-sky-500/15 text-sky-300 border-sky-500/35 font-semibold'
+                : 'bg-white/[0.03] text-slate-400 border-white/[0.07] hover:text-slate-200'
             ]"
           >
             {{ site }}
@@ -382,7 +381,7 @@ function addAllVisibleToPersonalBook() {
         </div>
 
         <!-- 3-Way Display Mode Switcher -->
-        <div class="flex flex-wrap items-center gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 font-bold">
+        <div class="flex flex-wrap items-center gap-1 p-1 bg-slate-950/80 rounded-xl border border-white/[0.07] font-medium">
           <button
             v-for="mode in displayModeOptions"
             :key="mode.id"
@@ -390,7 +389,7 @@ function addAllVisibleToPersonalBook() {
             :class="[
               'flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer',
               lineupStore.lineupDisplayMode === mode.id
-                ? 'bg-amber-500 text-slate-950 font-black shadow'
+                ? 'bg-white/[0.12] text-white font-semibold shadow-sm'
                 : 'text-slate-400 hover:text-white'
             ]"
           >
@@ -402,18 +401,18 @@ function addAllVisibleToPersonalBook() {
         </div>
       </div>
 
-      <!-- Second Row: Dropdown Filters + Search + Quick-Select Toggle -->
-      <div class="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-800/80">
+      <!-- Second Row: Dropdown Filters + Search + Select for My Book Toggle -->
+      <div class="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-white/[0.06]">
         <div class="flex flex-wrap items-center gap-2.5">
           <!-- MAP SELECT -->
           <div class="flex items-center gap-1.5">
-            <span class="text-slate-400 font-bold">Map:</span>
+            <span class="text-slate-400 font-medium">Map:</span>
             <select
               v-model="selectedMapFilter"
-              class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+              class="bg-slate-950/80 border border-white/[0.08] rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-400 cursor-pointer"
             >
-              <option value="all">All Maps</option>
-              <option v-for="map in mapStore.availableMaps" :key="map.id" :value="map.id">
+              <option value="all" class="bg-slate-900">All Maps</option>
+              <option v-for="map in mapStore.availableMaps" :key="map.id" :value="map.id" class="bg-slate-900">
                 {{ map.name }}
               </option>
             </select>
@@ -421,41 +420,41 @@ function addAllVisibleToPersonalBook() {
 
           <!-- NADE SELECT -->
           <div class="flex items-center gap-1.5">
-            <span class="text-slate-400 font-bold">Type:</span>
+            <span class="text-slate-400 font-medium">Type:</span>
             <select
               v-model="selectedNadeFilter"
-              class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+              class="bg-slate-950/80 border border-white/[0.08] rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-400 cursor-pointer"
             >
-              <option value="all">All Types</option>
-              <option value="smoke">Smokes</option>
-              <option value="flash">Flashes</option>
-              <option value="molotov">Molotovs</option>
-              <option value="he">HE Grenades</option>
-              <option value="decoy">Decoys</option>
+              <option value="all" class="bg-slate-900">All Types</option>
+              <option value="smoke" class="bg-slate-900">Smokes</option>
+              <option value="flash" class="bg-slate-900">Flashes</option>
+              <option value="molotov" class="bg-slate-900">Molotovs</option>
+              <option value="he" class="bg-slate-900">HE Grenades</option>
+              <option value="decoy" class="bg-slate-900">Decoys</option>
             </select>
           </div>
 
           <!-- SIDE SELECT -->
           <div class="flex items-center gap-1.5">
-            <span class="text-slate-400 font-bold">Side:</span>
+            <span class="text-slate-400 font-medium">Side:</span>
             <select
               v-model="selectedSideFilter"
-              class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+              class="bg-slate-950/80 border border-white/[0.08] rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-400 cursor-pointer"
             >
-              <option value="all">All Sides</option>
-              <option value="t">Terrorist (T)</option>
-              <option value="ct">Counter-Terrorist (CT)</option>
+              <option value="all" class="bg-slate-900">All Sides</option>
+              <option value="t" class="bg-slate-900">Terrorist (T)</option>
+              <option value="ct" class="bg-slate-900">Counter-Terrorist (CT)</option>
             </select>
           </div>
 
           <!-- SOURCE SELECT -->
           <div class="flex items-center gap-1.5">
-            <span class="text-slate-400 font-bold">Source:</span>
+            <span class="text-slate-400 font-medium">Source:</span>
             <select
               v-model="selectedSourceFilter"
-              class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+              class="bg-slate-950/80 border border-white/[0.08] rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-amber-400 cursor-pointer"
             >
-              <option v-for="opt in externalSourceOptions" :key="opt.value" :value="opt.value">
+              <option v-for="opt in externalSourceOptions" :key="opt.value" :value="opt.value" class="bg-slate-900">
                 {{ opt.label }}
               </option>
             </select>
@@ -463,12 +462,12 @@ function addAllVisibleToPersonalBook() {
 
           <!-- PRO PLAYER SELECT -->
           <div class="flex items-center gap-1.5">
-            <span class="text-slate-400 font-bold">Pro:</span>
+            <span class="text-slate-400 font-medium">Pro:</span>
             <select
               v-model="selectedProPlayerFilter"
-              class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-purple-300 focus:outline-none focus:border-purple-500 cursor-pointer"
+              class="bg-slate-950/80 border border-white/[0.08] rounded-lg px-2.5 py-1 text-purple-300 focus:outline-none focus:border-purple-400 cursor-pointer"
             >
-              <option v-for="pro in proPlayerOptions" :key="pro.value" :value="pro.value">
+              <option v-for="pro in proPlayerOptions" :key="pro.value" :value="pro.value" class="bg-slate-900">
                 {{ pro.label }}
               </option>
             </select>
@@ -478,10 +477,10 @@ function addAllVisibleToPersonalBook() {
           <button
             @click="showFavoritesOnly = !showFavoritesOnly"
             :class="[
-              'flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold transition-colors cursor-pointer',
+              'flex items-center gap-1.5 px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer border',
               showFavoritesOnly
-                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                ? 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                : 'bg-white/[0.03] text-slate-400 hover:text-white border-white/[0.07]'
             ]"
           >
             <Heart class="w-3.5 h-3.5" :class="{ 'fill-current': showFavoritesOnly }" />
@@ -490,51 +489,51 @@ function addAllVisibleToPersonalBook() {
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-          <!-- Quick-Select Toggle -->
+          <!-- Select for My Book Toggle -->
           <button
             @click="toggleQuickSelectMode"
             :class="[
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-medium transition-colors cursor-pointer',
               quickSelectMode
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-amber-500/40'
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 font-semibold'
+                : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border-white/[0.08]'
             ]"
           >
-            <Zap class="w-3.5 h-3.5 text-amber-400" />
-            <span>{{ quickSelectMode ? 'Quick-Select ON' : 'Quick-Select to Book' }}</span>
+            <CheckSquare class="w-3.5 h-3.5 text-amber-400" />
+            <span>{{ quickSelectMode ? 'Selection Mode Active' : 'Select for My Book' }}</span>
           </button>
 
           <!-- SEARCH INPUT -->
           <div class="relative w-full sm:w-56">
-            <Search class="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search class="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               v-model="searchQuery"
               type="text"
               placeholder="Search lineups, spots, sites..."
-              class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              class="w-full bg-slate-950/80 border border-white/[0.08] rounded-xl pl-8 pr-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/70"
             />
           </div>
         </div>
       </div>
 
-      <!-- Batch Quick-Select Toolbar -->
+      <!-- Batch Selection Toolbar -->
       <div
         v-if="quickSelectMode || lineupStore.quickSelectIds.length > 0"
-        class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-950 border border-amber-500/35 rounded-xl"
+        class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-950/80 border border-white/[0.1] rounded-xl"
       >
         <div class="flex flex-wrap items-center gap-2">
-          <span class="font-bold text-amber-400">{{ lineupStore.quickSelectIds.length }} selected</span>
+          <span class="font-semibold text-amber-400">{{ lineupStore.quickSelectIds.length }} selected</span>
           <button
             v-if="unbookmarkedVisible.length > 0"
             @click="selectAllVisible"
-            class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold cursor-pointer"
+            class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 font-medium cursor-pointer"
           >
             Select Visible ({{ unbookmarkedVisible.length }})
           </button>
           <button
             v-if="lineupStore.quickSelectIds.length > 0"
             @click="lineupStore.clearQuickSelect()"
-            class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-bold cursor-pointer"
+            class="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white font-medium cursor-pointer"
           >
             Clear
           </button>
@@ -544,24 +543,24 @@ function addAllVisibleToPersonalBook() {
           <button
             v-if="unbookmarkedVisible.length > 0"
             @click="addAllVisibleToPersonalBook"
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/35 font-bold cursor-pointer"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-emerald-300 border border-emerald-500/30 font-medium cursor-pointer"
           >
             <BookmarkPlus class="w-3.5 h-3.5" />
-            <span>Add All Visible ({{ unbookmarkedVisible.length }})</span>
+            <span>Save All Visible ({{ unbookmarkedVisible.length }})</span>
           </button>
 
           <button
             @click="addSelectedToPersonalBook"
             :disabled="lineupStore.quickSelectIds.length === 0"
             :class="[
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black transition-all',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all',
               lineupStore.quickSelectIds.length > 0
-                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer shadow'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer'
+                : 'bg-white/[0.05] text-slate-500 cursor-not-allowed'
             ]"
           >
             <BookmarkCheck class="w-3.5 h-3.5" />
-            <span>Add Selected ({{ lineupStore.quickSelectIds.length }}) to My Book</span>
+            <span>Save Selected ({{ lineupStore.quickSelectIds.length }}) to My Book</span>
           </button>
         </div>
       </div>
@@ -582,11 +581,11 @@ function addAllVisibleToPersonalBook() {
     <!-- EMPTY STATE -->
     <div
       v-else
-      class="flex flex-col items-center justify-center p-16 bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl text-center gap-3"
+      class="flex flex-col items-center justify-center p-16 bg-slate-900/40 border border-dashed border-white/[0.1] rounded-2xl text-center gap-3"
     >
-      <Grid class="w-8 h-8 text-slate-600" />
-      <h3 class="text-sm font-bold text-slate-300">No General Lineups Match Your Filters</h3>
-      <p class="text-xs text-slate-500 max-w-sm">
+      <Grid class="w-8 h-8 text-slate-500" />
+      <h3 class="text-sm font-semibold text-slate-200">No General Lineups Match Your Filters</h3>
+      <p class="text-xs text-slate-400 max-w-sm">
         Try clearing your search or switching site, map, or grenade filters.
       </p>
       <div class="flex items-center gap-2 mt-2">
@@ -600,13 +599,13 @@ function addAllVisibleToPersonalBook() {
             showFavoritesOnly = false;
             searchQuery = '';
           "
-          class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl cursor-pointer"
+          class="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 text-xs font-medium rounded-xl cursor-pointer"
         >
           Reset Filters
         </button>
         <button
           @click="lineupStore.isAddModalOpen = true"
-          class="px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 text-xs font-black rounded-xl shadow-md hover:from-amber-500 cursor-pointer"
+          class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl cursor-pointer"
         >
           Create Lineup
         </button>
