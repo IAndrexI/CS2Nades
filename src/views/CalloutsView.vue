@@ -12,6 +12,7 @@ import {
 } from '../core/radar/coordinateEngine'
 import {
   isPointInMapBounds,
+  isSegmentInMapBounds,
   snapPointToMapBounds,
   getMapSwitchConsoleCommand,
   getLineupSetupConsoleCommand
@@ -49,7 +50,9 @@ import {
   Edit3,
   BookOpen,
   UserCheck,
-  Hexagon
+  Hexagon,
+  PenTool,
+  Undo2
 } from 'lucide-vue-next'
 
 type CalloutEntry = CalloutItem & {
@@ -58,7 +61,7 @@ type CalloutEntry = CalloutItem & {
   commonNades?: string[]
 }
 
-type CanvasToolMode = 'select' | 'draw_box' | 'draw_polygon' | 'place_pin'
+type CanvasToolMode = 'select' | 'draw_polygon' | 'freehand' | 'draw_box' | 'place_pin'
 type LayerVisibilityMode = 'both' | 'boxes' | 'pins'
 
 const PERSONAL_COLOR_PALETTE = [
@@ -99,6 +102,25 @@ const isDrawingBox = ref(false)
 const boxDragStart = ref<Point2D | null>(null)
 const boxDragCurrent = ref<Point2D | null>(null)
 const polygonVertices = ref<Point2D[]>([])
+const isDrawingFreehand = ref(false)
+const freehandPoints = ref<Point2D[]>([])
+
+const isPolygonPreviewValid = computed(() => {
+  if (activeTool.value !== 'draw_polygon' || !cursorPct.value) return true
+  if (!isPointInMapBounds(mapStore.currentMapId, cursorPct.value, effectiveFloorParam.value)) {
+    return false
+  }
+  if (polygonVertices.value.length > 0) {
+    const last = polygonVertices.value[polygonVertices.value.length - 1]!
+    return isSegmentInMapBounds(
+      mapStore.currentMapId,
+      last,
+      cursorPct.value,
+      effectiveFloorParam.value
+    )
+  }
+  return true
+})
 
 // Share & Import Modal State
 const isShareModalOpen = ref(false)
@@ -457,7 +479,20 @@ function handleMouseDown(e: MouseEvent) {
     return
   }
 
-  if (activeTool.value === 'place_pin') return
+  if (activeTool.value === 'freehand' && svgElement.value) {
+    const rawPt = clientToSvgRadarPct(svgElement.value, e.clientX, e.clientY, true)
+    if (!rawPt) return
+    if (!isPointInMapBounds(mapStore.currentMapId, rawPt, effectiveFloorParam.value)) {
+      snapWarningMessage.value = 'Start drawing inside playable radar bounds.'
+      return
+    }
+    snapWarningMessage.value = ''
+    isDrawingFreehand.value = true
+    freehandPoints.value = [{ x: Number(rawPt.x.toFixed(2)), y: Number(rawPt.y.toFixed(2)) }]
+    return
+  }
+
+  if (activeTool.value === 'place_pin' || activeTool.value === 'draw_polygon') return
 
   isPanning.value = true
   panStart.value = { x: e.clientX - pan.value.x, y: e.clientY - pan.value.y }
@@ -466,6 +501,21 @@ function handleMouseDown(e: MouseEvent) {
 function handleMouseMove(e: MouseEvent) {
   if (svgElement.value) {
     cursorPct.value = clientToSvgRadarPct(svgElement.value, e.clientX, e.clientY, true)
+  }
+
+  if (isDrawingFreehand.value && cursorPct.value) {
+    const pt = { x: Number(cursorPct.value.x.toFixed(2)), y: Number(cursorPct.value.y.toFixed(2)) }
+    const last = freehandPoints.value[freehandPoints.value.length - 1]
+    if (last && Math.hypot(pt.x - last.x, pt.y - last.y) >= 0.9) {
+      if (
+        isPointInMapBounds(mapStore.currentMapId, pt, effectiveFloorParam.value) &&
+        isSegmentInMapBounds(mapStore.currentMapId, last, pt, effectiveFloorParam.value)
+      ) {
+        freehandPoints.value.push(pt)
+        didDrag.value = true
+      }
+    }
+    return
   }
 
   if (isDrawingBox.value && cursorPct.value) {
@@ -495,6 +545,33 @@ function handleMouseMove(e: MouseEvent) {
 }
 
 function handleMouseUp() {
+  if (isDrawingFreehand.value) {
+    isDrawingFreehand.value = false
+    const pts = freehandPoints.value
+    freehandPoints.value = []
+    if (pts.length >= 3) {
+      let sumX = 0
+      let sumY = 0
+      for (const p of pts) {
+        sumX += p.x
+        sumY += p.y
+      }
+      const snapped = snapPointToMapBounds(
+        mapStore.currentMapId,
+        { x: sumX / pts.length, y: sumY / pts.length },
+        effectiveFloorParam.value
+      )
+      draftShape.value = 'polygon'
+      draftCoords.value = { x: snapped.x, y: snapped.y }
+      draftBox.value = null
+      draftPolygon.value = pts
+      snapWarningMessage.value = ''
+    } else {
+      snapWarningMessage.value = 'Trace a larger shape inside playable radar bounds.'
+    }
+    return
+  }
+
   if (isDrawingBox.value && boxDragStart.value && boxDragCurrent.value) {
     const rawMinX = Math.min(boxDragStart.value.x, boxDragCurrent.value.x)
     const rawMinY = Math.min(boxDragStart.value.y, boxDragCurrent.value.y)
@@ -561,9 +638,22 @@ function handleMouseLeave() {
   cursorPct.value = null
 }
 
+function undoPolygonPoint() {
+  if (polygonVertices.value.length > 0) {
+    polygonVertices.value.pop()
+    snapWarningMessage.value = ''
+  }
+}
+
 function finishPolygonDrawing() {
   if (polygonVertices.value.length < 3) return
   const pts = [...polygonVertices.value]
+  const first = pts[0]!
+  const last = pts[pts.length - 1]!
+  if (!isSegmentInMapBounds(mapStore.currentMapId, last, first, effectiveFloorParam.value)) {
+    snapWarningMessage.value = 'Closing line must stay within playable radar bounds.'
+    return
+  }
   let sumX = 0
   let sumY = 0
   for (const p of pts) {
@@ -590,12 +680,11 @@ function handleMapClick(e: MouseEvent) {
   if (activeTool.value === 'draw_polygon') {
     const rawPt = clientToSvgRadarPct(svgElement.value, e.clientX, e.clientY, true)
     if (!rawPt) return
-    const snapped = snapPointToMapBounds(
-      mapStore.currentMapId,
-      rawPt,
-      effectiveFloorParam.value
-    )
-    const pt = { x: snapped.x, y: snapped.y }
+    if (!isPointInMapBounds(mapStore.currentMapId, rawPt, effectiveFloorParam.value)) {
+      snapWarningMessage.value = 'Points must stay within playable radar bounds.'
+      return
+    }
+    const pt = { x: Number(rawPt.x.toFixed(2)), y: Number(rawPt.y.toFixed(2)) }
     if (polygonVertices.value.length >= 3) {
       const first = polygonVertices.value[0]!
       if (Math.hypot(pt.x - first.x, pt.y - first.y) <= 2.4) {
@@ -603,6 +692,14 @@ function handleMapClick(e: MouseEvent) {
         return
       }
     }
+    if (polygonVertices.value.length > 0) {
+      const last = polygonVertices.value[polygonVertices.value.length - 1]!
+      if (!isSegmentInMapBounds(mapStore.currentMapId, last, pt, effectiveFloorParam.value)) {
+        snapWarningMessage.value = 'Lines must stay within playable radar bounds.'
+        return
+      }
+    }
+    snapWarningMessage.value = ''
     polygonVertices.value.push(pt)
     return
   }
@@ -1246,10 +1343,24 @@ function getBadgeWidth(name: string): number {
                     ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
                     : 'text-slate-300 hover:text-white hover:bg-white/[0.06]'
                 ]"
-                title="Click vertices to trace a custom polygon callout zone"
+                title="Click vertices inside playable bounds to trace a custom polygon callout zone"
               >
                 <Hexagon class="w-3.5 h-3.5" />
                 <span>Draw Polygon</span>
+              </button>
+
+              <button
+                @click="setTool('freehand')"
+                :class="[
+                  'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer',
+                  activeTool === 'freehand'
+                    ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-white/[0.06]'
+                ]"
+                title="Click and drag inside playable bounds to freehand trace a custom callout shape"
+              >
+                <PenTool class="w-3.5 h-3.5" />
+                <span>Freehand Shape</span>
               </button>
 
               <button
@@ -1289,8 +1400,16 @@ function getBadgeWidth(name: string): number {
               </span>
               <template v-else-if="activeTool === 'draw_polygon'">
                 <span class="pointer-events-none">
-                  Click points to trace polygon ({{ polygonVertices.length }} pts) — click start point to close
+                  Click points inside bounds ({{ polygonVertices.length }} pts) — click start point to close
                 </span>
+                <button
+                  v-if="polygonVertices.length > 0"
+                  @click.stop="undoPolygonPoint"
+                  class="flex items-center gap-1 px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg text-[11px] cursor-pointer"
+                >
+                  <Undo2 class="w-3 h-3" />
+                  <span>Undo</span>
+                </button>
                 <button
                   v-if="polygonVertices.length >= 3"
                   @click.stop="finishPolygonDrawing"
@@ -1299,6 +1418,9 @@ function getBadgeWidth(name: string): number {
                   Finish
                 </button>
               </template>
+              <span v-else-if="activeTool === 'freehand'" class="pointer-events-none">
+                Click &amp; drag inside playable radar bounds to trace a custom callout shape
+              </span>
               <span v-else class="pointer-events-none">
                 Click inside playable radar bounds to drop a personal callout pin
               </span>
@@ -1440,6 +1562,16 @@ function getBadgeWidth(name: string): number {
                     stroke-width="2"
                     stroke-dasharray="4 3"
                   />
+                  <line
+                    v-if="cursorPct"
+                    :x1="polygonVertices[polygonVertices.length - 1]!.x * 10"
+                    :y1="polygonVertices[polygonVertices.length - 1]!.y * 10"
+                    :x2="cursorPct.x * 10"
+                    :y2="cursorPct.y * 10"
+                    :stroke="isPolygonPreviewValid ? '#10b981' : '#f43f5e'"
+                    stroke-width="2"
+                    :stroke-dasharray="isPolygonPreviewValid ? 'none' : '4 3'"
+                  />
                   <circle
                     v-for="(pt, idx) in polygonVertices"
                     :key="`poly-pt-${idx}`"
@@ -1451,6 +1583,18 @@ function getBadgeWidth(name: string): number {
                     stroke-width="1.5"
                   />
                 </g>
+
+                <!-- IN-PROGRESS FREEHAND SHAPE PREVIEW -->
+                <polyline
+                  v-if="isDrawingFreehand && freehandPoints.length > 1"
+                  :points="freehandPoints.map((p) => `${p.x * 10},${p.y * 10}`).join(' ')"
+                  fill="none"
+                  :stroke="draftColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="pointer-events-none"
+                />
 
                 <!-- DRAFT CLIPPED POLYGON PREVIEW -->
                 <polygon

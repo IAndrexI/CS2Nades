@@ -50,7 +50,7 @@ export const useMapStore = defineStore('map', () => {
   const customRadarImages = ref<Record<string, string>>({})
   const customCallouts = ref<Record<string, CalloutItem[]>>({})
 
-  const calloutMapMode = ref<CalloutMapMode>('general')
+  const calloutMapMode = ref<CalloutMapMode>('personal')
   const showCalloutBoxes = ref<boolean>(true)
   const showCalloutPins = ref<boolean>(true)
   const selectedCalloutSource = ref<string>('all')

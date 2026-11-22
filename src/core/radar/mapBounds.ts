@@ -322,3 +322,29 @@ export function getPlayableMaskGrid(
   }
   return grid
 }
+
+/**
+ * Checks whether the straight line segment from `p1` to `p2` (in 0-100% radar coordinates)
+ * stays strictly inside playable map bounds at every sampled step.
+ */
+export function isSegmentInMapBounds(
+  mapId: string,
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  floor?: 'upper' | 'lower'
+): boolean {
+  if (!isPointInMapBounds(mapId, p1, floor)) return false
+  if (!isPointInMapBounds(mapId, p2, floor)) return false
+
+  const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+  const steps = Math.max(1, Math.ceil(dist / 0.6))
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps
+    const sample = {
+      x: p1.x + (p2.x - p1.x) * t,
+      y: p1.y + (p2.y - p1.y) * t
+    }
+    if (!isPointInMapBounds(mapId, sample, floor)) return false
+  }
+  return true
+}
