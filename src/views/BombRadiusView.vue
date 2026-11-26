@@ -202,14 +202,16 @@ const cursorMetrics = computed(() => {
     const cy = Math.max(0, Math.min(99, Math.floor(cursorPct.value.y)))
     const idx = cy * 100 + cx
     const pDist = shockwaveField.value.pathDist[idx]!
+    const eff2D = shockwaveField.value.effectiveDist[idx]!
     const isBehindWall = shockwaveField.value.behindWall[idx] === 1
     let dmg = shockwaveField.value.damage[idx]!
-    if (dz > 0 && pDist >= 0) {
-      const eff3D = Math.hypot(shockwaveField.value.effectiveDist[idx]!, dz)
+    if (dz > 0 && eff2D >= 0) {
+      const eff3D = Math.hypot(eff2D, dz)
       dmg = calculateBombDamage(eff3D, false)
     }
     const legacyDmg = calculateBombDamage(directHammer, false)
     const savedByCover = Math.max(0, legacyDmg - dmg)
+    const channeledBoost = Math.max(0, dmg - legacyDmg)
     const hpLeft = Math.max(0, playerHp.value - dmg)
     const survives = hpLeft > 0
     const distHammer = pDist >= 0 ? Math.round(pDist) : directHammer
@@ -223,6 +225,7 @@ const cursorMetrics = computed(() => {
       survives,
       isBehindWall,
       savedByCover,
+      channeledBoost,
       unreachable: pDist < 0
     }
   }
@@ -240,6 +243,7 @@ const cursorMetrics = computed(() => {
     survives,
     isBehindWall: false,
     savedByCover: 0,
+    channeledBoost: 0,
     unreachable: false
   }
 })
@@ -366,6 +370,9 @@ function handleMapClick(e: MouseEvent) {
               </h1>
               <span class="px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/30 text-[11px] font-medium">
                 {{ mapStore.currentMap.name }} • C4 Radius {{ bombRadius }}u
+                <template v-if="physicsMode === 'shockwave' && shockwaveField">
+                  • Corridor Reach {{ shockwaveField.maxCorridorReach }}u ({{ (shockwaveField.maxCorridorReach * 0.01905).toFixed(1) }}m)
+                </template>
               </span>
             </div>
             <p class="text-xs text-slate-400 mt-0.5">
@@ -525,10 +532,13 @@ function handleMapClick(e: MouseEvent) {
               </span>
             </div>
             <div class="text-[11px] font-mono text-slate-300 mt-1">
-              Damage: <strong class="text-white">{{ cursorMetrics.dmg }}</strong> • {{ cursorMetrics.distHammer }}u ({{ cursorMetrics.distMeters }}m)
+              Damage: <strong class="text-white">{{ cursorMetrics.dmg }}</strong> • Path {{ cursorMetrics.distHammer }}u ({{ cursorMetrics.distMeters }}m)
             </div>
             <div v-if="cursorMetrics.savedByCover > 0" class="text-[10px] font-mono text-emerald-400 mt-0.5">
               Wall Cover Saved: -{{ cursorMetrics.savedByCover }} DMG
+            </div>
+            <div v-else-if="cursorMetrics.channeledBoost > 0" class="text-[10px] font-mono text-amber-400 mt-0.5">
+              Hallway Channeled: +{{ cursorMetrics.channeledBoost }} DMG vs Open Air
             </div>
           </div>
 

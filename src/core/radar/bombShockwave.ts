@@ -10,16 +10,17 @@ export interface BombShockwaveField {
   bombCellY: number
   bombRadius: number
   maxBlastRadius: number
+  maxCorridorReach: number
   cellHammer: number
-  /** Playable shockwave path distance in Hammer units (-1 = unreachable / solid wall) */
+  /** Physical corridor path distance traveled around walls (Hammer units; -1 = solid wall/unreachable) */
   pathDist: Float64Array
-  /** Effective attenuated shockwave distance in Hammer units */
+  /** Effective attenuated shockwave distance after hallway channeling & corner diffraction */
   effectiveDist: Float64Array
   /** Direct straight-line distance in Hammer units */
   directDist: Float64Array
   /** Precomputed CS2 shockwave damage (0% armor mitigation in Season 5 rework) */
   damage: Uint16Array
-  /** Whether the cell is occluded behind a solid wall or cover box from the C4 */
+  /** Whether the cell is occluded behind a solid wall/corner from the C4 */
   behindWall: Uint8Array
   /** Parent cell index for path reconstruction */
   parentIdx: Int32Array
@@ -48,6 +49,7 @@ function decodeMaskB64(b64: string): Uint8Array {
 
 const floorCache = new Map<string, Uint8Array>()
 const wallCache = new Map<string, Uint8Array>()
+const opennessCache = new Map<string, Float32Array>()
 
 function resolveMaskKey(mapId: string, floor?: RadarFloorId): string {
   const norm = normalizeMapId(mapId || 'mirage')
@@ -57,13 +59,15 @@ function resolveMaskKey(mapId: string, floor?: RadarFloorId): string {
   return norm
 }
 
-function getFloorAndWallGrids(
+function getFloorWallAndOpennessGrids(
   mapId: string,
   floor?: RadarFloorId
-): { floorGrid: Uint8Array; wallGrid: Uint8Array } {
+): { floorGrid: Uint8Array; wallGrid: Uint8Array; openness: Float32Array } {
   const key = resolveMaskKey(mapId, floor)
   let fg = floorCache.get(key)
   let wg = wallCache.get(key)
+  let op = opennessCache.get(key)
+
   if (!fg) {
     const fb64 = RADAR_FLOOR_MASKS_B64[key]
     if (fb64) {
@@ -79,22 +83,46 @@ function getFloorAndWallGrids(
     }
     floorCache.set(key, fg)
   }
+
   if (!wg) {
     const wb64 = RADAR_WALL_COVER_MASKS_B64[key]
     wg = wb64 ? decodeMaskB64(wb64) : new Uint8Array(10000)
     wallCache.set(key, wg)
   }
-  return { floorGrid: fg, wallGrid: wg }
+
+  if (!op) {
+    op = new Float32Array(10000)
+    for (let y = 0; y < 100; y++) {
+      for (let x = 0; x < 100; x++) {
+        if (fg[y * 100 + x] !== 1) continue
+        let walkable = 0
+        let total = 0
+        for (let dy = -3; dy <= 3; dy++) {
+          for (let dx = -3; dx <= 3; dx++) {
+            const nx = x + dx
+            const ny = y + dy
+            total++
+            if (nx >= 0 && nx < 100 && ny >= 0 && ny < 100 && fg[ny * 100 + nx] === 1) {
+              walkable++
+            }
+          }
+        }
+        op[y * 100 + x] = walkable / total
+      }
+    }
+    opennessCache.set(key, op)
+  }
+
+  return { floorGrid: fg, wallGrid: wg, openness: op }
 }
 
-function countRayObstacles(
+function countRayVoidCells(
   floorGrid: Uint8Array,
-  wallGrid: Uint8Array,
   x0: number,
   y0: number,
   x1: number,
   y1: number
-): { voidHits: number; wallHits: number } {
+): number {
   let cx = x0
   let cy = y0
   const dx = Math.abs(x1 - x0)
@@ -103,14 +131,12 @@ function countRayObstacles(
   const sy = y0 < y1 ? 1 : -1
   let err = dx - dy
   let voidHits = 0
-  let wallHits = 0
   let step = 0
 
   while (true) {
     const idx = cy * 100 + cx
-    if (step > 1) {
-      if (floorGrid[idx] !== 1) voidHits++
-      else if (wallGrid[idx] === 1) wallHits++
+    if (step > 1 && floorGrid[idx] !== 1) {
+      voidHits++
     }
     if (cx === x1 && cy === y1) break
     const e2 = 2 * err
@@ -124,7 +150,7 @@ function countRayObstacles(
     }
     step++
   }
-  return { voidHits, wallHits }
+  return voidHits
 }
 
 function computeGaussianDamage(effectiveDist: number, bombRadius: number): number {
@@ -138,8 +164,10 @@ function computeGaussianDamage(effectiveDist: number, bombRadius: number): numbe
 }
 
 /**
- * Computes a 100x100 CS2 C4 Shockwave propagation field from the planted bomb,
- * respecting solid map walls, cover boxes, and attenuating blast energy around corners.
+ * Computes a 100x100 CS2 Season 5 C4 Shockwave field:
+ * - Solid walls block direct shockwaves and force travel around corridors.
+ * - Confined hallways/corridors channel blast pressure ~30-45% further than open-air Legacy Sphere.
+ * - Tucked pockets behind solid walls near site suffer corner-wrap diffraction attenuation, allowing cover survival.
  */
 export function computeBombShockwaveField(
   mapId: string,
@@ -150,9 +178,10 @@ export function computeBombShockwaveField(
   const cal = getMapCalibration(mapId)
   const cellHammer = 10.24 * (cal.scale || 5.0)
   const maxBlastRadius = bombRadius * 3.5
-  const { floorGrid, wallGrid } = getFloorAndWallGrids(mapId, floor)
+  const { floorGrid, openness } = getFloorWallAndOpennessGrids(mapId, floor)
 
   const pathDist = new Float64Array(10000).fill(-1)
+  const channeledDist = new Float64Array(10000).fill(-1)
   const effectiveDist = new Float64Array(10000).fill(-1)
   const directDist = new Float64Array(10000)
   const damage = new Uint16Array(10000)
@@ -185,6 +214,7 @@ export function computeBombShockwaveField(
 
   const startIdx = startY * 100 + startX
   pathDist[startIdx] = 0
+  channeledDist[startIdx] = 0
 
   const heapIdx: number[] = [startIdx]
   const heapDist: number[] = [0]
@@ -243,7 +273,7 @@ export function computeBombShockwaveField(
     const popped = popHeap()
     if (!popped) break
     const [u, d] = popped
-    if (pathDist[u]! >= 0 && d > pathDist[u]! + 1e-4) continue
+    if (channeledDist[u]! >= 0 && d > channeledDist[u]! + 1e-4) continue
 
     const ux = u % 100
     const uy = Math.floor(u / 100)
@@ -255,16 +285,23 @@ export function computeBombShockwaveField(
       const v = ny * 100 + nx
       if (floorGrid[v] !== 1) continue
 
-      const coverPenalty = wallGrid[v] === 1 ? cellHammer * 1.45 : 0
-      const nextD = d + stepMult! * cellHammer + coverPenalty
-      if (nextD > maxBlastRadius * 1.65) continue
-      if (pathDist[v]! < 0 || nextD + 1e-4 < pathDist[v]!) {
-        pathDist[v] = nextD
+      const stepPhys = stepMult! * cellHammer
+      // Confined hallways channel the blast pressure further (~0.64-0.76x distance decay vs open areas)
+      const open = openness[v]!
+      const channelFactor = open < 0.48 ? 0.62 : open < 0.72 ? 0.74 : 0.90
+      const nextChanneled = d + stepPhys * channelFactor
+      if (nextChanneled > maxBlastRadius * 1.15) continue
+
+      if (channeledDist[v]! < 0 || nextChanneled + 1e-4 < channeledDist[v]!) {
+        channeledDist[v] = nextChanneled
+        pathDist[v] = pathDist[u]! + stepPhys
         parentIdx[v] = u
-        pushHeap(v, nextD)
+        pushHeap(v, nextChanneled)
       }
     }
   }
+
+  let maxCorridorReach = maxBlastRadius
 
   for (let cy = 0; cy < 100; cy++) {
     for (let cx = 0; cx < 100; cx++) {
@@ -273,26 +310,34 @@ export function computeBombShockwaveField(
       directDist[idx] = rawDirect
 
       const pDist = pathDist[idx]!
-      if (pDist < 0) {
+      const cDist = channeledDist[idx]!
+      if (pDist < 0 || cDist < 0) {
         effectiveDist[idx] = -1
         damage[idx] = 0
         continue
       }
 
-      const { voidHits, wallHits } = countRayObstacles(floorGrid, wallGrid, startX, startY, cx, cy)
-      const detour = Math.max(0, pDist - rawDirect)
+      const voidHits = countRayVoidCells(floorGrid, startX, startY, cx, cy)
+      const wrapRatio = rawDirect > cellHammer ? pDist / rawDirect : 1
+      const isOccluded = voidHits > 0 || wrapRatio > 1.25
 
-      if (voidHits === 0 && wallHits === 0 && detour < cellHammer * 0.85) {
+      if (!isOccluded) {
         behindWall[idx] = 0
-        effectiveDist[idx] = rawDirect
+        effectiveDist[idx] = cDist
       } else {
         behindWall[idx] = 1
-        const wallAbsorption = voidHits * (cellHammer * 3.2) + wallHits * (cellHammer * 1.85)
-        const cornerAbsorption = detour * 1.65
-        effectiveDist[idx] = rawDirect + wallAbsorption + cornerAbsorption
+        // Sharp corner wrap around solid walls (high wrapRatio near site) saps blast energy;
+        // long straight hallways further out retain their channeled corridor reach.
+        const bendAttenuation = Math.max(0, wrapRatio - 1.18) * 760
+        const wallShield = Math.min(cellHammer * 4.5, voidHits * cellHammer * 0.55)
+        effectiveDist[idx] = cDist + bendAttenuation + wallShield
       }
 
-      damage[idx] = computeGaussianDamage(effectiveDist[idx]!, bombRadius)
+      const dmg = computeGaussianDamage(effectiveDist[idx]!, bombRadius)
+      damage[idx] = dmg
+      if (dmg > 0 && pDist > maxCorridorReach) {
+        maxCorridorReach = pDist
+      }
     }
   }
 
@@ -303,6 +348,7 @@ export function computeBombShockwaveField(
     bombCellY: startY,
     bombRadius,
     maxBlastRadius,
+    maxCorridorReach: Math.round(maxCorridorReach),
     cellHammer,
     pathDist,
     effectiveDist,
